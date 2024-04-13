@@ -164,3 +164,4 @@ cython_debug/
 angelo
 data-pimm
 !figures/*
+!tex_folder/papier-shifted-curve.pdf
