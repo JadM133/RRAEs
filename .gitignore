@@ -165,3 +165,7 @@ angelo
 data-pimm
 !figures/*
 !tex_folder/papier-shifted-curve.pdf
+*.fls
+*.aux
+*.bbl
+*.blg

@@ -29,7 +29,7 @@ def find_vs(filename, method):
 
 if __name__ == "__main__":
     method = "weak"
-    problem = "avrami-3" 
+    problem = "avrami-2" 
     prob_changed = ""
     pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" #   
     if prob_changed == "":
