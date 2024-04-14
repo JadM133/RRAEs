@@ -975,3 +975,68 @@
   archiveprefix = {arXiv},
   primaryclass  = {cs.LG}
 }
+@article{TORREGROSA202212,
+  title    = {Hybrid twins based on optimal transport},
+  journal  = {Computers \& Mathematics with Applications},
+  volume   = {127},
+  pages    = {12-24},
+  year     = {2022},
+  issn     = {0898-1221},
+  doi      = {https://doi.org/10.1016/j.camwa.2022.09.026},
+  url      = {https://www.sciencedirect.com/science/article/pii/S0898122122004060},
+  author   = {Sergio Torregrosa and Victor Champaney and Amine Ammar and Vincent Herbert and Francisco Chinesta},
+  keywords = {Hybrid twin, Artificial intelligence, Optimal transport, Model order reduction, Fluid dynamics},
+  abstract = {Nowadays data is acquiring an indisputable importance in every field including engineering. In the past, experimental data was used to calibrate state-of-the art models. Once the model was optimally calibrated, numerical simulations were run. However, data can offer much more, playing a more important role than calibration or statistical analysis in the modeling/simulation process. Indeed, today data is gathered and used to train models able to replace complex engineering systems. The more and better the training data, the more accurate the model is. However, in engineering experimental data use to be the best data but also the most expensive in time and computing effort. Therefore, numerical simulations, cheaper and faster, are used instead but, even if they are closed to reality, they always present an error related to the ignorance of the engineer over the complex real system. It seems thus coherent to take advantage of each approach. This leads to the “hybrid twin” rationale. On the one hand, numerical simulations are computed as primary data source, assuming their inherent error. On the other hand, some experimental data is gathered to train a machine learning correction model which fills the prediction-measurement gap. However, learning this ignorance gap becomes difficult in some fields such as fluids dynamics, where a regression over the localized solutions can lead to non physical interpolated solutions. Therefore, the “hybrid twin” methodology proposed in this article relies on Optimal Transport theory, which provides a mathematical framework to measure distances between general objects and a completely different interpolation approach between functions.}
+}
+@article{TORREGROSA202236,
+  title    = {Surrogate parametric metamodel based on Optimal Transport},
+  journal  = {Mathematics and Computers in Simulation},
+  volume   = {194},
+  pages    = {36-63},
+  year     = {2022},
+  issn     = {0378-4754},
+  doi      = {https://doi.org/10.1016/j.matcom.2021.11.010},
+  url      = {https://www.sciencedirect.com/science/article/pii/S0378475421004067},
+  author   = {Sergio Torregrosa and Victor Champaney and Amine Ammar and Vincent Herbert and Francisco Chinesta},
+  keywords = {Artificial intelligence, Optimal Transport, Fluid dynamics, sPGD, Model Order Reduction},
+  abstract = {The description of a physical problem through a model necessarily involves the introduction of parameters. Hence, one wishes to have a solution of the problem that is a function of all these parameters: a parametric solution. However, the construction of such parametric solutions exhibiting localization in space is only ensured by costly and time-consuming tests, which can be both numerical or experimental. Numerical methodologies used classically imply enormous computational efforts for exploring the design space. Therefore, parametric solutions obtained using advanced nonlinear regressions are an essential tool to address this challenge. However, classical regression techniques, even the most advanced ones, can lead to non physical interpolation in some fields such as fluid dynamics, where the solution localizes in different regions depending on the problem parameters choice. In this context, Optimal Transport (OT) offers a mathematical approach to measure distances and interpolate between general objects in a, sometimes, more physical way than the classical interpolation approach. Thus, OT has become fundamental in some fields such as statistics or computer vision, and it is being increasingly used in fields such as computational mechanics. However, the OT problem is usually computationally costly to solve and not adapted to be accessed in an online manner. Therefore, the aim of this paper is combining advanced nonlinear regressions with Optimal Transport in order to implement a parametric real-time model based on OT. To this purpose, a parametric model is built offline relying on Model Order Reduction and OT, leading to a real-time interpolation tool following Optimal Transport theory. Such a tool is of major interest in design processes, but also within the digital twin rationale.}
+}@article{ng2011sparse,
+  title   = {Sparse autoencoder},
+  author  = {Ng, Andrew and others},
+  journal = {CS294A Lecture notes},
+  volume  = {72},
+  number  = {2011},
+  pages   = {1--19},
+  year    = {2011}
+}
+@inproceedings{vincent2008extracting,
+  title={Extracting and composing robust features with denoising autoencoders},
+  author={Vincent, Pascal and Larochelle, Hugo and Bengio, Yoshua and Manzagol, Pierre-Antoine},
+  booktitle={Proceedings of the 25th international conference on Machine learning},
+  pages={1096--1103},
+  year={2008}
+}
+@article{vincent2010stacked,
+  title={Stacked denoising autoencoders: Learning useful representations in a deep network with a local denoising criterion.},
+  author={Vincent, Pascal and Larochelle, Hugo and Lajoie, Isabelle and Bengio, Yoshua and Manzagol, Pierre-Antoine and Bottou, L{\'e}on},
+  journal={Journal of machine learning research},
+  volume={11},
+  number={12},
+  year={2010}
+}
+@article{kingma2019introduction,
+  title={An introduction to variational autoencoders},
+  author={Kingma, Diederik P and Welling, Max and others},
+  journal={Foundations and Trends{\textregistered} in Machine Learning},
+  volume={12},
+  number={4},
+  pages={307--392},
+  year={2019},
+  publisher={Now Publishers, Inc.}
+}
+@article{doersch2016tutorial,
+  title={Tutorial on variational autoencoders},
+  author={Doersch, Carl},
+  journal={arXiv preprint arXiv:1606.05908},
+  year={2016}
+}

@@ -3,44 +3,44 @@ Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: papier-shifted-curve.aux
 The style file: unsrt.bst
 Database file #1: sn-bibliography.bib
-You've used 44 entries,
+You've used 51 entries,
             1791 wiz_defined-function locations,
-            707 strings with 12170 characters,
-and the built_in function-call counts, 11244 in all, are:
-= -- 1020
-> -- 519
-< -- 8
-+ -- 189
-- -- 145
-* -- 784
-:= -- 1740
-add.period$ -- 135
-call.type$ -- 44
-change.case$ -- 40
+            746 strings with 13376 characters,
+and the built_in function-call counts, 12959 in all, are:
+= -- 1168
+> -- 610
+< -- 9
++ -- 222
+- -- 171
+* -- 905
+:= -- 2016
+add.period$ -- 156
+call.type$ -- 51
+change.case$ -- 47
 chr.to.int$ -- 0
-cite$ -- 44
-duplicate$ -- 490
-empty$ -- 1087
-format.name$ -- 145
-if$ -- 2521
+cite$ -- 51
+duplicate$ -- 565
+empty$ -- 1244
+format.name$ -- 171
+if$ -- 2901
 int.to.chr$ -- 0
-int.to.str$ -- 44
-missing$ -- 46
-newline$ -- 221
-num.names$ -- 44
-pop$ -- 128
+int.to.str$ -- 51
+missing$ -- 53
+newline$ -- 256
+num.names$ -- 51
+pop$ -- 142
 preamble$ -- 1
 purify$ -- 0
 quote$ -- 0
-skip$ -- 234
+skip$ -- 273
 stack$ -- 0
-substring$ -- 841
-swap$ -- 124
-text.length$ -- 8
+substring$ -- 952
+swap$ -- 143
+text.length$ -- 9
 text.prefix$ -- 0
 top$ -- 0
 type$ -- 0
 warning$ -- 0
-while$ -- 115
-width$ -- 46
-write$ -- 481
+while$ -- 131
+width$ -- 53
+write$ -- 557

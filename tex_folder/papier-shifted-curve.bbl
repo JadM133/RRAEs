@@ -89,6 +89,16 @@ Mark~A Davenport and Justin Romberg.
 \newblock An overview of low-rank matrix recovery from incomplete observations.
 \newblock {\em IEEE Journal of Selected Topics in Signal Processing}, 10(4):608--622, 2016.
 
+\bibitem{TORREGROSA202212}
+Sergio Torregrosa, Victor Champaney, Amine Ammar, Vincent Herbert, and Francisco Chinesta.
+\newblock Hybrid twins based on optimal transport.
+\newblock {\em Computers \& Mathematics with Applications}, 127:12--24, 2022.
+
+\bibitem{TORREGROSA202236}
+Sergio Torregrosa, Victor Champaney, Amine Ammar, Vincent Herbert, and Francisco Chinesta.
+\newblock Surrogate parametric metamodel based on optimal transport.
+\newblock {\em Mathematics and Computers in Simulation}, 194:36--63, 2022.
+
 \bibitem{popescu2009multilayer}
 Marius-Constantin Popescu, Valentina~E Balas, Liliana Perescu-Popescu, and Nikos Mastorakis.
 \newblock Multilayer perceptron and neural networks.
@@ -198,6 +208,31 @@ Bethany Lusch, J~Nathan Kutz, and Steven~L Brunton.
 Yasi Wang, Hongxun Yao, and Sicheng Zhao.
 \newblock Auto-encoder based dimensionality reduction.
 \newblock {\em Neurocomputing}, 184:232--242, 2016.
+
+\bibitem{ng2011sparse}
+Andrew Ng et~al.
+\newblock Sparse autoencoder.
+\newblock {\em CS294A Lecture notes}, 72(2011):1--19, 2011.
+
+\bibitem{vincent2008extracting}
+Pascal Vincent, Hugo Larochelle, Yoshua Bengio, and Pierre-Antoine Manzagol.
+\newblock Extracting and composing robust features with denoising autoencoders.
+\newblock In {\em Proceedings of the 25th international conference on Machine learning}, pages 1096--1103, 2008.
+
+\bibitem{vincent2010stacked}
+Pascal Vincent, Hugo Larochelle, Isabelle Lajoie, Yoshua Bengio, Pierre-Antoine Manzagol, and L{\'e}on Bottou.
+\newblock Stacked denoising autoencoders: Learning useful representations in a deep network with a local denoising criterion.
+\newblock {\em Journal of machine learning research}, 11(12), 2010.
+
+\bibitem{kingma2019introduction}
+Diederik~P Kingma, Max Welling, et~al.
+\newblock An introduction to variational autoencoders.
+\newblock {\em Foundations and Trends{\textregistered} in Machine Learning}, 12(4):307--392, 2019.
+
+\bibitem{doersch2016tutorial}
+Carl Doersch.
+\newblock Tutorial on variational autoencoders.
+\newblock {\em arXiv preprint arXiv:1606.05908}, 2016.
 
 \bibitem{jing2020implicit}
 Li~Jing, Jure Zbontar, et~al.
