@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex papier-shifted-curve"] 1713098954.64498 "papier-shifted-curve.aux" "papier-shifted-curve.bbl" "papier-shifted-curve" 1713099301.11544 0
+["bibtex papier-shifted-curve"] 1713098954.64498 "papier-shifted-curve.aux" "papier-shifted-curve.bbl" "papier-shifted-curve" 1713099572.37192 0
   "./sn-bibliography.bib" 1713093925 40345 3b6bfe1254786dcfd51c0bc1932761d3 ""
   "c:/texlive/2023/texmf-dist/bibtex/bst/base/unsrt.bst" 1709738180 18030 1376b4b231b50c66211e47e42eda2875 ""
-  "papier-shifted-curve.aux" 1713099299 11128 04b2dc4a928e2abbea8158afc552c5b9 "pdflatex"
+  "papier-shifted-curve.aux" 1713099571 11128 04b2dc4a928e2abbea8158afc552c5b9 "pdflatex"
   (generated)
   "papier-shifted-curve.bbl"
   "papier-shifted-curve.blg"
   (rewritten before read)
-["pdflatex"] 1713099298.30999 "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_folder/papier-shifted-curve.tex" "papier-shifted-curve.pdf" "papier-shifted-curve" 1713099301.11603 0
+["pdflatex"] 1713099569.56805 "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_folder/papier-shifted-curve.tex" "papier-shifted-curve.pdf" "papier-shifted-curve" 1713099572.3724 0
   "../figures/avrami_ww_noise_sv.pdf" 1713003543 17632 c1b9cf158dee290110b103e0315c1645 ""
   "../figures/avrami_ww_noise_test.pdf" 1713003540 43469 7ad22d03bdc221ed1e68b10331beaf54 ""
   "../figures/sin.pdf" 1713003616 17560 98add5a0d27fd908c24fc14af307ec57 ""
@@ -16,7 +16,7 @@
   "../figures/sin_sin_gauss_plot_test.pdf" 1713020149 53152 367ab600235aa7e8a9cc19344cc72b1d ""
   "./Notations.tex" 1713003424 3767 445aabaa7eff24019c171e76e4e1196a ""
   "Notations.tex" 1713003424 3767 445aabaa7eff24019c171e76e4e1196a ""
-  "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_folder/papier-shifted-curve.tex" 1713099297 70765 1bda7c0c16c22180cdb72d9739eca2e1 ""
+  "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_folder/papier-shifted-curve.tex" 1713099568 70775 ad2b6b0ed7e793579d92114e533cdb55 ""
   "c:/texlive/2023/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc" 1709738612 2900 1537cc8184ad1792082cd229ecc269f4 ""
   "c:/texlive/2023/texmf-dist/fonts/map/fontname/texfonts.map" 1709739532 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "c:/texlive/2023/texmf-dist/fonts/tfm/jknappen/ec/tcti1200.tfm" 1709739147 2048 4bf576aaa733142ac4e68faea01bc92e ""
@@ -233,10 +233,10 @@
   "c:/texlive/2023/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1709743293 5513072 c253eaa6343e824d2661325481d57b70 ""
   "c:/texlive/2023/texmf-var/web2c/pdftex/pdflatex.fmt" 1709743506 8221392 1a7f040ea3b99c66d693a7cdcbd20073 ""
   "c:/texlive/2023/texmf.cnf" 1709743268 713 e69b156964470283e0530f5060668171 ""
-  "papier-shifted-curve.aux" 1713099299 11128 04b2dc4a928e2abbea8158afc552c5b9 "pdflatex"
+  "papier-shifted-curve.aux" 1713099571 11128 04b2dc4a928e2abbea8158afc552c5b9 "pdflatex"
   "papier-shifted-curve.bbl" 1713098955 12363 8897e06677430b8562068ae5f2a05d3c "bibtex papier-shifted-curve"
-  "papier-shifted-curve.out" 1713099299 1435 09d86f75129edb484babe0b63435d080 "pdflatex"
-  "papier-shifted-curve.tex" 1713099297 70765 1bda7c0c16c22180cdb72d9739eca2e1 ""
+  "papier-shifted-curve.out" 1713099571 1435 09d86f75129edb484babe0b63435d080 "pdflatex"
+  "papier-shifted-curve.tex" 1713099568 70775 ad2b6b0ed7e793579d92114e533cdb55 ""
   (generated)
   "papier-shifted-curve.aux"
   "papier-shifted-curve.log"
