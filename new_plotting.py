@@ -134,7 +134,7 @@ def plot_sin_sin_gauss():
     plt.show()
 
 def plot_avramis():
-    methods = ["Strong", "Weak"]
+    methods = ["strong", "weak"]
     colors = ["g", "r"]
     markers = ["o", "*"] 
     pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" # 
@@ -178,17 +178,17 @@ def plot_avramis():
                     newlab = lab if ii == 0 else "__no_legend__"
                     plt.plot(ts, y_pred_test_o[:, idx], label=newlab, color=color, linestyle=ls)
 
-            plt.xlabel(r'$t$', fontsize=20)
+            plt.xlabel(r'$t_v$', fontsize=20)
             plt.ylabel(ylabel, fontsize=20)
             if inc != 1:
                 
                 plt.title("Test on Avrami model", fontsize=20)
             else:
                 plt.title("Test on Avrami model with noise", fontsize=20)
-            plt.legend(fontsize=10)
+            plt.legend(fontsize=20)
 
-    plot_first_fig(methods, colors, markers, "avrami-10", pre_folder, [[39,], [1,]], r"$f_a(\bf{p})$", sample=6) # 58
-    plot_first_fig(methods, colors, markers, "avrami_noise", pre_folder, [[1, 15,], [44, 70]], r"$f_an(\bf{p})$", inc=1, sample=24)
+    plot_first_fig(methods, colors, markers, "avrami-10", pre_folder, [[39,], [1,]], r"$X_d$", sample=6) # 58
+    plot_first_fig(methods, colors, markers, "avrami_noise", pre_folder, [[1, 15,], [44, 70]], r"$X_d$", inc=1, sample=24)
     plt.savefig(os.path.join(folder_for_all, f"avrami_ww_noise_test.pdf"))
 
     
@@ -220,10 +220,10 @@ def plot_avramis():
                 plt.xlabel(r'$Index$', fontsize=20)
                 plt.ylabel(f"First {how_much} Singular Values of Y", fontsize=20)
                 plt.title(f"Results for the {method} formulation", fontsize=20)
-                plt.legend(fontsize=10)
+                plt.legend(fontsize=20)
 
     problems = ["avrami-2", "avrami-3", "avrami-5", "avrami-10"]
-    plot_second_fig(methods, colors, markers, problems, pre_folder, 5, r"$f_a(\bf{p})$", sample=6) # 58
+    plot_second_fig(methods, colors, markers, problems, pre_folder, 5, "", sample=6) # 58
     plt.savefig(os.path.join(folder_for_all, f"avrami_ww_noise_sv.pdf"))
 
     plt.show()
