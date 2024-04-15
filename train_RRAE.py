@@ -526,7 +526,7 @@ def post_process(p_vals, p_test, problem, method, x_train, y_pred_train, v_train
                     plt.title(f"Latent space for mode {i}", fontsize=20)
                     if file is not None:
                         plt.savefig(os.path.join(file, f"latent_mode_{i}.pdf"))
-                    plt.show()
+                    plt.clf()
         if v_test is not None:
             if pp:
                 for i, (v_tr, v_t) in enumerate(zip(vt_train, v_test)): # , p_vals.T, p_test.T
@@ -583,7 +583,7 @@ def post_process(p_vals, p_test, problem, method, x_train, y_pred_train, v_train
         for i, x_train in enumerate(x_train_modes):
             plt.plot(x_train, color="blue")
             plt.title(f"Latent space for mode {i}")
-            plt.show()
+            plt.clf()
         error_test = None
         error_test_o = None
 
@@ -636,6 +636,14 @@ def do_all_the_u_now_stuff(y_shift, y_test, eps=None):
         return u_now @ jax.vmap(inv_to_norm)(x, means, stds)
     
     return norm_coeffs, norm_coeffs_test, inv_func
+
+def plot_surfaces(X_vec, Y_vec, solutions, idx):
+    from matplotlib import cm
+    Z_n = jnp.reshape(solutions[:, idx], (X_vec.shape[0], Y_vec.shape[0]))
+    _, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    ax.plot_surface(X_vec, Y_vec, Z_n, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+    ax.view_init(elev=90, azim=-90, roll=0)
+    plt.show()
 
 def get_data(problem, **kwargs):
     match problem:
@@ -809,7 +817,7 @@ def get_data(problem, **kwargs):
             y_test = jax.vmap(lambda p, t: x_0*jnp.exp(-alpha*t)*jnp.cos(p*t)+(v_0+alpha*x_0)*jnp.exp(-alpha*t)/p*jnp.sin(p*t), in_axes=[0, None])(p_test, ts).T
             return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None
         
-        case _:
+        case "avrami":
             n = 4
             N = jnp.repeat(jnp.linspace(1.5, 3, 20), 20)
             G = jnp.tile(jnp.linspace(1.5, 3, 20), 20)
@@ -825,6 +833,46 @@ def get_data(problem, **kwargs):
             y_test = jax.vmap(lambda p, t: 1-jnp.exp(-jnp.pi*p[0]*p[1]**3/3*t**n), in_axes=[0, None])(p_test, ts).T
             y_test = (y_test-mean)/std
             return ts, y_shift, y_test, p_vals, p_test, None, None, None
+        
+        case "welding":
+            import os
+            import h5py
+            filename = os.path.join(os.getcwd(), "data-chady/")
+            f = lambda n: os.path.join(filename, n)
+            Data_1 = h5py.File(f('dataset_1.mat'), 'r')
+            all_ys = jnp.array(Data_1['Solution']).T
+            location = jnp.array(Data_1['location']).T
+            radius = jnp.array(Data_1['radius']).T
+            X = jnp.array(Data_1['X']).T
+            Y = jnp.array(Data_1['Y']).T
+            location = jnp.array(Data_1['location']).T
+            radius = jnp.array(Data_1['radius']).T
+            Data_1.close()
+
+            all_ps = jnp.concatenate([location, radius], -1) 
+
+            # # for plotting
+            # X_new = X[:, 0]
+            # Y_new = Y[:, 0]
+            # idx = jnp.argmax(jnp.diff(X_new)<0) 
+            # X_vec = X[0:idx+1][:, 0]
+            # dY = Y[idx+1]-Y[0]
+            # Y_vec = jnp.arange(Y[0, 0], Y[-1, 0]+dY[0], dY[0]) 
+            # X_n, Y_n = np.meshgrid(X_vec, Y_vec)
+
+            prop_train = 0.9
+
+            idx = jnp.arange(0, all_ys.shape[1], 1)
+            idx = jrandom.permutation(jrandom.PRNGKey(10), idx)
+            all_ys = all_ys[:, idx]
+            all_ps = all_ps[idx]
+            y_shift = all_ys[:, :int(all_ys.shape[1]*prop_train)]
+            p_vals = all_ps[:int(all_ys.shape[1]*prop_train)]
+            y_test = all_ys[:, int(all_ys.shape[1]*prop_train):]
+            p_test = all_ps[int(all_ys.shape[1]*prop_train):]
+            return (X, Y,), y_shift, y_test, p_vals, p_test, None, None, None
+        case _:
+            raise ValueError(f"Problem {problem} not recognized")
         
 def p_of_dim_1(v_train, vt_train, p_vals, p_test, model, num_modes):
     def evaluate_at_parameter(idx, p_val, v):
@@ -923,6 +971,7 @@ def get_v_test_multi_p(p_train, vt_train, p_test, graph=False):
 
 def p_of_dim_2(v_train, vt_train, p_vals, p_test, model, num_modes):
     to_conc = []
+    pdb.set_trace()
     for j in range(num_modes):
         vt_trai = vt_train[j]
         vt_test_ = get_v_test_multi_p(p_vals, vt_trai, p_test, graph=False)
@@ -967,8 +1016,7 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False,
         v_vt = False
         Wx_ = False
         num_modes_true = num_modes
-    folder = f"{prob_name}/{prob_name}_{method}"
-
+    
     ts, y_shift, y_test, p_vals, p_test, lambda_post, y_original, y_test_original = data_func(**kwargs)
     lambda_post = _identity if lambda_post is None else lambda_post
     assert is_test_inside(p_vals, p_test)
@@ -980,13 +1028,16 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False,
     if (not train_nn) and  (p_vals.shape[-1] != 1) and (p_vals.shape[-1] != 2):
         print("Only P = 1 or P = 2 are supported without training a Neural Network , switching to training mode")
         train_nn = True
-    
+
+    folder = f"{prob_name}/{prob_name}_{method}"
     folder_name = f"{folder}/"
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
     filename = os.path.join(folder_name, f"{method}_{prob_name}")
 
     if not train_nn:
         
-        process_func = p_of_dim_2 if p_vals.shape[-1] == 2 else p_of_dim_1
+        process_func = p_of_dim_2 if p_vals.shape[-1] > 1 else p_of_dim_1
         x_test, y_pred_test, y_pred_test_o, vt_test = process_func(v_train, vt_train, p_vals, p_test, model, num_modes_true)
 
         kwargs = {k: kwargs[k] for k in set(list(kwargs.keys())) - set({"activation_enc", "activation_dec", "loss_func", "post_proc_func"})}
@@ -1030,9 +1081,9 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False,
     return p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train
 if __name__ == "__main__":
 
-    method = "weak"
-    problem = "avrami-5" # "shift", "accelerate", "stairs", "mult_freqs", "pimm_curves", "angelo", "mult_gausses", "avrami", "avrami_noise", "mass_spring"
+    method = "strong"
+    problem = "welding" # "shift", "accelerate", "stairs", "mult_freqs", "pimm_curves", "angelo", "mult_gausses", "avrami", "avrami_noise", "mass_spring"
     train_nn = False # 12
-    kwargs = {"num_modes": 5, "problem": problem, "step_st": [2000, 2000, 2000], "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_enc": 64, "depth_enc": 1, "width_dec": 64, "depth_dec": 6, "mul_latent": 6, "batch_size_st":[20, 20, 20,], "mul_lr": 100}
+    kwargs = {"num_modes": 3, "problem": problem, "step_st": [2,], "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_enc": 64, "depth_enc": 1, "width_dec": 64, "depth_dec": 6, "mul_latent": 6, "batch_size_st":[20, 20, 20,], "mul_lr": 100}
     p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train = main_RRAE(method, problem, get_data, train_loop_RRAE, True, train_nn, pp=True, **kwargs)
     pdb.set_trace()
