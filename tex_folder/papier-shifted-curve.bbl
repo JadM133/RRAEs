@@ -1,14 +1,28 @@
 \begin{thebibliography}{10}
 
-\bibitem{zienkiewicz2005finite}
-Olek~C Zienkiewicz and Robert~Leroy Taylor.
-\newblock {\em The finite element method for solid and structural mechanics}.
-\newblock Elsevier, Amsterdam, 2005.
+\bibitem{tezzele2019shape}
+Marco Tezzele, Nicola Demo, and Gianluigi Rozza.
+\newblock Shape optimization through proper orthogonal decomposition with interpolation and dynamic mode decomposition enhanced by active subspaces, 2019.
 
-\bibitem{smith1985numerical}
-Gordon~D Smith, Gordon~D Smith, and Gordon Dennis~Smith Smith.
-\newblock {\em Numerical solution of partial differential equations: finite difference methods}.
-\newblock Oxford university press, Oxford, 1985.
+\bibitem{nguyen2022efficient}
+Minh-Nhan Nguyen and Hyun-Gyu Kim.
+\newblock An efficient podi method for real-time simulation of indenter contact problems using rbf interpolation and contact domain decomposition.
+\newblock {\em Computer Methods in Applied Mechanics and Engineering}, 388:114215, 2022.
+
+\bibitem{rama2020towards}
+RR~Rama and S~Skatulla.
+\newblock Towards real-time modelling of passive and active behaviour of the human heart using podi-based model reduction.
+\newblock {\em Computers \& Structures}, 232:105897, 2020.
+
+\bibitem{chinesta2011short}
+Francisco Chinesta, Pierre Ladeveze, and Elias Cueto.
+\newblock A short review on model order reduction based on proper generalized decomposition.
+\newblock {\em Archives of Computational Methods in Engineering}, 18(4):395--404, 2011.
+
+\bibitem{sancarlos2023regularized}
+Abel Sancarlos, Victor Champaney, Elias Cueto, and Francisco Chinesta.
+\newblock Regularized regressions for parametric models based on separated representations.
+\newblock {\em Advanced Modeling and Simulation in Engineering Sciences}, 10(1):4, 2023.
 
 \bibitem{rowley2004model}
 Clarence~W Rowley, Tim Colonius, and Richard~M Murray.
@@ -45,29 +59,15 @@ David Gonz{\'a}lez, Jos{\'e}~Vicente Aguado, E~Cueto, E~Abisset-Chavanne, and F~
 \newblock kpca-based parametric solutions within the pgd framework.
 \newblock {\em Archives of Computational Methods in Engineering}, 25:69--86, 2018.
 
-\bibitem{tezzele2019shape}
-Marco Tezzele, Nicola Demo, and Gianluigi Rozza.
-\newblock Shape optimization through proper orthogonal decomposition with interpolation and dynamic mode decomposition enhanced by active subspaces, 2019.
+\bibitem{TORREGROSA202212}
+Sergio Torregrosa, Victor Champaney, Amine Ammar, Vincent Herbert, and Francisco Chinesta.
+\newblock Hybrid twins based on optimal transport.
+\newblock {\em Computers \& Mathematics with Applications}, 127:12--24, 2022.
 
-\bibitem{nguyen2022efficient}
-Minh-Nhan Nguyen and Hyun-Gyu Kim.
-\newblock An efficient podi method for real-time simulation of indenter contact problems using rbf interpolation and contact domain decomposition.
-\newblock {\em Computer Methods in Applied Mechanics and Engineering}, 388:114215, 2022.
-
-\bibitem{rama2020towards}
-RR~Rama and S~Skatulla.
-\newblock Towards real-time modelling of passive and active behaviour of the human heart using podi-based model reduction.
-\newblock {\em Computers \& Structures}, 232:105897, 2020.
-
-\bibitem{chinesta2011short}
-Francisco Chinesta, Pierre Ladeveze, and Elias Cueto.
-\newblock A short review on model order reduction based on proper generalized decomposition.
-\newblock {\em Archives of Computational Methods in Engineering}, 18(4):395--404, 2011.
-
-\bibitem{sancarlos2023regularized}
-Abel Sancarlos, Victor Champaney, Elias Cueto, and Francisco Chinesta.
-\newblock Regularized regressions for parametric models based on separated representations.
-\newblock {\em Advanced Modeling and Simulation in Engineering Sciences}, 10(1):4, 2023.
+\bibitem{TORREGROSA202236}
+Sergio Torregrosa, Victor Champaney, Amine Ammar, Vincent Herbert, and Francisco Chinesta.
+\newblock Surrogate parametric metamodel based on optimal transport.
+\newblock {\em Mathematics and Computers in Simulation}, 194:36--63, 2022.
 
 \bibitem{srebro2003weighted}
 Nathan Srebro and Tommi Jaakkola.
@@ -88,66 +88,6 @@ Madeleine Udell, Corinne Horn, Reza Zadeh, Stephen Boyd, et~al.
 Mark~A Davenport and Justin Romberg.
 \newblock An overview of low-rank matrix recovery from incomplete observations.
 \newblock {\em IEEE Journal of Selected Topics in Signal Processing}, 10(4):608--622, 2016.
-
-\bibitem{TORREGROSA202212}
-Sergio Torregrosa, Victor Champaney, Amine Ammar, Vincent Herbert, and Francisco Chinesta.
-\newblock Hybrid twins based on optimal transport.
-\newblock {\em Computers \& Mathematics with Applications}, 127:12--24, 2022.
-
-\bibitem{TORREGROSA202236}
-Sergio Torregrosa, Victor Champaney, Amine Ammar, Vincent Herbert, and Francisco Chinesta.
-\newblock Surrogate parametric metamodel based on optimal transport.
-\newblock {\em Mathematics and Computers in Simulation}, 194:36--63, 2022.
-
-\bibitem{popescu2009multilayer}
-Marius-Constantin Popescu, Valentina~E Balas, Liliana Perescu-Popescu, and Nikos Mastorakis.
-\newblock Multilayer perceptron and neural networks.
-\newblock {\em WSEAS Transactions on Circuits and Systems}, 8(7):579--588, 2009.
-
-\bibitem{seiffert2001multiple}
-Udo Seiffert.
-\newblock Multiple layer perceptron training using genetic algorithms.
-\newblock In {\em ESANN}, pages 159--164. Citeseer, 2001.
-
-\bibitem{mitra1995fuzzy}
-Sushmita Mitra and Sankar~K Pal.
-\newblock Fuzzy multi-layer perceptron, inferencing and rule generation.
-\newblock {\em IEEE Transactions on Neural Networks}, 6(1):51--63, 1995.
-
-\bibitem{tang2015extreme}
-Jiexiong Tang, Chenwei Deng, and Guang-Bin Huang.
-\newblock Extreme learning machine for multilayer perceptron.
-\newblock {\em IEEE transactions on neural networks and learning systems}, 27(4):809--821, 2015.
-
-\bibitem{medsker2001recurrent}
-Larry~R Medsker and LC~Jain.
-\newblock Recurrent neural networks.
-\newblock {\em Design and Applications}, 5(64-67):2, 2001.
-
-\bibitem{salehinejad2017recent}
-Hojjat Salehinejad, Sharan Sankar, Joseph Barfett, Errol Colak, and Shahrokh Valaee.
-\newblock Recent advances in recurrent neural networks.
-\newblock {\em arXiv preprint arXiv:1801.01078}, 2017.
-
-\bibitem{medsker1999recurrent}
-Larry Medsker and Lakhmi~C Jain.
-\newblock {\em Recurrent neural networks: design and applications}.
-\newblock CRC press, 1999.
-
-\bibitem{albawi2017understanding}
-Saad Albawi, Tareq~Abed Mohammed, and Saad Al-Zawi.
-\newblock Understanding of a convolutional neural network.
-\newblock In {\em 2017 international conference on engineering and technology (ICET)}, pages 1--6. Ieee, 2017.
-
-\bibitem{gu2018recent}
-Jiuxiang Gu, Zhenhua Wang, Jason Kuen, Lianyang Ma, Amir Shahroudy, Bing Shuai, Ting Liu, Xingxing Wang, Gang Wang, Jianfei Cai, et~al.
-\newblock Recent advances in convolutional neural networks.
-\newblock {\em Pattern recognition}, 77:354--377, 2018.
-
-\bibitem{li2021survey}
-Zewen Li, Fan Liu, Wenjie Yang, Shouheng Peng, and Jun Zhou.
-\newblock A survey of convolutional neural networks: analysis, applications, and prospects.
-\newblock {\em IEEE transactions on neural networks and learning systems}, 33(12):6999--7019, 2021.
 
 \bibitem{berrada2020training}
 Leonard Berrada, Andrew Zisserman, and M~Pawan Kumar.
@@ -179,60 +119,25 @@ Yihan Deng, Andr{\'e} Sander, Lukas Faulstich, and Kerstin Denecke.
 \newblock Towards automatic encoding of medical procedures using convolutional neural networks and autoencoders.
 \newblock {\em Artificial intelligence in medicine}, 93:29--42, 2019.
 
-\bibitem{shin2012stacked}
-Hoo-Chang Shin, Matthew~R Orton, David~J Collins, Simon~J Doran, and Martin~O Leach.
-\newblock Stacked autoencoders for unsupervised feature learning and multiple organ detection in a pilot study using 4d patient data.
-\newblock {\em IEEE transactions on pattern analysis and machine intelligence}, 35(8):1930--1943, 2012.
-
 \bibitem{park2018multimodal}
 Daehyung Park, Yuuna Hoshi, and Charles~C Kemp.
 \newblock A multimodal anomaly detector for robot-assisted feeding using an lstm-based variational autoencoder.
 \newblock {\em IEEE Robotics and Automation Letters}, 3(3):1544--1551, 2018.
-
-\bibitem{sergeant2015multimodal}
-James Sergeant, Niko S{\"u}nderhauf, Michael Milford, and Ben Upcroft.
-\newblock Multimodal deep autoencoders for control of a mobile robot.
-\newblock In {\em Proc. of Australasian Conf. for robotics and automation (ACRA)}, 2015.
 
 \bibitem{bank2023autoencoders}
 Dor Bank, Noam Koenigstein, and Raja Giryes.
 \newblock Autoencoders.
 \newblock {\em Machine learning for data science handbook: data mining and knowledge discovery handbook}, pages 353--374, 2023.
 
-\bibitem{lusch2018deep}
-Bethany Lusch, J~Nathan Kutz, and Steven~L Brunton.
-\newblock Deep learning for universal linear embeddings of nonlinear dynamics.
-\newblock {\em Nature communications}, 9(1):4950, 2018.
-
-\bibitem{wang2016auto}
-Yasi Wang, Hongxun Yao, and Sicheng Zhao.
-\newblock Auto-encoder based dimensionality reduction.
-\newblock {\em Neurocomputing}, 184:232--242, 2016.
+\bibitem{doersch2016tutorial}
+Carl Doersch.
+\newblock Tutorial on variational autoencoders.
+\newblock {\em arXiv preprint arXiv:1606.05908}, 2016.
 
 \bibitem{ng2011sparse}
 Andrew Ng et~al.
 \newblock Sparse autoencoder.
 \newblock {\em CS294A Lecture notes}, 72(2011):1--19, 2011.
-
-\bibitem{vincent2008extracting}
-Pascal Vincent, Hugo Larochelle, Yoshua Bengio, and Pierre-Antoine Manzagol.
-\newblock Extracting and composing robust features with denoising autoencoders.
-\newblock In {\em Proceedings of the 25th international conference on Machine learning}, pages 1096--1103, 2008.
-
-\bibitem{vincent2010stacked}
-Pascal Vincent, Hugo Larochelle, Isabelle Lajoie, Yoshua Bengio, Pierre-Antoine Manzagol, and L{\'e}on Bottou.
-\newblock Stacked denoising autoencoders: Learning useful representations in a deep network with a local denoising criterion.
-\newblock {\em Journal of machine learning research}, 11(12), 2010.
-
-\bibitem{kingma2019introduction}
-Diederik~P Kingma, Max Welling, et~al.
-\newblock An introduction to variational autoencoders.
-\newblock {\em Foundations and Trends{\textregistered} in Machine Learning}, 12(4):307--392, 2019.
-
-\bibitem{doersch2016tutorial}
-Carl Doersch.
-\newblock Tutorial on variational autoencoders.
-\newblock {\em arXiv preprint arXiv:1606.05908}, 2016.
 
 \bibitem{jing2020implicit}
 Li~Jing, Jure Zbontar, et~al.
@@ -242,6 +147,16 @@ Li~Jing, Jure Zbontar, et~al.
 \bibitem{mazumder2023learning}
 Alokendu Mazumder, Tirthajit Baruah, Bhartendu Kumar, Rishab Sharma, Vishwajeet Pattanaik, and Punit Rathore.
 \newblock Learning low-rank latent spaces with simple deterministic autoencoder: Theoretical and empirical insights, 2023.
+
+\bibitem{brunton2021modern}
+Steven~L Brunton, Marko Budi{\v{s}}i{\'c}, Eurika Kaiser, and J~Nathan Kutz.
+\newblock Modern koopman theory for dynamical systems.
+\newblock {\em arXiv preprint arXiv:2102.12086}, 2021.
+
+\bibitem{kpca}
+Bernhard Schölkopf, Alexander Smola, and Klaus-Robert Müller.
+\newblock {\em Kernel Principal Component Analysis}, volume 1327, pages 583--588.
+\newblock 10 2006.
 
 \bibitem{stewart1993early}
 Gilbert~W Stewart.

@@ -423,7 +423,6 @@ def train_loop_RRAE(
                     widgetf.setText(f"Loss: {loss}")
                 t_t = 0
 
-    pdb.set_trace()
     model = eqx.nn.inference_mode(model)
     x, y, x_m, svd, _ = model(ys, n_mode, 0, True)
     _, y_o, _, _, _ = model(ys, n_mode, 0, False)
@@ -1025,9 +1024,9 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False,
     print(f"Shape of p_vals is {p_vals.shape}, (N x P)")
     y_pred_train, x_m, model, v_train, vt_train, parameters, y_pred_train_o = train_func(y_shift, n_mode=num_modes, num_modes_vvt=num_modes_vvt, dropout=0, v_vt=v_vt, WX_=Wx_, p_vals=p_vals, post_proc_func=lambda_post, method=method, **kwargs)
 
-    if (not train_nn) and  (p_vals.shape[-1] != 1) and (p_vals.shape[-1] != 2):
-        print("Only P = 1 or P = 2 are supported without training a Neural Network , switching to training mode")
-        train_nn = True
+    # if (not train_nn) and  (p_vals.shape[-1] != 1) and (p_vals.shape[-1] != 2):
+    #     print("Only P = 1 or P = 2 are supported without training a Neural Network , switching to training mode")
+    #     train_nn = True
 
     folder = f"{prob_name}/{prob_name}_{method}"
     folder_name = f"{folder}/"
@@ -1083,7 +1082,7 @@ if __name__ == "__main__":
 
     method = "strong"
     problem = "welding" # "shift", "accelerate", "stairs", "mult_freqs", "pimm_curves", "angelo", "mult_gausses", "avrami", "avrami_noise", "mass_spring"
-    train_nn = False # 12
-    kwargs = {"num_modes": 3, "problem": problem, "step_st": [2,], "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_enc": 64, "depth_enc": 1, "width_dec": 64, "depth_dec": 6, "mul_latent": 6, "batch_size_st":[20, 20, 20,], "mul_lr": 100}
+    train_nn = True # 12
+    kwargs = {"num_modes": 3, "problem": problem, "step_st": [2000, 2000, 2000], "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_enc": 64, "depth_enc": 1, "width_dec": 64, "depth_dec": 6, "mul_latent": 2, "batch_size_st":[20, 20, 20,], "mul_lr": 100}
     p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train = main_RRAE(method, problem, get_data, train_loop_RRAE, True, train_nn, pp=True, **kwargs)
     pdb.set_trace()

@@ -33,7 +33,7 @@ def plot_sin_escal():
 
             with open(f"{filename}_.pkl", "rb") as f:
                 v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs = dill.load(f)
-            
+
             plt.figure(1)
             if j == 0:
                 for i_, i in enumerate(indices):
@@ -61,6 +61,9 @@ def plot_sin_escal():
             else:
                 y1 = vt_train
                 y2 = vt_test
+            if inc == 1:
+                y1 = (y1 - jnp.min(y1))/(jnp.max(y1) - jnp.min(y1))
+                y2 = (y2 - jnp.min(y2))/(jnp.max(y2) - jnp.min(y2))
             plt.scatter(p_vals, y1, color=color, label=f"{method}-train", marker="o")
             plt.scatter(p_test, y2, color=color, label=f"{method}-test", marker="x")
             if j == 0 and inc == 0:
@@ -216,7 +219,7 @@ def plot_avramis():
                 S, V, D = jnp.linalg.svd(x_m)
                 to_plot = V[:how_much]/jnp.max(V)
                 t_val = jnp.arange(1, how_much+1)
-                plt.plot(t_val, to_plot, label=prob, linestyle="-")
+                plt.plot(t_val, to_plot, label=f"{method}-{v_train.shape[-1]}", linestyle="-")
                 plt.xlabel(r'$Index$', fontsize=20)
                 plt.ylabel(f"First {how_much} Singular Values of Y", fontsize=20)
                 plt.title(f"Results for the {method} formulation", fontsize=20)

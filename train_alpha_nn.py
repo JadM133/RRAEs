@@ -227,11 +227,11 @@ def main_alpha(filename, folder_name, restart=True, **kwargs):
 
 if __name__ == "__main__":
     method = "strong"
-    problem = "avrami"
+    problem = "welding"
     folder = f"{problem}/{problem}_{method}"
     folder_name = f"{folder}/"
     filename = os.path.join(folder_name, f"{method}_{problem}")
     restart = True
-    kwargs = {"step_st":[500,], "lr_st":[1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_size":64, "depth":1, "batch_size_st":[-1, -1, -1, -1]}
+    kwargs = {"step_st":[2000, 2000], "lr_st":[1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_size":64, "depth":2, "batch_size_st":[-1, -1, -1, -1]}
     main_alpha(filename, folder_name, restart, **kwargs)
     pdb.set_trace()
