@@ -427,8 +427,7 @@ def train_loop_RRAE(
     x, y, x_m, svd, _ = model(ys, n_mode, 0, True)
     _, y_o, _, _, _ = model(ys, n_mode, 0, False)
     if method == "weak":
-        pdb.set_trace()
-        # u_vec, sv, v_vec = determine_u_now(x_m, eps=1, ret=True, full_matrices=False)
+        u_vec, sv, v_vec = determine_u_now(x_m, eps=1, ret=True, full_matrices=False)
         v1 = jax.vmap(lambda x: x / jnp.linalg.norm(x), in_axes=[-1])(model.v_vt1.v).T
         v_vec = model.v_vt1.vt
     else:
@@ -509,7 +508,6 @@ def post_process(p_vals, p_test, problem, method, x_train, y_pred_train, v_train
         print("Plotting latent space for test")
         if x_test_modes is None:
             x_test_modes = jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(v_train, v_test)
-        pdb.set_trace()
         if x_test_modes.shape[1] < 1500:
             if pp:
                 for i, (x_train, x_test) in enumerate(zip(x_train_modes, x_test_modes)):
@@ -592,10 +590,12 @@ def is_test_inside(p_vals, p_test):
     check_func = lambda p_v, p_t: (jnp.min(p_v, axis=0) < p_t).all() & (p_t < jnp.max(p_v, axis=0)).all()
     if p_vals.shape[-1] == 1:
         return check_func(p_vals, p_test)
-    else:
+    elif p_vals.shape[-1] == 2:
         is_in_rect = lambda vals: (jnp.sum(vals, axis=1) == 2).any()  and (jnp.sum(vals, axis=1) == 0).any() and ((jnp.sum(vals, axis=1) == 1) & (vals[:, 0] == 1)).any() and ((jnp.sum(vals, axis=1) == 1) & (vals[:, 0] == 0)).any() 
         check_func_2 = lambda p_t: is_in_rect(p_vals > p_t)
         return my_vmap(check_func_2)(p_test).all()
+    else:
+        return True
 
 def determine_u_now(ys, eps=1, ret=False, full_matrices=True):
     u, sv, v = jnp.linalg.svd(ys, full_matrices=full_matrices)
@@ -643,6 +643,30 @@ def plot_surfaces(X_vec, Y_vec, solutions, idx):
     ax.plot_surface(X_vec, Y_vec, Z_n, cmap=cm.coolwarm, linewidth=0, antialiased=False)
     ax.view_init(elev=90, azim=-90, roll=0)
     plt.show()
+
+def norm_divide_return(ts, y_all, p_all, prop_train=0.8, pod=False, eps=1):
+    norm_vec = lambda x: (x)/jnp.std(x)
+    p_all= jnp.stack(my_vmap(lambda y: norm_vec(y + jnp.abs(min(jnp.min(y), 0))))(p_all.T)).T
+    idx = jrandom.permutation(jrandom.PRNGKey(0), jnp.linspace(0, y_all.shape[-1]-1, y_all.shape[-1], dtype=int))
+    idx_train = idx[:int(prop_train*y_all.shape[-1])]
+    idx_test = idx[int(prop_train*y_all.shape[-1]):]
+    p_vals = p_all[idx_train]
+    p_test = p_all[idx_test]
+    y_shift_old = y_all[:, idx_train]
+    y_shift = (y_shift_old - jnp.mean(y_shift_old))/jnp.std(y_shift_old)
+    y_test = y_all[:, idx_test]
+    y_test = (y_test - jnp.mean(y_shift_old))/jnp.std(y_shift_old)
+    if not pod:
+        return ts, y_shift, y_test, p_vals, p_test, None, None, None
+    u_now = determine_u_now(y_shift, eps=eps)
+    coeffs_shift = u_now.T @ y_shift
+    mean_vals = jnp.mean(coeffs_shift, axis=1)
+    std_vals = jnp.std(coeffs_shift, axis=1)
+    coeffs_shift = jax.vmap(lambda x, m, s: (x-m)/s)(coeffs_shift, mean_vals, std_vals)
+    coeffs_test = u_now.T @ y_test
+    coeffs_test = jax.vmap(lambda x, m, s: (x-m)/s)(coeffs_test, mean_vals, std_vals)
+    inv_func = lambda xx: u_now @ jax.vmap(lambda x, m, s: x*s+m)(xx, mean_vals, std_vals)
+    return ts, coeffs_shift, coeffs_test, p_vals, p_test, inv_func, y_shift, y_test        
 
 def get_data(problem, **kwargs):
     match problem:
@@ -725,22 +749,16 @@ def get_data(problem, **kwargs):
             return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None
         
         case "angelo":
-            import scipy.io
             import os
-            filename = os.path.join(os.getcwd(), "shifted-curves-angelo/KE/data/")
+            import pandas as pd
+            filename = os.path.join(os.getcwd(), "data_angelo/")
             f = lambda n: os.path.join(filename, n)
-            curves = jnp.array(scipy.io.loadmat(f('curves.mat'))["curves"])
-            ts = jnp.array(scipy.io.loadmat(f('times.mat'))["times"][:, 0])
-            ps = jnp.array(scipy.io.loadmat(f('doe.mat'))["doe_matrix"])
-            idx = jnp.arange(0, curves.shape[1], 1)
-            idx = jrandom.permutation(jrandom.PRNGKey(0), idx) 
-            y_shift = curves[:, idx[:-3]]
-            p_vals = ps[idx[:-3]]
-            y_test = curves[:, idx[-3:]]
-            p_test = ps[idx[-3:]]
-            y_shift_ = jax.vmap(lambda y: (y-jnp.mean(y_shift))/jnp.std(y_shift), in_axes=[-1])(y_shift).T
-            y_test = jax.vmap(lambda y: (y-jnp.mean(y_shift))/jnp.std(y_shift), in_axes=[-1])(y_test).T
-            return ts, y_shift_, y_test, p_vals, p_test, None, None, None
+            scaledDesign = pd.read_csv(f("data.csv"))
+            ts = jnp.array(scaledDesign['freqEng'][0].strip('[]').split(), 'float')
+            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy()) 
+            p_all = jnp.asarray(scaledDesign[scaledDesign.columns[:14]])
+            y_all = read_series(scaledDesign['S22dB']).T
+            return norm_divide_return(ts, y_all, p_all, prop_train=0.9)
         
         case "mult_gausses":
 
@@ -759,24 +777,6 @@ def get_data(problem, **kwargs):
             y_test = jax.vmap(lambda p, t: gauss(a, p[0], c, t) + gauss(-a, p[1], c, t), in_axes=[0, None])(p_test, ts).T
             # u_now = determine_u_now(y_shift, eps=0.0001)
             return ts, y_shift, y_test, p_vals, p_test, None, None, None
-        
-        case "avrami-POD":
-            n = 4
-            N = jnp.repeat(jnp.linspace(1.5, 3, 20), 20)
-            G = jnp.tile(jnp.linspace(1.5, 3, 20), 20)
-            p_vals = jnp.stack([N, G], axis=-1)
-            p_test_1 = jrandom.uniform(jrandom.PRNGKey(100), (150,), minval=N[0]+0.01, maxval=N[-1]-0.01)
-            p_test_2 = jrandom.uniform(jrandom.PRNGKey(0), (150,), minval=G[0]+0.01, maxval=G[-1]-0.01)
-            p_test = jnp.stack([p_test_1, p_test_2], axis=-1)
-
-            ts = jnp.arange(0, 1, 0.01)
-            y_shift = jax.vmap(lambda p, t: 1-jnp.exp(-jnp.pi*p[0]*p[1]**3/3*t**n), in_axes=[0, None])(p_vals, ts).T
-            mean, std = jnp.mean(y_shift), jnp.std(y_shift)
-            y_shift = (y_shift-mean)/std
-            y_test = jax.vmap(lambda p, t: 1-jnp.exp(-jnp.pi*p[0]*p[1]**3/3*t**n), in_axes=[0, None])(p_test, ts).T
-            y_test = (y_test-mean)/std
-            y_pod_shift, y_pod_test, inv_func = do_all_the_u_now_stuff(y_shift, y_test, eps=0.5)
-            return ts, y_pod_shift, y_pod_test, p_vals, p_test, inv_func, y_shift, y_test
         
         case "avrami_noise":
             n = 4
@@ -798,23 +798,6 @@ def get_data(problem, **kwargs):
             y_test = jax.vmap(lambda y, k: y + jrandom.normal(k, y.shape)*0.01, in_axes=[-1, 0])(y_test, noise_keys_test).T
             u_now = determine_u_now(y_shift, 1.3)
             return ts, u_now.T @ y_shift, u_now.T @ y_test, p_vals, p_test, lambda x: u_now @ x, y_shift, y_test
-        
-        case "mass_spring":
-            # p_vals_0 = jrandom.uniform(jrandom.PRNGKey(40), (50,), minval=-0.2, maxval=0.2)
-            # p_vals_1 = jrandom.uniform(jrandom.PRNGKey(250), (50,), minval=2, maxval=10)
-            # p_vals = jnp.stack([p_vals_0, p_vals_1], axis=-1)
-            # p_test_0 = jrandom.uniform(jrandom.PRNGKey(0), (20,), minval=-0.2+0.1, maxval=0.2-0.1)
-            # p_test_1 = jrandom.uniform(jrandom.PRNGKey(50), (20,), minval=2+2, maxval=10-2)
-            # p_test = jnp.stack([p_test_0, p_test_1], axis=-1)
-            p_vals = jnp.arange(2, 10, 0.1)
-            p_test = jnp.array([2.1, 3.1, 3.5, 5.5, 6.2, 7.1])
-            alpha = 0.2
-            x_0 = 0.4
-            v_0 = 3.1
-            ts = jnp.arange(0, 10, 0.05)
-            y_shift = jax.vmap(lambda p, t: x_0*jnp.exp(-alpha*t)*jnp.cos(p*t)+(v_0+alpha*x_0)*jnp.exp(-alpha*t)/p*jnp.sin(p*t), in_axes=[0, None])(p_vals, ts).T
-            y_test = jax.vmap(lambda p, t: x_0*jnp.exp(-alpha*t)*jnp.cos(p*t)+(v_0+alpha*x_0)*jnp.exp(-alpha*t)/p*jnp.sin(p*t), in_axes=[0, None])(p_test, ts).T
-            return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None
         
         case "avrami":
             n = 4
@@ -839,7 +822,7 @@ def get_data(problem, **kwargs):
             filename = os.path.join(os.getcwd(), "data-chady/")
             f = lambda n: os.path.join(filename, n)
             Data_1 = h5py.File(f('dataset_1.mat'), 'r')
-            all_ys = jnp.array(Data_1['Solution']).T
+            y_all = jnp.array(Data_1['Solution']).T
             location = jnp.array(Data_1['location']).T
             radius = jnp.array(Data_1['radius']).T
             X = jnp.array(Data_1['X']).T
@@ -848,32 +831,13 @@ def get_data(problem, **kwargs):
             radius = jnp.array(Data_1['radius']).T
             Data_1.close()
 
-            all_ps = jnp.concatenate([location, radius], -1) 
-
-            # # for plotting
-            # X_new = X[:, 0]
-            # Y_new = Y[:, 0]
-            # idx = jnp.argmax(jnp.diff(X_new)<0) 
-            # X_vec = X[0:idx+1][:, 0]
-            # dY = Y[idx+1]-Y[0]
-            # Y_vec = jnp.arange(Y[0, 0], Y[-1, 0]+dY[0], dY[0]) 
-            # X_n, Y_n = np.meshgrid(X_vec, Y_vec)
-
-            prop_train = 0.9
-
-            idx = jnp.arange(0, all_ys.shape[1], 1)
-            idx = jrandom.permutation(jrandom.PRNGKey(10), idx)
-            all_ys = all_ys[:, idx]
-            all_ps = all_ps[idx]
-            y_shift = all_ys[:, :int(all_ys.shape[1]*prop_train)]
-            p_vals = all_ps[:int(all_ys.shape[1]*prop_train)]
-            y_test = all_ys[:, int(all_ys.shape[1]*prop_train):]
-            p_test = all_ps[int(all_ys.shape[1]*prop_train):]
-            return (X, Y,), y_shift, y_test, p_vals, p_test, None, None, None
+            p_all = jnp.concatenate([location, radius], -1)
+            return norm_divide_return((X, Y), y_all, p_all, prop_train=0.8, pod=True, eps=1)
+        
         case _:
             raise ValueError(f"Problem {problem} not recognized")
         
-def p_of_dim_1(v_train, vt_train, p_vals, p_test, model, num_modes):
+def p_of_dim_1(v_train, vt_train, p_vals, p_test, model):
     def evaluate_at_parameter(idx, p_val, v):
         v_1 = v[idx]
         p_1 = p_vals[idx]
@@ -968,27 +932,12 @@ def get_v_test_multi_p(p_train, vt_train, p_test, graph=False):
         return interpolate_quad(p0, p1, p2, p3, v0, v1, v2, v3, pt)
     return my_vmap(to_map_over_p_test)(p_test)
 
-def p_of_dim_2(v_train, vt_train, p_vals, p_test, model, num_modes):
+def p_of_dim_2(v_train, vt_train, p_vals, p_test, model):
     to_conc = []
-    pdb.set_trace()
-    for j in range(num_modes):
+    for j in range(vt_train.shape[0]):
         vt_trai = vt_train[j]
         vt_test_ = get_v_test_multi_p(p_vals, vt_trai, p_test, graph=False)
         to_conc.append(vt_test_)
-
-        # res_ = get_v_test_multi_p(p_vals, vt_trai, p_test, graph=True)
-        # if j == 0:
-        #     plt.scatter(p_vals[:, 0], p_vals[:, 1], color="blue", label = "Train")
-        # for i, (p_now, re) in enumerate(zip(p_test, res_)):
-        #     legends = ["Test", "Interp"] if i == 0 else ["_no_legend", "_no_legend"]
-        #     if j == 0:
-        #         plt.scatter(p_now[0], p_now[1], color="green", label = legends[0])
-        #         plt.scatter(re[:, 0], re[:, 1], color="red", label = legends[1])
-        #         plt.plot(jnp.concatenate((re[:, 0], jnp.expand_dims(re[0, 0], 0))), jnp.concatenate((re[:, 1], jnp.expand_dims(re[0, 1], 0))), color="red")
-        # if j == 0:
-        #     plt.legend()
-        #     plt.show()
-
         x_test_ = jnp.outer(v_train[:, j], vt_test_)
         x_test = x_test_ if j == 0 else x_test + x_test_
     vt_test = jnp.stack(to_conc)
@@ -1001,7 +950,7 @@ def normalize(x_tr, x_t, axis=0):
     std = jnp.std(x_tr, axis=axis)
     return (x_tr-means)/std, (x_t-means)/std
 
-def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False, train_nn=True, pp=True, **kwargs):
+def main_RRAE(method, prob_name, data_func, train_func, process_func=None, post_process_bool=False, train_nn=True, pp=True, **kwargs):
 
     if method == "weak":
         num_modes = -1
@@ -1036,8 +985,7 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False,
 
     if not train_nn:
         
-        process_func = p_of_dim_2 if p_vals.shape[-1] > 1 else p_of_dim_1
-        x_test, y_pred_test, y_pred_test_o, vt_test = process_func(v_train, vt_train, p_vals, p_test, model, num_modes_true)
+        x_test, y_pred_test, y_pred_test_o, vt_test = process_func(v_train, vt_train, p_vals, p_test, model)
 
         kwargs = {k: kwargs[k] for k in set(list(kwargs.keys())) - set({"activation_enc", "activation_dec", "loss_func", "post_proc_func"})}
         if post_process_bool:
@@ -1052,7 +1000,7 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False,
                 dill.dump([v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs, []], f)
         else:
             error_train = jnp.linalg.norm(y_pred_train-y_shift)/jnp.linalg.norm(y_shift)*100
-            with open(f"{filename}.pkl", 'wb') as f:    
+            with open(f"{filename}_.pkl", 'wb') as f:    
                 dill.dump([v_train, vt_train, error_train], f)
 
     else:
@@ -1060,11 +1008,11 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False,
         if post_process_bool:
             error_train, error_test, error_train_o, error_test_o = post_process(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, test=False, file=folder_name)
 
-            with open(f"{filename}.pkl", 'wb') as f:
-                dill.dump([v_train, vt_train, x_m, y_pred_train, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, p_vals, p_test, kwargs, []], f)
+            with open(f"{filename}_.pkl", 'wb') as f:
+                dill.dump([v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs, []], f)
         else:
             error_train = jnp.linalg.norm(y_pred_train-y_shift)/jnp.linalg.norm(y_shift)*100
-            with open(f"{filename}.pkl", 'wb') as f:    
+            with open(f"{filename}_.pkl", 'wb') as f:    
                 dill.dump([v_train, vt_train, error_train], f)
 
     def save(filename, hyperparams, model):
@@ -1078,11 +1026,16 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_bool=False,
     if train_nn:
         print("Use them in train_alpha_nn.py to train a NN to get the coeffs.")
     return p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     method = "strong"
     problem = "welding" # "shift", "accelerate", "stairs", "mult_freqs", "pimm_curves", "angelo", "mult_gausses", "avrami", "avrami_noise", "mass_spring"
     train_nn = True # 12
-    kwargs = {"num_modes": 3, "problem": problem, "step_st": [2000, 2000, 2000], "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_enc": 64, "depth_enc": 1, "width_dec": 64, "depth_dec": 6, "mul_latent": 2, "batch_size_st":[20, 20, 20,], "mul_lr": 100}
-    p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train = main_RRAE(method, problem, get_data, train_loop_RRAE, True, train_nn, pp=True, **kwargs)
+    num_modes = 3
+
+    # process_func = p_of_dim_2 if num_modes == 2 else p_of_dim_1
+    # assert (num_modes == 2) or (num_modes == 1)
+
+    kwargs = {"num_modes": num_modes, "problem": problem, "step_st": [2000, 2000, 2000], "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_enc": 64, "depth_enc": 1, "width_dec": 64, "depth_dec": 6, "mul_latent": 12, "batch_size_st":[20, 20, 20,], "mul_lr": 100}
+    p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train = main_RRAE(method, problem, get_data, train_loop_RRAE, True, train_nn, post_process=post_process, pp=True, **kwargs)
     pdb.set_trace()

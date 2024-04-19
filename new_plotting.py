@@ -83,6 +83,59 @@ def plot_sin_escal():
     plt.savefig(os.path.join(folder_for_all, f"sin_shift_plot_test.pdf"))
     plt.clf()
 
+def plot_p_vals():
+    colors = ["b", "g", "r"]
+    markers = ["p", "o", "*"]
+    pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" # 
+    matplotlib.rc('xtick', labelsize=20) 
+    matplotlib.rc('ytick', labelsize=20) 
+    fig1 = plt.figure(1)
+    fig1.set_size_inches(18.5, 10.5)
+    fig1 = fig1.add_subplot(1, 3, 1)
+    plt.subplots_adjust(wspace=0.35)
+    fig2 = plt.figure(2)
+    fig2.set_size_inches(18.5, 10.5)
+    fig2 = fig2.add_subplot(1, 3, 1)
+    plt.subplots_adjust(wspace=0.35)
+
+    def plot_problem(methods, colors, markers, problems, pre_folder, indices, inc=0, ylabel=None, sample=6, bypi=False):
+        plt.figure(inc+1)
+        for j, (problem,) in enumerate(zip(problems,)): 
+            plt.subplot(1, 3, j+1)         
+            folder = f"{pre_folder}{problem}/{problem}_strong" # 
+            folder_name = f"{folder}/"
+            filename = os.path.join(folder_name, f"strong_{problem}")
+
+            with open(f"{filename}_.pkl", "rb") as f:
+                v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs = dill.load(f)
+            
+            if vt_train.shape[0] != 1:
+                if bypi and j == 0:
+                    p_vals = p_vals/jnp.pi
+                    p_test = p_test/jnp.pi
+                if bypi and j == 2:
+                    problem = "avrami"
+                plt.scatter(p_vals[:, 0], p_vals[:, 1], s=24, edgecolors="none", label=f"Train-{problem}", c="blue")
+                plt.scatter(p_test[:, 0], p_test[:, 1], s=24, edgecolors="none", label=f"Test-{problem}", c="red")
+                plt.xlabel(r"$p^1_d$", fontsize=20)
+                plt.ylabel(r"$p^2_d$", fontsize=15)
+            else:
+                plt.scatter(p_vals, p_vals, s=24, edgecolors="none", label=f"Train-{problem}", c="blue")
+                plt.scatter(p_test, p_test, s=24, edgecolors="none", label=f"Train-{problem}", c="red")
+
+                plt.xlabel(r"$p^1_d$", fontsize=20)
+                plt.ylabel(r"$p^1_d$", fontsize=15)
+            plt.legend(fontsize=12, loc="upper left")
+
+
+    plot_problem(None, colors, markers, ["shift", "stairs", "accelerate"], pre_folder, [1, 3], ylabel=r"$f_{shift}(t_v, p_d)$", inc=0)
+    plot_problem(None, colors, markers, ["mult_freqs", "mult_gausses", "avrami-10"], pre_folder, [1, 3], ylabel=r"$f_{stair}(t_v, p_d, \text{args})$", inc=1, bypi=True)
+
+    plt.savefig(os.path.join(folder_for_all, f"p_vals_2.pdf"))
+    plt.figure(1)
+    plt.savefig(os.path.join(folder_for_all, f"p_vals_1.pdf"))
+    plt.clf()
+
 def plot_sin_sin_gauss():
     methods = ["AE", "Strong", "Weak"]
     colors = ["b", "g", "r"]
@@ -93,7 +146,7 @@ def plot_sin_sin_gauss():
     fig1 = plt.figure(1)
     fig1.set_size_inches(18.5, 10.5)
     fig1 = fig1.add_subplot(3, 2, 1)
-    plt.subplots_adjust(hspace=0.8, wspace=0.25)
+    plt.subplots_adjusFt(hspace=0.8, wspace=0.25)
 
     def plot_problem(methods, colors, markers, problem, pre_folder, indices, ylabel, inc=0, sample=6):
         
@@ -137,20 +190,21 @@ def plot_sin_sin_gauss():
     plt.show()
 
 def plot_avramis():
-    methods = ["strong", "weak"]
+    methods = ["strong", "strong"]
     colors = ["g", "r"]
     markers = ["o", "*"] 
     pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" # 
     matplotlib.rc('xtick', labelsize=20) 
     matplotlib.rc('ytick', labelsize=20) 
     fig1 = plt.figure(1)
-    fig1.set_size_inches(18.5, 10.5)
-    fig1 = fig1.add_subplot(1, 2, 1)
+    fig1.set_size_inches(25.5, 10.5)
+    fig1 = fig1.add_subplot(1, 3, 1)
     plt.subplots_adjust(hspace=0.8, wspace=0.25)
 
-    def plot_first_fig(methods, colors, markers, problem, pre_folder, indices, ylabel, inc=0, sample=6):
-        
-        for j, (method, color, mark, idxs) in enumerate(zip(methods, colors, markers, indices)):
+    def plot_first_fig(methods, colors, markers, problems, pre_folder, indices, ylabel, inc=0, sample=6):
+        for j, (method, problem, color, mark, idxs) in enumerate(zip(methods, problems, colors, markers, indices)):
+            if inc == 1:
+                color = "green"
             if isinstance(idxs, int):
                 idxs = [idxs]          
             folder = f"{pre_folder}{problem}/{problem}_{method}" # 
@@ -161,7 +215,7 @@ def plot_avramis():
                 v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs = dill.load(f)              
             
             plt.figure(1)
-            plt.subplot(1, 2, 1+inc)
+            plt.subplot(1, 3, 1+inc*2)
             for i_, i in enumerate(idxs):
                 lab = f"True" if i_ == 0 and j == 0 else "__no_legend__"
                 if y_test_original is None:
@@ -170,7 +224,9 @@ def plot_avramis():
                     plt.plot(ts[:], y_test_original[:, i], label=lab, color="darkgray", linestyle="-", linewidth=2, zorder=0)
                     
 
-            lab = f"{method}-10" if inc == 0 else f"POD-{method}"
+            lab = f"{vt_train.shape[0]} modes" if inc == 0 else f"POD-RRAE"
+            if inc == 1 and j !=0:
+                lab = "__no_legend__"
             ls = ((5, (5, 3))) if inc == 0 else "-"
             if y_pred_test_o is None:
                 for ii, idx in enumerate(idxs):
@@ -185,30 +241,30 @@ def plot_avramis():
             plt.ylabel(ylabel, fontsize=20)
             if inc != 1:
                 
-                plt.title("Test on Avrami model", fontsize=20)
+                plt.title("Test on Avrami model", fontsize=22)
             else:
-                plt.title("Test on Avrami model with noise", fontsize=20)
+                plt.title("Test on Avrami model with noise", fontsize=22)
             plt.legend(fontsize=20)
 
-    plot_first_fig(methods, colors, markers, "avrami-10", pre_folder, [[39,], [1,]], r"$X_d$", sample=6) # 58
-    plot_first_fig(methods, colors, markers, "avrami_noise", pre_folder, [[1, 15,], [44, 70]], r"$X_d$", inc=1, sample=24)
-    plt.savefig(os.path.join(folder_for_all, f"avrami_ww_noise_test.pdf"))
+    plot_first_fig(methods, colors, markers, ["avrami-10", "avrami-5"], pre_folder, [[39,], [1,]], r"$X_d$", sample=6) # 58
+    plot_first_fig(methods, colors, markers, ["avrami_noise", "avrami_noise"], pre_folder, [[1, 15,], [44, 70]], r"$X_d$", inc=1, sample=24)
+    # plt.savefig(os.path.join(folder_for_all, f"avrami_ww_noise_test.pdf"))
 
     
-    methods = ["Strong", "Weak"]
+    methods = ["Strong"]
     colors = ["g", "r"]
     markers = ["o", "*"] 
     pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" # 
-    matplotlib.rc('xtick', labelsize=20) 
-    matplotlib.rc('ytick', labelsize=20) 
-    fig1 = plt.figure(3)
-    fig1.set_size_inches(18.5, 10.5)
-    fig1 = fig1.add_subplot(1, 2, 1)
+    # matplotlib.rc('xtick', labelsize=20) 
+    # matplotlib.rc('ytick', labelsize=20) 
+    # fig1 = plt.figure(3)
+    # fig1.set_size_inches(18.5, 10.5)
+    # fig1 = fig1.add_subplot(1, 2, 1)
 
     def plot_second_fig(methods, colors, markers, problem, pre_folder, how_much, ylabel, inc=0, sample=6):
         
         for j, (method, color) in enumerate(zip(methods, colors)):
-            plt.subplot(1, 2, j+1)
+            plt.subplot(1, 3, j+1+1)
             for k, prob in enumerate(problem):
                 folder = f"{pre_folder}{prob}/{prob}_{method}" # 
                 folder_name = f"{folder}/"
@@ -219,10 +275,10 @@ def plot_avramis():
                 S, V, D = jnp.linalg.svd(x_m)
                 to_plot = V[:how_much]/jnp.max(V)
                 t_val = jnp.arange(1, how_much+1)
-                plt.plot(t_val, to_plot, label=f"{method}-{v_train.shape[-1]}", linestyle="-")
+                plt.plot(t_val, to_plot, label=f"{v_train.shape[-1]} modes", linestyle="-")
                 plt.xlabel(r'$Index$', fontsize=20)
                 plt.ylabel(f"First {how_much} Singular Values of Y", fontsize=20)
-                plt.title(f"Results for the {method} formulation", fontsize=20)
+                plt.title(f"Normalized singular values of the latent space", fontsize=22)
                 plt.legend(fontsize=20)
 
     problems = ["avrami-2", "avrami-3", "avrami-5", "avrami-10"]
@@ -243,5 +299,7 @@ if __name__ == "__main__":
             plot_sin_sin_gauss()
         case "avramis":
             plot_avramis()
+        case "p_vals":
+            plot_p_vals()
         case _:
             raise ValueError("Invalid problem")
