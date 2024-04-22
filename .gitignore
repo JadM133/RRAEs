@@ -171,3 +171,5 @@ data-pimm
 *.bbl
 *.blg
 *.mat
+*.csv
+*.asv

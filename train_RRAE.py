@@ -760,6 +760,26 @@ def get_data(problem, **kwargs):
             y_all = read_series(scaledDesign['S22dB']).T
             return norm_divide_return(ts, y_all, p_all, prop_train=0.9)
         
+        case "angelo_new":
+            import os
+            import pandas as pd
+            filename = os.path.join(os.getcwd(), "data_angelo_new/")
+            f = lambda n: os.path.join(filename, n)
+
+            scaledDesign = pd.read_csv(f("data_400.csv"))
+            ts = jnp.array(scaledDesign['freqEng'][0].strip('[]').split(), 'float')
+            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy()) 
+            p_all_0 = jnp.asarray(scaledDesign[scaledDesign.columns[:14]])
+            y_all_0 = read_series(scaledDesign['S22dB']).T
+
+            scaledDesign = pd.read_csv(f("data_800.csv"))
+            ts = jnp.array(scaledDesign['freqEng'][0].strip('[]').split(), 'float')
+            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy()) 
+            p_all = jnp.asarray(scaledDesign[scaledDesign.columns[:14]])
+            y_all = read_series(scaledDesign['S22dB']).T
+
+            return norm_divide_return(ts, y_all, p_all, prop_train=0.9)
+        
         case "mult_gausses":
 
             p_vals_0 = jnp.repeat(jnp.linspace(1, 3, 25), 25)
@@ -966,7 +986,8 @@ def main_RRAE(method, prob_name, data_func, train_func, process_func=None, post_
         num_modes_true = num_modes
     
     ts, y_shift, y_test, p_vals, p_test, lambda_post, y_original, y_test_original = data_func(**kwargs)
-    lambda_post = _identity if lambda_post is None else lambda_post
+
+    lambda_post = _identity if lambda_post is None else lambda_post                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
     assert is_test_inside(p_vals, p_test)
 
     print(f"Shape of y_train is {y_shift.shape}, (T x N)")
@@ -1029,13 +1050,13 @@ def main_RRAE(method, prob_name, data_func, train_func, process_func=None, post_
 
 if __name__ == "__main__":
     method = "strong"
-    problem = "welding" # "shift", "accelerate", "stairs", "mult_freqs", "pimm_curves", "angelo", "mult_gausses", "avrami", "avrami_noise", "mass_spring"
+    problem = "angelo_new" # "shift", "accelerate", "stairs", "mult_freqs", "pimm_curves", "angelo", "mult_gausses", "avrami", "avrami_noise", "mass_spring"
     train_nn = True # 12
-    num_modes = 3
+    num_modes = 8
 
     # process_func = p_of_dim_2 if num_modes == 2 else p_of_dim_1
     # assert (num_modes == 2) or (num_modes == 1)
 
-    kwargs = {"num_modes": num_modes, "problem": problem, "step_st": [2000, 2000, 2000], "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_enc": 64, "depth_enc": 1, "width_dec": 64, "depth_dec": 6, "mul_latent": 12, "batch_size_st":[20, 20, 20,], "mul_lr": 100}
+    kwargs = {"num_modes": num_modes, "problem": problem, "step_st": [2000, 2000, 5000], "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_enc": 64, "depth_enc": 1, "width_dec": 64, "depth_dec": 6, "mul_latent": 25, "batch_size_st":[20, 20, 20,], "mul_lr": 100}
     p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train = main_RRAE(method, problem, get_data, train_loop_RRAE, True, train_nn, post_process=post_process, pp=True, **kwargs)
     pdb.set_trace()

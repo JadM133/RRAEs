@@ -198,7 +198,8 @@ def models_itrations(train_func, filename, p_vals, p_compare, output, restart=Fa
 def main_alpha(train_func, filename, folder_name, restart=True, **kwargs):
 
     with open(f"{filename}_.pkl", "rb") as f:
-        v_train, vt_train, x_m, y_pred_train, y_shift, y_test, y_original, y_pred_train_o, y_test_original, _, ts, p_vals, p_test, kwargs_old, kwargs_new = dill.load(f)
+        v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs_new = dill.load(f)
+        # v_train, vt_train, x_m, y_pred_train, y_shift, y_test, y_original, y_pred_train_o, y_test_original, _, ts, p_vals, p_test, kwargs_old, kwargs_new = dill.load(f)
     
     RRAE = load_eqx_nn(f"{filename}_nn.pkl", make_model)[0][0]
 
@@ -220,11 +221,11 @@ def main_alpha(train_func, filename, folder_name, restart=True, **kwargs):
 
 if __name__ == "__main__":
     method = "strong"
-    problem = "angelo"
+    problem = "angelo_new"
     folder = f"{problem}/{problem}_{method}"
     folder_name = f"{folder}/"
     filename = os.path.join(folder_name, f"{method}_{problem}")
     restart = True
-    kwargs = {"step_st":[2000, 2000, 2000], "lr_st":[1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_size":20, "depth":1, "batch_size_st":[64, 64, 64, -1], "prop_train":0.9}
+    kwargs = {"step_st":[2000, 2000, 2000], "lr_st":[1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_size":64, "depth":2, "batch_size_st":[64, 64, 64, -1], "prop_train":0.9}
     main_alpha(train_alpha, filename, folder_name, restart, **kwargs)
     pdb.set_trace()
