@@ -41,6 +41,7 @@ def train_alpha(
     dropout=0, 
     prop_train=1,
     WX_=False,
+    model=None,
     **kwargs
 ):
     """ Training an MLP as a model for alpha. Inputs should be of shape (Samples, Features)
@@ -53,7 +54,8 @@ def train_alpha(
     out = out.T
     hyperparams = {"data_size": inp.shape[-1], "width_size": width_size, "depth": depth, "out_size": out_size, "dropout": dropout, "seed": seed}
     hyper = {k: hyperparams[k] for k in set(list(hyperparams.keys())) - set(["seed"])}
-    model = Func(key=model_key, **hyper)
+    if model == None:
+        model = Func(key=model_key, **hyper)
     print(f"Inpu shape is {inp.shape}, output shape is {out.shape}")
     if WX_:
         hyperparams = {"dim0": inp.shape[-1], "dim1": 1, "seed": seed}
@@ -209,6 +211,8 @@ def main_alpha(train_func, filename, folder_name, restart=True, **kwargs):
     if len(alpha_models) != 0:
         pdb.set_trace()
         vt_test = jnp.array([jnp.squeeze(m(p_test.T)) for m in alpha_models])[0]
+        if len(vt_test.shape) == 1:
+            vt_test = jnp.expand_dims(vt_test, axis=0)
         x_test = jnp.sum(jax.vmap(lambda v_tr, vt_t: jnp.outer(v_tr, vt_t), in_axes=[-1, 0])(v_train, vt_test), axis=0)
         y_pred_test = RRAE.func_decode(x_test, train=True)
         y_pred_test_o = RRAE.func_decode(x_test, train=False)
@@ -226,6 +230,7 @@ if __name__ == "__main__":
     folder_name = f"{folder}/"
     filename = os.path.join(folder_name, f"{method}_{problem}")
     restart = True
-    kwargs = {"step_st":[2000, 2000, 2000], "lr_st":[1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_size":64, "depth":2, "batch_size_st":[64, 64, 64, -1], "prop_train":0.9}
+    RRAE = load_eqx_nn(f"{filename}_nn.pkl", make_model)[0][0]
+    kwargs = {"model": RRAE.func_interp, "step_st":[2000, 2000], "lr_st":[1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_size":64, "depth":1, "batch_size_st":[64, 64, 64, -1], "prop_train":0.9}
     main_alpha(train_alpha, filename, folder_name, restart, **kwargs)
     pdb.set_trace()

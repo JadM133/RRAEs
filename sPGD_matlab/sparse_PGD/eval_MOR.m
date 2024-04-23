@@ -1,5 +1,5 @@
-function [prediction] = eval_MOR(MOR,param_sel)
-
+function [prediction] = eval_MOR(str_MOR,param_sel)
+    MOR = load(str_MOR);
     Nparam  = numel(MOR.param_vec);
     ns = size(MOR.fP{1},1);
     % param_sel : size 1,Nparam 
