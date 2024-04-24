@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from scipy.io import savemat
 import numpy as np
 import jax
-from train_RRAE import my_vmap, make_model, post_process
+from train_RRAE import my_vmap, make_model, post_process_interp
 import jax.random as jrandom    
 import matplotlib.pyplot as plt
 from train_alpha_nn import load_eqx_nn
@@ -16,7 +16,7 @@ def interp_spgd_in_matlab(datas, parameters, folder):
     eng = matlab.engine.start_matlab()
 
     prop_train = 0.95
-    error_crit = 8
+    error_crit = 2
     solver = "Rad"
     flag_reg = 0
     Ncp = 8
@@ -53,14 +53,15 @@ def interp_spgd_in_matlab(datas, parameters, folder):
         eng.MOR_construction_sparse(error_crit, offline_name, str_MOR, solver, flag_reg, Ncp, flag_modes, nargout=0)
         print(f"Saved - {i} out of {datas.shape[0]}")
         pred_train = jnp.stack(my_vmap(lambda p: jnp.asarray(eng.eval_MOR(str_MOR, md(p))))(parameters_train)).T
+        pdb.set_trace()
         pred_test = jnp.stack(my_vmap(lambda p: jnp.asarray(eng.eval_MOR(str_MOR, md(p))))(parameters_test)).T
         all_preds_test.append(pred_test)
         all_preds_train.append(pred_train)
-        # plt.scatter(data_train, pred_train, c="blue", label="Train")
-        # plt.scatter(data_test, pred_test, c="red", label="Test")
-        # plt.plot(jnp.linspace(jnp.min(data_train), jnp.max(data_train), 100), jnp.linspace(jnp.min(data_train), jnp.max(data_train), 100), c="black")
-        # plt.ylim([-20, 20])
-        # plt.show()
+        plt.scatter(data_train, pred_train, c="blue", label="Train")
+        plt.scatter(data_test, pred_test, c="red", label="Test")
+        plt.plot(jnp.linspace(jnp.min(data_train), jnp.max(data_train), 100), jnp.linspace(jnp.min(data_train), jnp.max(data_train), 100), c="black")
+        plt.ylim([-20, 20])
+        plt.show()
         error_train = jnp.linalg.norm(jnp.abs(data_train - pred_train)) / jnp.linalg.norm(data_train)*100
         error_test = jnp.linalg.norm(jnp.abs(data_test - pred_test)) / jnp.linalg.norm(data_test)*100
         print(f"Train error - {i}: {error_train}")
@@ -110,7 +111,7 @@ if __name__ == "__main__":
     y_pred_test = RRAE.func_decode(jnp.sum(jax.vmap(lambda v_tr, vt_t: jnp.outer(v_tr, vt_t), in_axes=[-1, 0])(v_train, vt_test), axis=0), train=True)
     y_pred_test_o = RRAE.func_decode(jnp.sum(jax.vmap(lambda v_tr, vt_t: jnp.outer(v_tr, vt_t), in_axes=[-1, 0])(v_train, vt_test), axis=0), train=False)
     pdb.set_trace()
-    error_train, error_test, error_train_o, error_test_o = post_process(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, file=folder_name, pp=pp)
+    error_train, error_test, error_train_o, error_test_o = post_process_interp(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, file=folder_name, pp=pp)
     with open(f"{filename}_.pkl", "wb") as f:
         dill.dump([v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs], f)
     

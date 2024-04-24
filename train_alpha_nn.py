@@ -2,7 +2,7 @@ import pickle
 import equinox as eqx
 import jax.random as jr
 import jax.numpy as jnp
-from train_RRAE import Func, WX, find_weighted_loss, dataloader, my_vmap, post_process, make_model, normalize
+from train_RRAE import Func, WX, find_weighted_loss, dataloader, my_vmap, post_process_interp, make_model, normalize
 import optax
 import time
 import jax
@@ -63,7 +63,7 @@ def train_alpha(
     @eqx.filter_value_and_grad
     def grad_loss(model, inp, out, key):
         pred = jnp.squeeze(model(inp, key))
-        wv = jnp.array([1., 0,])
+        wv = jnp.array([1., 100,])
         # mse = lambda x, y: jnp.mean((x-y)**2)
         layers = model.mlp.layers
         mean = lambda lis: sum(lis)/len(lis)
@@ -219,7 +219,7 @@ def main_alpha(filename, folder_name, restart=True, **kwargs):
         x_test = jnp.array([jnp.squeeze(m(p_test.T)) for m in alpha_models])
         y_pred_test = RRAE.func_decode(jnp.sum(x_test, axis=0), train=True)
         y_pred_test_o = RRAE.func_decode(jnp.sum(x_test, axis=0), train=False)
-        error_train, error_test, error_train_o, error_test_o = post_process(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, None, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, x_test_modes=x_test, file=folder_name)
+        error_train, error_test, error_train_o, error_test_o = post_process_interp(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, None, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, x_test_modes=x_test, file=folder_name)
         if not broke:
             with open(f"{filename}_alpha.pkl", "wb") as f:
                 dill.dump([x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs_new.append(kwargs)], f)

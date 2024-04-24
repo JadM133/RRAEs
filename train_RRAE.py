@@ -39,15 +39,119 @@ from equinox.nn import LayerNorm
 import shutil
 _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
-class WX(Module):
-    w : jnp.array
-    def __init__(self, dim0, dim1, *, key=jrandom.PRNGKey(1200), **kwargs):
+
+def into_continuous(y_vals, ts, slope=1):
+    jumps = jnp.concatenate([jnp.abs(jnp.diff(y_vals)), jnp.expand_dims(0, 0)])
+    to_the_rgiht = jnp.concatenate([jnp.expand_dims(0, 0), (jumps == 1)[:-1]])
+    jumps = jumps+to_the_rgiht
+    if (jumps == 2).any():
+        idx1 = list(jnp.where(jumps == 1)[0])
+        idx2 = jnp.where(jumps == 2)[0]
+        new_idx1 = list(idx1)
+        for i2 in idx2:
+            new_idx1.insert(jnp.searchsorted(jnp.array(idx1), i2), i2)
+            new_idx1.insert(jnp.searchsorted(jnp.array(idx1), i2), i2)
+        new_idx1 = jnp.array(new_idx1)
+    else:
+        new_idx1 = jnp.where(jumps == 1)[0]
+    t_jumps = jnp.concatenate([jnp.expand_dims(ts[0], 0), ts[new_idx1], jnp.expand_dims(ts[-1], 0)])
+    t_half = jnp.concatenate([jnp.expand_dims(ts[0], 0), jnp.sum(jnp.reshape(t_jumps, (-1, 2)), axis=1)/2, jnp.expand_dims(ts[-1], 0)])
+
+    slopes = slope*jnp.array([-1 if i % 2 == 0 else 1 for i in range(t_half.shape[0]-1)])
+    if y_vals[0] == 0:
+        slopes = slopes*-1
+
+    def to_scan(state, inp):
+        bn = (inp[1]-inp[0])*inp[2]+state[0]
+        new_inc = bn
+        return ((new_inc, state[1].at[state[2]].set(bn), state[2]+1), None)
+    b0 = -slopes[0]*t_half[0]
+    biases = jnp.concatenate([jnp.expand_dims(b0, 0), jax.lax.scan(to_scan, (b0, jnp.zeros((slopes.shape[0]-1,)), 0), (slopes[1:], slopes[:-1], t_half[1:-1]))[0][1]])
+    idx_t = jnp.searchsorted(t_half, ts, "right")
+    idx_t = idx_t.at[-1].set(idx_t[-2])-1
+    cont_sol = slopes[idx_t]*ts + biases[idx_t]
+    return cont_sol
+
+class WX(Module, strict=True):
+    layers: tuple[Linear, ...]
+    dropout: eqx.nn.Dropout
+    use_bias: bool = field(static=True)
+    use_final_bias: bool = field(static=True)
+    in_size: Union[int, Literal["scalar"]] = field(static=True)
+    out_size: Union[int, Literal["scalar"]] = field(static=True)
+    width_size: int = field(static=True)
+    depth: int = field(static=True)
+
+    def __init__(
+        self,
+        in_size,
+        out_size,
+        width_size,
+        depth,
+        dropout,
+        use_bias=True,
+        use_final_bias=True,
+        *,
+        key
+    ):
+
+        keys = jrandom.split(key, depth + 1)
+        layers = []
+        if depth == 0:
+            layers.append(Linear(in_size, out_size, use_final_bias, key=keys[0]))
+        else:
+            layers.append(Linear(in_size, width_size, use_bias, key=keys[0]))
+            for i in range(depth - 1):
+                layers.append(Linear(width_size, width_size, use_bias, key=keys[i + 1]))
+            layers.append(Linear(width_size, out_size, use_final_bias, key=keys[-1]))
+        self.layers = tuple(layers)
+        self.in_size = in_size
+        self.out_size = out_size
+        self.width_size = width_size
+        self.depth = depth
+        self.dropout = dropout
+        self.use_bias = use_bias
+        self.use_final_bias = use_final_bias
+
+    @jax.named_scope("eqx.nn.MLP")
+    def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
+        for layer in self.layers[:-1]:
+            x = layer(x)
+            x = self.dropout(x, key=key)
+        x = self.layers[-1](x)
+        return x
+
+class WX_Func(eqx.Module):
+    WX_: WX
+    mat_end: jnp.array
+    post_proc_func: Callable
+
+    def __init__(self, data_size, width_size, depth, out_size=None, dropout=0, *, key, mat_end=None, post_proc_func=_identity, **kwargs):
         super().__init__(**kwargs)
-        self.w = jrandom.uniform(key, (dim1, dim0), minval=-1, maxval=1)
 
-    def __call__(self, x, *args, **kwargs):
-        return jnp.dot(self.w, x)
+        if out_size is None:
+            out_size = data_size
 
+
+        self.WX_ = WX(
+            in_size=data_size,
+            out_size=out_size,
+            width_size=width_size,
+            depth=depth,
+            dropout=eqx.nn.Dropout(dropout),
+            key=key,
+        )
+        self.mat_end = mat_end
+        self.post_proc_func = post_proc_func
+
+    def __call__(self, y, k=None, train=False):
+        if not train and self.mat_end is not None:
+            return self.post_proc_func(self.mat_end @ self.WX_(y, key=k))
+        if not train:
+            return self.post_proc_func(self.WX_(y, key=k))
+        else:
+            return self.WX_(y, key=k)
+        
 class Linear(Module, strict=True):
     """Performs a linear transformation."""
 
@@ -146,7 +250,7 @@ class MLP_dropout(Module, strict=True):
     out_size: Union[int, Literal["scalar"]] = field(static=True)
     width_size: int = field(static=True)
     depth: int = field(static=True)
-    
+
     def __init__(
         self,
         in_size,
@@ -192,19 +296,18 @@ class MLP_dropout(Module, strict=True):
     @jax.named_scope("eqx.nn.MLP")
     def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
         for i, layer in enumerate(self.layers[:-1]):
-            if i == 0:
-                x = self.dropout(x, key=key)
             x = layer(x)
+            x = self.dropout(x, key=key)
             layer_activation = jtu.tree_map(
                 lambda x: x[i] if is_array(x) else x, self.activation
             )
             x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
-            
+
         x = self.layers[-1](x)
-        if self.out_size == "scalar":
-            x = self.final_activation(x)
-        else:
-            x = filter_vmap(lambda a, b: a(b))(self.final_activation, x)
+        # if self.out_size == "scalar":
+        x = self.final_activation(x)
+        # else:
+        #     x = filter_vmap(lambda a, b: a(b))(self.final_activation, x)
         return x
 
 class Func(eqx.Module):
@@ -254,11 +357,11 @@ class v_vt_class(eqx.Module):
         self.v = jax.vmap(lambda x: x / jnp.linalg.norm(x), in_axes=[-1])(self.v).T
         self.vt = jrandom.uniform(jrandom.PRNGKey(0), (dim1, num_nodes), minval=-1, maxval=1) # no T
         self.vt = jax.vmap(lambda x: x / jnp.linalg.norm(x), in_axes=[-1])(self.vt)
-    
+
     def __call__(self):
         normalized_v = jax.vmap(lambda x: x / jnp.linalg.norm(x), in_axes=[-1])(self.v).T
         return jnp.dot(self.vt.T, normalized_v.T).T
-    
+
 class simple_koop_operator(eqx.Module):
     func_encode: Func
     func_decode: Func
@@ -270,8 +373,8 @@ class simple_koop_operator(eqx.Module):
         self.func_decode = func_dec
         self.func_interp = func_interp
         self.v_vt1 = v_vt1
-    
-    def __call__(self, ys, n_mode=1, key=jrandom.PRNGKey(0), train=False, pv=None, p_interp_now=None, all_ids=None, method="strong"):
+
+    def __call__(self, ys, n_mode=1, key=jrandom.PRNGKey(0), train=False, pv=None, v1_now=None):
         x = self.func_encode(ys)
         if n_mode != -1:
             u, s, v = jnp.linalg.svd(x, full_matrices=False)
@@ -285,15 +388,12 @@ class simple_koop_operator(eqx.Module):
             v_now = None
             sigs = None
         y = self.func_decode(xs_m, key, train)
-        if p_interp_now is not None:
-            v1 = jnp.multiply(sigs, u_now)
-            v_interp = self.func_interp(p_interp_now.T, True)
-            x_interp = jnp.sum(jax.vmap(lambda v1, v2: jnp.outer(v1, v2), in_axes=[-1, 0])(v1, v_interp), 0)
-            y_pred_interp = self.func_decode(x_interp, key, train)
-        else:
-            y_pred_interp = None
-        return x, y, xs_m, (u_now, v_now, sigs), v_now, y_pred_interp
-    
+        # if v1_now is not None:
+        #     v_now = self.func_interp(pv.T, True)
+        #     x = jnp.sum(jax.vmap(lambda u, v: jnp.outer(u, v), in_axes=[-1, 0])(u_now, v_now).T, axis=-1).T
+        #     y = self.func_decode(x, key, train)
+        return x, y, xs_m, (u_now, v_now, sigs)
+
     def interpolate(self):
         pass
 
@@ -313,7 +413,7 @@ def dataloader(arrays, batch_size, p_vals=None, *, key):
     indices = jnp.arange(dataset_size)
     kk = 0
 
-    while True:   
+    while True:
         perm = jr.permutation(key, indices)
         (key,) = jr.split(key, 1)
         start = 0
@@ -329,13 +429,15 @@ def dataloader(arrays, batch_size, p_vals=None, *, key):
             end = start + batch_size
         kk += 1
 
-def make_model(key, data_size, data_size_end, mul_latent, dropout, WX_, v_vt, num_modes_vvt, width_enc, depth_enc, width_dec, depth_dec, activation_enc, activation_dec, post_proc_func=_identity, interp=True, width_i=64, depth_i=2, p_vals=None, modes=None, **kwargs):
+def make_model(key, data_size, data_size_end, mul_latent, dropout, WX_, v_vt, num_modes_vvt, width_enc, depth_enc, width_dec, depth_dec, activation_enc, activation_dec, post_proc_func=_identity, interp=True, width_i=64, depth_i=2, p_vals=None, modes=None, out_size=None,**kwargs):
     func_encode = Func(data_size, width_enc, depth_enc, out_size=int(data_size*mul_latent), activation=activation_enc, key=key)
     if WX_:
         func_encode = WX(data_size, int(data_size*mul_latent))
-    func_decode = Func(int(data_size*mul_latent), width_dec, depth_dec, out_size=data_size, dropout=dropout, activation=activation_dec, key=key, post_proc_func=post_proc_func)
+    if out_size is None:
+        out_size = data_size
+    func_decode = Func(int(data_size*mul_latent), width_dec, depth_dec, out_size=out_size, dropout=dropout, activation=activation_dec, key=key, post_proc_func=post_proc_func)
     if interp:
-        func_interp = Func(p_vals.shape[-1], width_i, depth_i, out_size=modes, dropout=dropout, activation=activation_dec, key=key, post_proc_func=post_proc_func)
+        func_interp = Func(p_vals.shape[-1], width_i, depth_i, out_size=modes, dropout=dropout, key=key)
     else:
         func_interp = None
     print(f"Dimension of latent space is {int(data_size*mul_latent)} and data size is {data_size}")
@@ -347,6 +449,7 @@ def make_model(key, data_size, data_size_end, mul_latent, dropout, WX_, v_vt, nu
 
 def train_loop_RRAE(
     ys,
+    output,
     step_st=[3000, 3000], #000, 8000],
     lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
     width_enc=64,
@@ -358,7 +461,7 @@ def train_loop_RRAE(
     loss_func=None,
     post_proc_func=_identity,
     seed=5678,
-    print_every=100,
+    print_every=20,
     stagn_every=80, # 80
     reg=False,
     batch_size_st=[16, 16, 16, 16, 32],
@@ -366,7 +469,7 @@ def train_loop_RRAE(
     num_modes_vvt=None,
     v_vt=False,
     mul_latent=0.05, # 0.05
-    dropout=0, 
+    dropout=0,
     WX_=True,
     p_vals=None,
     mat_end=None,
@@ -377,108 +480,85 @@ def train_loop_RRAE(
     width_i=64,
     depth_i=2,
     interp=False,
+    training_intr=[False, False, False, False, False],
     **kwargs
 ):
-    # if add_interp != 0:
-    #     res = jnp.stack(my_vmap(lambda p: (p > jnp.min(p)) & (p < jnp.max(p)))(p_vals.T)).T
-    #     idx = jnp.linspace(0, res.shape[0]-1, res.shape[0], dtype=int) 
-    #     cbt_idx = idx[jnp.sum(res, 1) == res.shape[1]] # could be test
-    #     permut_idx = jrandom.permutation(jrandom.PRNGKey(200), cbt_idx.shape[0])
-    #     cbt_idx = cbt_idx[permut_idx]
-    #     idx_interp = cbt_idx[:int(res.shape[0]*(add_interp))]
-    #     y_interp = ys[:, idx_interp]
-    #     p_interp = p_vals[idx_interp]
-    #     ys_old = ys
-    #     ys = jnp.delete(ys, idx_interp, 1)
-    #     p_vals = jnp.delete(p_vals, idx_interp, 0)
-    # else:
-    #     ys_old = ys
-    #     y_interp = None
-    #     p_interp = None
+
     key = jr.PRNGKey(seed)
     loader_key, dropout_key = jr.split(key, 2)
     seed = 0
     model_key = jr.PRNGKey(seed)
-    parameters = {"width_i": width_i, "depth_i": depth_i, "modes":num_modes, "interp":interp, "p_vals":p_vals, "data_size": int(ys.shape[0]), "activation_enc":activation_enc, "post_proc_func":post_proc_func , "activation_dec":activation_dec, "data_size_end": int(ys.shape[-1]), "mul_latent": mul_latent, "dropout": dropout, "WX_": WX_, "v_vt": v_vt, "num_modes_vvt": num_modes_vvt, "width_enc": width_enc, "depth_enc": depth_enc, "width_dec": width_dec, "depth_dec": depth_dec, "seed": seed}
+    parameters = {"width_i": width_i, "out_size": int(output.shape[0]), "depth_i": depth_i, "modes":num_modes, "interp":interp, "p_vals":p_vals, "data_size": int(ys.shape[0]), "activation_enc":activation_enc, "post_proc_func":post_proc_func , "activation_dec":activation_dec, "data_size_end": int(ys.shape[-1]), "mul_latent": mul_latent, "dropout": dropout, "WX_": WX_, "v_vt": v_vt, "num_modes_vvt": num_modes_vvt, "width_enc": width_enc, "depth_enc": depth_enc, "width_dec": width_dec, "depth_dec": depth_dec, "seed": seed}
     model = make_model(key=model_key, **parameters)
-    loss_func = lambda x1, x2 : jnp.linalg.norm(x1-x2)/jnp.linalg.norm(x2)*100
+    if loss_func is None:
+        loss_func = lambda x1, x2 : jnp.linalg.norm(x1-x2)/jnp.linalg.norm(x2)*100
 
-    @eqx.filter_value_and_grad
-    def grad_loss(model, input, bs, idx, key, pv, y_interp, p_interp_now, all_ids):
+    @eqx.filter_value_and_grad(has_aux=True)
+    def grad_loss(model, input, out, bs, idx, key, pv, y_interp, u_now):
         print("Compiled")
-        _, y, _, svd, v, y_pred_interp = model(input, n_mode, key, True, pv, p_interp_now, all_ids, method)
-        if y_pred_interp is not None:
-            sv = jnp.expand_dims(svd[2], 0)
-            u_vec = svd[0]
-            wv = jnp.array([1., 1.])
-            return find_weighted_loss([loss_func(y, input), loss_func(y_pred_interp, y_interp)], weight_vals=wv) #
+        _, y, _, svd = model(input, n_mode, key, True, pv, u_now)
         wv = jnp.array([1.,])
-        return find_weighted_loss([loss_func(y, input)], weight_vals=wv) # 
+        return find_weighted_loss([loss_func(y, out)], weight_vals=wv), (y)
 
     @eqx.filter_value_and_grad
-    def grad_loss_v_vt(model, input, bs, idx, key, pv, y_interp, p_interp_now, all_ids):
+    def grad_loss_v_vt(model, input, bs, idx, key, pv, y_interp, u_now):
         x, y, _, svd, _, _ = model(input, n_mode, key, True)
-        if y_interp is not None:
-            v1 = jax.vmap(lambda x: x / jnp.linalg.norm(x), in_axes=[-1])(model.v_vt1.v).T
-            v_vec = model.v_vt1.vt
-            _, y_pred_interp, _, _ = p_of_dim_1(v1, v_vec, pv, p_interp_now, model, all_ids)
-            wv = jnp.array([1., 1., 1.]) # 4 for mult_freqs  
-            return find_weighted_loss([loss_func(y, input), jnp.linalg.norm(x-model.v_vt1()[:, idx])/jnp.linalg.norm(x)*100, loss_func(y_pred_interp, y_interp)], weight_vals=wv) # 
+        # if y_interp is not None:
+        #     v1 = jax.vmap(lambda x: x / jnp.linalg.norm(x), in_axes=[-1])(model.v_vt1.v).T
+        #     v_vec = model.v_vt1.vt
+        #     _, y_pred_interp, _, _ = p_of_dim_1(v1, v_vec, pv, p_interp_now, model, all_ids)
+        #     wv = jnp.array([1., 1., 1.]) # 4 for mult_freqs
+        #     return find_weighted_loss([loss_func(y, input), jnp.linalg.norm(x-model.v_vt1()[:, idx])/jnp.linalg.norm(x)*100, loss_func(y_pred_interp, y_interp)], weight_vals=wv) #
         wv = jnp.array([1., 1.])
         return find_weighted_loss([loss_func(y, input), jnp.linalg.norm(x-model.v_vt1()[:, idx])/jnp.linalg.norm(x)*100], weight_vals=wv)
-        
+
     @eqx.filter_jit
-    def make_step(input, model, opt_state, bs, idx, key, pv, y_interp_now, p_interp_now, all_ids):
+    def make_step(input, out, model, opt_state, bs, idx, key, pv, y_interp_now, v1_now):
         loss_func = grad_loss_v_vt if v_vt else grad_loss
-        loss, grads = loss_func(model, input, bs, idx, key, pv, y_interp_now, p_interp_now, all_ids)
+        (loss, aux), grads = loss_func(model, input, out, bs, idx, key, pv, y_interp_now, v1_now)
         updates, opt_state = optim.update(grads, opt_state)
         model = eqx.apply_updates(model, updates)
-        return loss, model, opt_state
+        return loss, model, opt_state, aux
 
     print("Training the RRAE...")
     filter_spec = jtu.tree_map(lambda _: False, model)
     if v_vt:
-        is_v_vt = eqx.tree_at(lambda tree: (tree.v_vt1.v, tree.v_vt1.vt), filter_spec, replace=(True, True))
-        is_not_v_vt = jtu.tree_map(lambda x: not x, is_v_vt)
+        is_acc = eqx.tree_at(lambda tree: (tree.v_vt1.v, tree.v_vt1.vt), filter_spec, replace=(True, True))
+        is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
+    else:
+        is_acc = eqx.tree_at(lambda tree: jtu.tree_leaves(tree.func_interp), filter_spec, replace=(True,)*len(jtu.tree_leaves(filter_spec.func_interp)))
+        is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
 
-    if add_interp != 0:
-        res = jnp.stack(my_vmap(lambda p: (p > jnp.min(p)) & (p < jnp.max(p)))(p_vals.T)).T
-        idx = jnp.linspace(0, res.shape[0]-1, res.shape[0], dtype=int) 
-        cbt_idx = idx[jnp.sum(res, 1) == res.shape[1]] # could be test
-        permut_idx = jrandom.permutation(jrandom.PRNGKey(0), cbt_idx.shape[0])
-        cbt_idx = cbt_idx[permut_idx]
-        idx_interp = cbt_idx[:int(res.shape[0]*(add_interp))]
-        yi = ys[:, idx_interp]
-        pi = p_vals[idx_interp]
-        ys_old = ys
-        ys = jnp.delete(ys, idx_interp, 1)
-        p_vals = jnp.delete(p_vals, idx_interp, 0)
-        print(f"Interpolating {pi.shape[0]} points...")
-        
-    for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
-        if v_vt:
-            optim = optax.chain(optax.masked(optax.adabelief(lr), is_not_v_vt), optax.masked(optax.adabelief(mul_lr*lr), is_v_vt))
-        else:
-            optim = optax.adabelief(lr)
-        filtered_model = eqx.filter(model, eqx.is_inexact_array)
-        opt_state =  optim.init(filtered_model)
+    for steps, lr, batch_size, mul_l, bool_val  in zip(step_st, lr_st, batch_size_st , mul_lr, training_intr):
         stagn_num = 0
         loss_old = jnp.inf
         t_t = 0
 
+        if v_vt:
+            optim = optax.chain(optax.masked(optax.adabelief(lr), is_not_acc), optax.masked(optax.adabelief(mul_l*lr), is_acc))
+        else:
+            #     if not bool_val:
+            #         optim = optax.chain(optax.masked(optax.adabelief(lr), is_not_acc), optax.masked(optax.set_to_zero(), is_acc))
+            #         v1_now = None
+            #     else:
+            #         optim = optax.chain(optax.masked(optax.set_to_zero(), is_not_acc), optax.masked(optax.adabelief(lr), is_acc))
+            #         sv = jnp.expand_dims(svd[2], 0)
+            #         u_vec = svd[0]
+            #         v1_now = jnp.multiply(sv, u_vec)
+            #
+            optim = optax.adabelief(lr)
+
+        filtered_model = eqx.filter(model, eqx.is_inexact_array)
+        opt_state =  optim.init(filtered_model)
+
         keys = jr.split(dropout_key, steps)
-        # if p_interp is not None:
-        #     print(f"Interpolating {p_interp.shape[0]} points...")
-        #     pv, y_interp_now, p_interp_now, all_ids = p_vals, y_interp, p_interp, None
-        # else:
-        #     pv, y_interp_now, p_interp_now, all_ids = None, None, None, None
 
         if (batch_size > ys.shape[-1]) or batch_size == -1:
             batch_size = ys.shape[-1]
 
-        for step, (yb, idx, key, pv) in zip(range(steps), dataloader([ys.T, p_vals, jnp.arange(0, ys.shape[-1], 1), keys], batch_size, key=loader_key)):
+        for step, (yb, pv, out, idx, key) in zip(range(steps), dataloader([ys.T, p_vals, output.T, jnp.arange(0, ys.shape[-1], 1), keys], batch_size, key=loader_key)):
             start = time.time()
-            loss, model, opt_state = make_step(yb.T, model, opt_state, batch_size, idx, key[0], pv, yi, pi, None)
+            loss, model, opt_state, aux = make_step(yb.T, out.T, model, opt_state, batch_size, idx, key[0], pv, None, None)
             end = time.time()
             t_t += end - start
             if (step % stagn_every) == 0:
@@ -490,14 +570,18 @@ def train_loop_RRAE(
                 loss_old = loss
 
             if (step % print_every) == 0 or step == steps - 1:
-                print(f"Step: {step}, Loss: {loss}, Computation time: {t_t}")
+                pred = np.zeros_like(aux)
+                pred[aux.argmax(0), np.arange(aux.shape[-1])] = 1
+                print(f"Step: {step}, Loss: {loss}, Computation time: {t_t}, Accuracy: {jnp.sum((pred == out.T))/pred.size*100}")
                 if widgetf is not None:
                     widgetf.setText(f"Loss: {loss}")
                 t_t = 0
 
+        model = eqx.nn.inference_mode(model)
+        x, y, x_m, svd = model(ys, n_mode, 0, True)
+        model = eqx.nn.inference_mode(model)
     model = eqx.nn.inference_mode(model)
-    x, y, x_m, svd, _, _ = model(ys, n_mode, 0, True)
-    _, y_o, _, _, _, _ = model(ys, n_mode, 0, False)
+    _, y_o, _, _ = model(ys, n_mode, 0, False)
     if method == "weak":
         u_vec, sv, v_vec = determine_u_now(x_m, eps=1, ret=True, full_matrices=False)
         v1 = jax.vmap(lambda x: x / jnp.linalg.norm(x), in_axes=[-1])(model.v_vt1.v).T
@@ -522,7 +606,7 @@ def my_vmap(func, to_array=True):
                 sols.append(func(elems, *args))
         try:
             return [jnp.squeeze(jnp.stack(sol, axis=0)) for sol in sols]
-        
+
         except (TypeError, ValueError) as e:
             if isinstance(e, ValueError):
                 return sols
@@ -532,9 +616,116 @@ def my_vmap(func, to_array=True):
                 return sols
     return map_func
 
-def post_process(p_vals, p_test, problem, method, x_train, y_pred_train, v_train, vt_train, v_test, y_pred_test, ys, ys_test, y_original=None, y_pred_train_o=None, y_test_o=None, y_pred_test_o=None, changed=False, x_test_modes=None, test=True, file=None, pp=True):
+def my_vmap_multiple_arrays(func, to_array=True):
+    def map_func(*arrays, args=None):
+        sols = []
+        for elems in zip(*arrays):
+            if args is None:
+                sols.append(func(*elems))
+            else:
+                sols.append(func(*elems, *args))
+        try:
+            if isinstance(sols[0], list) or isinstance(sols[0], tuple):
+                final_sols = []
+                for i in range(len(sols[0])):
+                    final_sols.append(jnp.array([sol[i] for sol in sols]))
+                return final_sols
+            return jnp.array([jnp.squeeze(jnp.stack(sol, axis=0)) for sol in sols])
+        except:
+            pdb.set_trace()
+            if to_array:
+                return jnp.array(sols)
+            else:
+                return sols
+    return map_func
+
+def plot_confusion_matrix(cm, target_names, title='Confusion matrix', cmap=None, normalize=True):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import itertools
+
+    accuracy = np.trace(cm) / float(np.sum(cm))
+    misclass = 1 - accuracy
+
+    if cmap is None:
+        cmap = plt.get_cmap('Blues')
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+
+    if target_names is not None:
+        tick_marks = np.arange(len(target_names))
+        plt.xticks(tick_marks, target_names, rotation=45)
+        plt.yticks(tick_marks, target_names)
+
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+
+    thresh = cm.max() / 1.5 if normalize else cm.max() / 2
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        if normalize:
+            plt.text(j, i, "{:0.4f}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+        else:
+            plt.text(j, i, "{:,}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
+
+def post_process_class(p_vals, p_test, problem, method, x_train, y_pred_train, v_train, vt_train, v_test, y_pred_test, ys, ys_test, y_original=None, y_pred_train_o=None, y_test_o=None, y_pred_test_o=None, changed=False, x_test_modes=None, test=True, file=None, pp=True, out_train=None, out_test=None,**kwargs):
+    from sklearn.metrics import confusion_matrix
+
+    pred_train = np.zeros_like(y_pred_train)
+    pred_train[y_pred_train.argmax(0), np.arange(y_pred_train.shape[-1])] = 1
+
+    pred_test = np.zeros_like(y_pred_test)
+    pred_test[y_pred_test.argmax(0), np.arange(y_pred_test.shape[-1])] = 1
+
+    error_train = jnp.sum(pred_train != out_train)/out_train.size*100
+    error_test = jnp.sum(pred_test != out_test)/out_test.size*100
+    accuracy_train = jnp.sum(pred_train == out_train)/out_train.size*100
+    accuracy_test = jnp.sum(pred_test == out_test)/out_test.size*100
+
+    fig1 = plt.figure(1)
+    fig1.set_size_inches(18.5, 10.5)
+    fig1 = fig1.add_subplot(1, 2, 1)
+    plt.subplots_adjust(hspace=0.8)
+    plt.subplot(1, 2, 1)
+    pdb.set_trace()
+    cm_train = confusion_matrix(np.argmax(out_train, 0), np.argmax(pred_train, 0))
+
+    names = []
+    for i in range(out_train.shape[0]):
+        if i == 0:
+            names.append(f"{i+1} Step")
+        else:
+            names.append(f"{i+1} Steps")
+
+    plot_confusion_matrix(cm_train, names, title="Confusion matrix for train", normalize=True)
+    plt.subplot(1, 2, 2)
+    cm_test = confusion_matrix(np.argmax(out_test, 0), np.argmax(pred_test, 0))
+    plot_confusion_matrix(cm_test, names, title="Confusion matrix for test", normalize=True)
+    plt.show()
+
+    print(f"Accuracy for train is {accuracy_train} and for test is {accuracy_test}")
+
+    return error_train, error_test, None, None
+
+def process_class(y_train, y_test, out_train, out_test, model, n_mode, **kwargs):
+    pred_test = model(y_test, n_mode, 0, True)[1]
+    pred_test_org = model(y_train, n_mode, 0, False)[1]
+    return None, pred_test, pred_test_org, None
+
+def post_process_interp(p_vals, p_test, problem, method, x_train, y_pred_train, v_train, vt_train, v_test, y_pred_test, ys, ys_test, y_original=None, y_pred_train_o=None, y_test_o=None, y_pred_test_o=None, changed=False, x_test_modes=None, test=True, file=None, pp=True, out_train=None, out_test=None,**kwargs):
     import matplotlib
-    matplotlib.rc('xtick', labelsize=15) 
+    matplotlib.rc('xtick', labelsize=15)
     matplotlib.rc('ytick', labelsize=15)
     plt.rcParams["figure.figsize"] = (10, 12)
 
@@ -547,7 +738,7 @@ def post_process(p_vals, p_test, problem, method, x_train, y_pred_train, v_train
             lab_ = r"$x$-train" if i == 0 else "_no_legend_"
             plt.plot(yt, color="blue", label=lab_)
             plt.plot(yr, color="red", linestyle="--", label=lab)
-            
+
         plt.xlabel(r"$t$", fontsize=20)
         plt.ylabel(r"$x, \tilde{x}$", fontsize=20)
         plt.legend()
@@ -621,7 +812,7 @@ def post_process(p_vals, p_test, problem, method, x_train, y_pred_train, v_train
                 lab_ = r"$x$-test" if i == 0 else "_no_legend_"
                 plt.plot(yr, color="blue", label=lab)
                 plt.plot(yt, color="red", linestyle="--", label=lab_)
-            
+
             plt.ylabel(r"$x, \tilde{x}$", fontsize=20)
             plt.xlabel(r"$t$", fontsize=20)
             plt.legend()
@@ -665,7 +856,7 @@ def is_test_inside(p_vals, p_test):
     if p_vals.shape[-1] == 1:
         return check_func(p_vals, p_test)
     elif p_vals.shape[-1] == 2:
-        is_in_rect = lambda vals: (jnp.sum(vals, axis=1) == 2).any()  and (jnp.sum(vals, axis=1) == 0).any() and ((jnp.sum(vals, axis=1) == 1) & (vals[:, 0] == 1)).any() and ((jnp.sum(vals, axis=1) == 1) & (vals[:, 0] == 0)).any() 
+        is_in_rect = lambda vals: (jnp.sum(vals, axis=1) == 2).any()  and (jnp.sum(vals, axis=1) == 0).any() and ((jnp.sum(vals, axis=1) == 1) & (vals[:, 0] == 1)).any() and ((jnp.sum(vals, axis=1) == 1) & (vals[:, 0] == 0)).any()
         check_func_2 = lambda p_t: is_in_rect(p_vals > p_t)
         return my_vmap(check_func_2)(p_test).all()
     else:
@@ -690,24 +881,24 @@ def determine_u_now(ys, eps=1, ret=False, full_matrices=True):
     return u_now
 
 def do_all_the_u_now_stuff(y_shift, y_test, eps=None):
-    u_now = determine_u_now(y_shift, eps=eps)  
+    u_now = determine_u_now(y_shift, eps=eps)
     coeffs = u_now.T @ y_shift
 
     def to_norm(x):
         return (x-jnp.mean(x))/jnp.std(x), jnp.mean(x), jnp.std(x)
-    
+
     def to_norm_test(x, mean, std):
         return (x-mean)/std
-    
+
     def inv_to_norm(x, mean, std):
         return x*std+mean
-    
+
     norm_coeffs, means, stds = jax.vmap(to_norm)(coeffs)
     norm_coeffs_test = jax.vmap(to_norm_test)(u_now.T @ y_test, means, stds)
 
     def inv_func(x):
         return u_now @ jax.vmap(inv_to_norm)(x, means, stds)
-    
+
     return norm_coeffs, norm_coeffs_test, inv_func
 
 def plot_surfaces(X_vec, Y_vec, solutions, idx):
@@ -718,26 +909,34 @@ def plot_surfaces(X_vec, Y_vec, solutions, idx):
     ax.view_init(elev=90, azim=-90, roll=0)
     plt.show()
 
-def norm_divide_return(ts, y_all, p_all, prop_train=0.8, pod=False, eps=1):
+def norm_divide_return(ts, y_all, p_all, prop_train=0.8, pod=False, eps=1, output=None):
     norm_vec = lambda x: (x-jnp.mean(x))/jnp.std(x)
     p_all= jnp.stack(my_vmap(lambda y: norm_vec(y))(p_all.T)).T
 
     res = jnp.stack(my_vmap(lambda p: (p > jnp.min(p)) & (p < jnp.max(p)))(p_all.T)).T
-    idx = jnp.linspace(0, res.shape[0]-1, res.shape[0], dtype=int) 
+    idx = jnp.linspace(0, res.shape[0]-1, res.shape[0], dtype=int)
     cbt_idx = idx[jnp.sum(res, 1) == res.shape[1]] # could be test
     permut_idx = jrandom.permutation(jrandom.PRNGKey(200), cbt_idx.shape[0])
-    idx_test = cbt_idx[:int(res.shape[0]*(1-prop_train))]
+    idx_test = cbt_idx[permut_idx][:int(res.shape[0]*(1-prop_train))]
 
     p_test = p_all[idx_test]
     p_vals = jnp.delete(p_all, idx_test, 0)
     y_test = y_all[:, idx_test]
     y_shift_old = jnp.delete(y_all, idx_test, 1)
-    
+
     y_shift = (y_shift_old - jnp.mean(y_shift_old))/jnp.std(y_shift_old)
     y_test = (y_test - jnp.mean(y_shift_old))/jnp.std(y_shift_old)
 
+    if output is None:
+        output_shift = y_shift
+        output_test = y_test
+    else:
+        output_test = output[:, idx_test]
+        output_shift = jnp.delete(output, idx_test, 1)
+
     if not pod:
-        return ts, y_shift, y_test, p_vals, p_test, None, None, None
+        return ts, y_shift, y_test, p_vals, p_test, None, None, None, output_shift, output_test
+
     u_now = determine_u_now(y_shift, eps=eps)
     coeffs_shift = u_now.T @ y_shift
     mean_vals = jnp.mean(coeffs_shift, axis=1)
@@ -746,7 +945,7 @@ def norm_divide_return(ts, y_all, p_all, prop_train=0.8, pod=False, eps=1):
     coeffs_test = u_now.T @ y_test
     coeffs_test = jax.vmap(lambda x, m, s: (x-m)/s)(coeffs_test, mean_vals, std_vals)
     inv_func = lambda xx: u_now @ jax.vmap(lambda x, m, s: x*s+m)(xx, mean_vals, std_vals)
-    return ts, coeffs_shift, coeffs_test, p_vals, p_test, inv_func, y_shift, y_test        
+    return ts, coeffs_shift, coeffs_test, p_vals, p_test, inv_func, y_shift, y_test, output_shift, output_test
 
 def get_data(problem, **kwargs):
     match problem:
@@ -757,7 +956,7 @@ def get_data(problem, **kwargs):
             y_shift = jax.vmap(func, in_axes=[0, None])(p_vals, ts).T
             p_test = jrandom.uniform(jrandom.PRNGKey(0), (200,), minval=1/3+0.01, maxval=1-0.01)
             y_test = jax.vmap(func, in_axes=[0, None])(p_test, ts).T
-            return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None
+            return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None, None, None
         case "shift":
             ts = jnp.linspace(0, 2*jnp.pi, 200)
             sf_func = lambda s, x: jnp.sin(x-s*jnp.pi)
@@ -767,7 +966,7 @@ def get_data(problem, **kwargs):
             p_test = jnp.array([-0.15, 0.28, 0.41])
             p_test = jrandom.uniform(jrandom.PRNGKey(0), (20,), minval=0+0.01, maxval=p_vals[-1]*0.99)
             y_test = jax.vmap(sf_func, in_axes=[0, None])(p_test, ts).T
-            return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None
+            return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None, None, None
         case "stairs":
             Tend = 3.5  # [s]
             NT = 500
@@ -787,14 +986,14 @@ def get_data(problem, **kwargs):
             y_shift_old = jax.vmap(create_escal)(p_vals).T
             y_shift = jax.vmap(lambda y: (y-jnp.mean(y_shift_old))/jnp.std(y_shift_old), in_axes=[-1])(y_shift_old).T # lambda y: (y-jnp.mean(y))/jnp.std(y)
             y_shift = y_shift[:, ~jnp.isnan(y_shift).any(axis=0)]
-            
+
             p_test = jrandom.uniform(jrandom.PRNGKey(0), (100,), minval=jnp.min(p_vals)+0.01, maxval=jnp.max(p_vals)-0.01)
             y_test = jax.vmap(lambda y: (y-jnp.mean(y_shift_old))/jnp.std(y_shift_old))(jax.vmap(create_escal)(p_test)).T
 
             ts = jnp.arange(0, y_shift.shape[0], 1)
             # y_pod_shift, y_pod_test, inv_func = do_all_the_u_now_stuff(y_shift)
-            return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None# inv_func, y_shift, y_test
-        
+            return ts, y_shift, y_test, jnp.expand_dims(p_vals, axis=-1), jnp.expand_dims(p_test, axis=-1), None, None, None, None, None# inv_func, y_shift, y_test
+
         case "mult_freqs":
             p_vals_0 = jnp.repeat(jnp.linspace(0.8*jnp.pi, jnp.pi, 25), 25)
             p_vals_1 = jnp.tile(jnp.linspace(0.3*jnp.pi, 0.5*jnp.pi, 25), 25)
@@ -807,7 +1006,7 @@ def get_data(problem, **kwargs):
             p_test = jnp.stack([p_vals_0, p_vals_1], axis=-1)
             y_test = jax.vmap(lambda p: jnp.sin(p[0]*ts)+jnp.sin(p[1]*ts))(p_test).T
             return ts, y_shift, y_test, p_vals, p_test, None, None, None
-        
+
         case "angelo":
             import os
             import pandas as pd
@@ -815,31 +1014,39 @@ def get_data(problem, **kwargs):
             f = lambda n: os.path.join(filename, n)
             scaledDesign = pd.read_csv(f("data.csv"))
             ts = jnp.array(scaledDesign['freqEng'][0].strip('[]').split(), 'float')
-            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy()) 
+            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy())
             p_all = jnp.asarray(scaledDesign[scaledDesign.columns[:14]])
             y_all = read_series(scaledDesign['S22dB']).T
             return norm_divide_return(ts, y_all, p_all, prop_train=0.9)
-        
+
         case "angelo_new":
             import os
             import pandas as pd
+
             filename = os.path.join(os.getcwd(), "data_angelo_new/")
             f = lambda n: os.path.join(filename, n)
 
             scaledDesign = pd.read_csv(f("data_400.csv"))
             ts = jnp.array(scaledDesign['freqEng'][0].strip('[]').split(), 'float')
-            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy()) 
+            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy())
             p_all_0 = jnp.asarray(scaledDesign[scaledDesign.columns[:14]])
-            y_all_0 = read_series(scaledDesign['S22dB']).T
+            y_all_0 = read_series(scaledDesign['S22dB']).T # S21dB, S22dB, Nf
 
             scaledDesign = pd.read_csv(f("data_800.csv"))
             ts = jnp.array(scaledDesign['freqEng'][0].strip('[]').split(), 'float')
-            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy()) 
-            p_all = jnp.asarray(scaledDesign[scaledDesign.columns[:14]])
-            y_all = read_series(scaledDesign['S22dB']).T
+            read_series = lambda y: np.stack(y.apply(lambda x: np.array(x.strip('[]').split(), dtype=np.float32)).to_numpy())
+            p_all_1 = jnp.asarray(scaledDesign[scaledDesign.columns[:14]])
+            y_all_1 = read_series(scaledDesign['S22dB']).T
 
+            y_all = jnp.concatenate([y_all_0, y_all_1], axis=-1)
+            p_all = jnp.concatenate([p_all_0, p_all_1], axis=0)
+            func = lambda p: jnp.concatenate((np.argsort(p)[:10], np.argsort(p)[-10:]))
+            idxs = jnp.concatenate(jax.vmap(func, in_axes=[-1])(p_all))
+
+            p_all = jnp.delete(p_all, idxs, 0)
+            y_all = jnp.delete(y_all, idxs, 1)
             return norm_divide_return(ts, y_all, p_all, prop_train=0.95)
-        
+
         case "mult_gausses":
 
             p_vals_0 = jnp.repeat(jnp.linspace(1, 3, 25), 25)
@@ -848,7 +1055,7 @@ def get_data(problem, **kwargs):
             p_test_0 = jrandom.uniform(jrandom.PRNGKey(100), (100,), minval=1.1, maxval=2.9)
             p_test_1 = jrandom.uniform(jrandom.PRNGKey(0), (100,), minval=4.1, maxval=5.9)
             p_test = jnp.stack([p_test_0, p_test_1], axis=-1)
-            
+
             ts = jnp.arange(0, 6, 0.005)
             gauss = lambda a, b, c, t: a*jnp.exp(-((t-b)**2)/(2*c**2))
             a = 1.3
@@ -856,8 +1063,8 @@ def get_data(problem, **kwargs):
             y_shift = jax.vmap(lambda p, t: gauss(a, p[0], c, t) + gauss(-a, p[1], c, t), in_axes=[0, None])(p_vals, ts).T
             y_test = jax.vmap(lambda p, t: gauss(a, p[0], c, t) + gauss(-a, p[1], c, t), in_axes=[0, None])(p_test, ts).T
             # u_now = determine_u_now(y_shift, eps=0.0001)
-            return ts, y_shift, y_test, p_vals, p_test, None, None, None
-        
+            return ts, y_shift, y_test, p_vals, p_test, None, None, None, None, None
+
         case "avrami_noise":
             n = 4
             N = jnp.repeat(jnp.linspace(1, 3, 20), 20)
@@ -877,8 +1084,8 @@ def get_data(problem, **kwargs):
             y_shift = jax.vmap(lambda y, k: y + jrandom.normal(k, y.shape)*0.01, in_axes=[-1, 0])(y_shift, noise_keys_train).T
             y_test = jax.vmap(lambda y, k: y + jrandom.normal(k, y.shape)*0.01, in_axes=[-1, 0])(y_test, noise_keys_test).T
             u_now = determine_u_now(y_shift, 1.3)
-            return ts, u_now.T @ y_shift, u_now.T @ y_test, p_vals, p_test, lambda x: u_now @ x, y_shift, y_test
-        
+            return ts, u_now.T @ y_shift, u_now.T @ y_test, p_vals, p_test, lambda x: u_now @ x, y_shift, y_test, None, None
+
         case "avrami":
             n = 4
             N = jnp.repeat(jnp.linspace(1.5, 3, 20), 20)
@@ -894,8 +1101,8 @@ def get_data(problem, **kwargs):
             y_shift = (y_shift-mean)/std
             y_test = jax.vmap(lambda p, t: 1-jnp.exp(-jnp.pi*p[0]*p[1]**3/3*t**n), in_axes=[0, None])(p_test, ts).T
             y_test = (y_test-mean)/std
-            return ts, y_shift, y_test, p_vals, p_test, None, None, None
-        
+            return ts, y_shift, y_test, p_vals, p_test, None, None, None, None, None
+
         case "welding":
             import os
             import h5py
@@ -913,10 +1120,54 @@ def get_data(problem, **kwargs):
 
             p_all = jnp.concatenate([location, radius], -1)
             return norm_divide_return((X, Y), y_all, p_all, prop_train=0.8, pod=True, eps=1)
-        
+
+        case "multiple_steps":
+            create_steps = lambda p, w, t: np.bitwise_or.reduce(jnp.stack(my_vmap(lambda pp, w, t: ~((t < (pp - w/2)) | (t > (pp + w/2))))(p, args=(w, t))), 0)
+            t = jnp.linspace(0, 20, 500)
+
+            w1 = 0.5
+            p_1 = jrandom.uniform(jrandom.PRNGKey(0), (100,), minval=t[0]+w1/2, maxval=t[-1]-w1/2)
+            steps_1 = jnp.stack(my_vmap(create_steps)(jnp.expand_dims(p_1, 0).T, args=(w1, t))).T
+
+            w2 = 0.5
+            p_2_0 = jrandom.uniform(jrandom.PRNGKey(30), (100,), minval=t[0]+3*w2/2, maxval=t[-1]-3*w2/2)
+            p_2_1 = jax.vmap(lambda p: p + 2*w2)(p_2_0)
+            p_2 = jnp.stack([p_2_0, p_2_1], 0)
+            steps_2 = jnp.stack(my_vmap(create_steps)(p_2.T, args=(w2, t))).T
+
+            w3 = 0.5
+            p_3_0 = jrandom.uniform(jrandom.PRNGKey(20), (100,), minval=t[0]+5*w3/2, maxval=t[-1]-5*w3/2)
+            p_3_1 = jax.vmap(lambda p: p + 2*w3)(p_3_0)
+            p_3_2 = jax.vmap(lambda p: p + 2*w3)(p_3_1)
+            p_3 = jnp.stack([p_3_0, p_3_1, p_3_2], 0)
+            steps_3 = jnp.stack(my_vmap(create_steps)(p_3.T, args=(w3, t))).T
+
+            w4 = 0.4
+            p_4_0 = jrandom.uniform(jrandom.PRNGKey(500), (100,), minval=t[0]+7*w4/2, maxval=t[-1]-7*w4/2)
+            p_4_1 = jax.vmap(lambda p: p + 2*w4)(p_4_0)
+            p_4_2 = jax.vmap(lambda p: p + 2*w4)(p_4_1)
+            p_4_3 = jax.vmap(lambda p: p + 2*w4)(p_4_2)
+            p_4 = jnp.stack([p_4_0, p_4_1, p_4_2, p_4_3], 0)
+            steps_4 = jnp.stack(my_vmap(create_steps)(p_4.T, args=(w3, t))).T
+
+            pdb.set_trace()
+            y_all = jnp.concatenate([steps_1, steps_2, steps_3, steps_4], -1)
+            output_all = jnp.zeros((y_all.shape[-1], 4))
+            output_all = output_all.at[:steps_1.shape[-1], 0].set(1)
+            output_all = output_all.at[steps_1.shape[-1]:steps_1.shape[-1]+steps_2.shape[-1], 1].set(1)
+            output_all = output_all.at[steps_1.shape[-1]+steps_2.shape[-1]:steps_1.shape[-1]+steps_2.shape[-1]+steps_3.shape[-1], 2].set(1)
+            output_all = output_all.at[steps_1.shape[-1]+steps_2.shape[-1]+steps_3.shape[-1]:, 3].set(1)
+            output_all = output_all.T
+            p_all = jnp.concatenate([p_1,  jnp.sum(p_2, 0)/2, p_3[1]], -1)
+
+            permutation = jrandom.permutation(jrandom.PRNGKey(0), y_all.shape[1])
+            y_all = y_all[:, permutation]
+            output_all = output_all[:, permutation]
+            return norm_divide_return(t, y_all, jnp.expand_dims(p_all, -1), prop_train=0.8, output=output_all)
+
         case _:
             raise ValueError(f"Problem {problem} not recognized")
-        
+
 def p_of_dim_1(v_train, vt_train, p_vals, p_test, model, ids=None):
     def evaluate_at_parameter(idx, p_val, v):
         v_1 = v[idx]
@@ -961,7 +1212,7 @@ def interpolate_quad(p00, p11, p22, p33, v00, v11, v22, v33, pt):
     sorted_ds = jnp.sort(jnp.array([d0, d1, d2, d3]))
     sorted_idx = jnp.argsort(jnp.array([d0, d1, d2, d3]))
 
-    return jnp.sum(jnp.multiply(sorted_ds/jnp.sum(sorted_ds), jnp.array([v0, v1, v2, v3])[sorted_idx])) 
+    return jnp.sum(jnp.multiply(sorted_ds/jnp.sum(sorted_ds), jnp.array([v0, v1, v2, v3])[sorted_idx]))
     # aa = x0
     # ap = y0
     # bb = -x0 + x1
@@ -1031,7 +1282,7 @@ def normalize(x_tr, x_t, axis=0):
     std = jnp.std(x_tr, axis=axis)
     return (x_tr-means)/std, (x_t-means)/std
 
-def main_RRAE(method, prob_name, data_func, train_func, process_func=None, post_process_bool=False, train_nn=True, pp=True, **kwargs):
+def main_RRAE(method, prob_name, data_func, train_func, post_process_func, process_func=None, post_process_bool=False, train_nn=True, pp=True, **kwargs):
 
     if method == "weak":
         num_modes = -1
@@ -1045,16 +1296,16 @@ def main_RRAE(method, prob_name, data_func, train_func, process_func=None, post_
         v_vt = False
         Wx_ = False
         num_modes_true = num_modes
-    
-    ts, y_shift, y_test, p_vals, p_test, lambda_post, y_original, y_test_original = data_func(**kwargs)
 
-    lambda_post = _identity if lambda_post is None else lambda_post                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+    ts, y_shift, y_test, p_vals, p_test, lambda_post, y_original, y_test_original, output_shift, output_test = data_func(**kwargs)
+
+    lambda_post = _identity if lambda_post is None else lambda_post
     assert is_test_inside(p_vals, p_test)
 
     print(f"Shape of y_train is {y_shift.shape}, (T x N)")
     print(f"Shape of p_vals is {p_vals.shape}, (N x P)")
-    y_pred_train, x_m, model, v_train, vt_train, parameters, y_pred_train_o, y_shift, p_vals = train_func(y_shift, n_mode=num_modes, num_modes_vvt=num_modes_vvt, dropout=0, v_vt=v_vt, WX_=Wx_, p_vals=p_vals, post_proc_func=lambda_post, method=method, **kwargs)
-
+    print(f"Shape of output_train is {output_shift.shape}, (O x N)")
+    y_pred_train, x_m, model, v_train, vt_train, parameters, y_pred_train_o, y_shift, p_vals = train_func(y_shift, output_shift, n_mode=num_modes, num_modes_vvt=num_modes_vvt, dropout=0, v_vt=v_vt, WX_=Wx_, p_vals=p_vals, post_proc_func=lambda_post, method=method, **kwargs)
     # if (not train_nn) and  (p_vals.shape[-1] != 1) and (p_vals.shape[-1] != 2):
     #     print("Only P = 1 or P = 2 are supported without training a Neural Network , switching to training mode")
     #     train_nn = True
@@ -1066,35 +1317,34 @@ def main_RRAE(method, prob_name, data_func, train_func, process_func=None, post_
     filename = os.path.join(folder_name, f"{method}_{prob_name}")
 
     if not train_nn:
-        
-        x_test, y_pred_test, y_pred_test_o, vt_test = process_func(v_train, vt_train, p_vals, p_test, model)
+
+        x_test, y_pred_test, y_pred_test_o, vt_test = process_func(n_mode=num_modes, v_train=v_train, vt_train=vt_train, p_vals=p_vals, p_test=p_test, model=model, y_train=y_shift, y_test=y_test, out_train=output_shift, out_test=output_test)
 
         kwargs = {k: kwargs[k] for k in set(list(kwargs.keys())) - set({"activation_enc", "activation_dec", "loss_func", "post_proc_func"})}
         if post_process_bool:
-            pdb.set_trace()
             if not os.path.exists(folder):
                 os.makedirs(folder)
             shutil.rmtree(folder)
             os.makedirs(folder)
-            error_train, error_test, error_train_o, error_test_o = post_process(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, file=folder_name, pp=pp)
+            error_train, error_test, error_train_o, error_test_o = post_process_func(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, out_test=output_test, out_train=output_shift, file=folder_name, pp=pp)
 
             with open(f"{filename}_.pkl", 'wb') as f:
                 dill.dump([v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs, []], f)
         else:
             error_train = jnp.linalg.norm(y_pred_train-y_shift)/jnp.linalg.norm(y_shift)*100
-            with open(f"{filename}_.pkl", 'wb') as f:    
+            with open(f"{filename}_.pkl", 'wb') as f:
                 dill.dump([v_train, vt_train, error_train], f)
 
     else:
         x_test, y_pred_test, y_pred_test_o, vt_test = None, None, None, None
         if post_process_bool:
-            error_train, error_test, error_train_o, error_test_o = post_process(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, test=False, file=folder_name)
+            error_train, error_test, error_train_o, error_test_o = post_process_func(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, out_test=output_test, out_shift=output_shift, test=False, file=folder_name)
 
             with open(f"{filename}_.pkl", 'wb') as f:
                 dill.dump([v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs, []], f)
         else:
             error_train = jnp.linalg.norm(y_pred_train-y_shift)/jnp.linalg.norm(y_shift)*100
-            with open(f"{filename}_.pkl", 'wb') as f:    
+            with open(f"{filename}_.pkl", 'wb') as f:
                 dill.dump([v_train, vt_train, error_train], f)
 
     def save(filename, hyperparams, model):
@@ -1112,9 +1362,9 @@ def main_RRAE(method, prob_name, data_func, train_func, process_func=None, post_
 
 if __name__ == "__main__":
     method = "strong"
-    problem = "angelo_new" # "shift", "accelerate", "stairs", "mult_freqs", "pimm_curves", "angelo", "mult_gausses", "avrami", "avrami_noise", "mass_spring"
-    train_nn = True # 12
-    num_modes = 14
+    problem = "multiple_steps" # "shift", "accelerate", "stairs", "mult_freqs", "pimm_curves", "angelo", "mult_gausses", "avrami", "avrami_noise", "mass_spring"
+    train_nn = False # 12
+    num_modes = 1
 
     # process_func = p_of_dim_2 if num_modes == 2 else p_of_dim_1
     # assert (num_modes == 2) or (num_modes == 1)
@@ -1122,19 +1372,22 @@ if __name__ == "__main__":
     kwargs = {
         "interp": True,
         "width_i": 64,
-        "depth_i": 6,
-        "add_interp": 0.5,
+        "depth_i": 4,
         "num_modes": num_modes,
         "problem": problem,
-        "step_st": [2000, 2000, 2000],
-        "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
+        "step_st": [160,],
+        "lr_st": [1e-3, 1e-4, 1e-5],
         "width_enc": 64,
         "depth_enc": 1,
         "width_dec": 64,
         "depth_dec": 6,
-        "mul_latent": 20,
-        "batch_size_st": [32, 32, 32, 32],
-        "mul_lr": 100
+        "mul_latent": 2,
+        "batch_size_st": [20, 20, 20, 32, 32, 32, 32, 32, 32, 32, 32],
+        "mul_lr": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        "training_intr":[False, False, False, True, True, False, False, False, True, True, False, False, False],
+        "loss_func": lambda x, y: (-1*jnp.sum(y*jnp.log(x)))/x.shape[-1],
+        "activation_dec": lambda x: jax.nn.softmax(x.T).T,
     }
-    p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train = main_RRAE(method, problem, get_data, train_loop_RRAE, process_func=None, post_process_bool=True, train_nn=train_nn, post_process=post_process, pp=True, **kwargs)
+    res = main_RRAE(method, problem, get_data, train_loop_RRAE, process_func=process_class, post_process_bool=True, train_nn=train_nn, post_process_func=post_process_class, pp=True, **kwargs)
+    p_vals, p_test, model, x_m, y_pred_train, v_train, vt_train, vt_test, y_pred_test, y_shift, y_test, num_modes, y_original, y_pred_train_o, y_test_original, y_pred_test_o, folder_name, error_train = res
     pdb.set_trace()

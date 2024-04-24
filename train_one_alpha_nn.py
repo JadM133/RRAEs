@@ -2,7 +2,7 @@ import pickle
 import equinox as eqx
 import jax.random as jr
 import jax.numpy as jnp
-from train_RRAE import Func, WX, find_weighted_loss, dataloader, my_vmap, post_process, make_model, normalize
+from train_RRAE import Func, WX_Func, find_weighted_loss, dataloader, my_vmap, post_process_interp, make_model, normalize
 import optax
 import time
 import jax
@@ -36,7 +36,7 @@ def train_alpha(
     depth=1,
     seed=5678,
     print_every=20,
-    stagn_every=20,
+    stagn_every=100,
     batch_size_st=[32, 32, 32, 32,],
     dropout=0, 
     prop_train=1,
@@ -58,21 +58,19 @@ def train_alpha(
         model = Func(key=model_key, **hyper)
     print(f"Inpu shape is {inp.shape}, output shape is {out.shape}")
     if WX_:
-        hyperparams = {"dim0": inp.shape[-1], "dim1": 1, "seed": seed}
-        hyper = {k: hyperparams[k] for k in set(list(hyperparams.keys())) - set(["seed"])}
-        model = WX(key=model_key, **hyper)
+        model = WX_Func(key=model_key, **hyper)
 
     @eqx.filter_value_and_grad
     def grad_loss(model, inp, out, key):
         pred = jnp.squeeze(model(inp, key))
-        wv = jnp.array([1., 0,])
+        wv = jnp.array([1.,])
         # mse = lambda x, y: jnp.mean((x-y)**2)
-        layers = model.mlp.layers
-        mean = lambda lis: sum(lis)/len(lis)
-        ws = mean([jnp.mean(jnp.abs(l.weight)) for l in layers])
-        bs = mean([jnp.mean(jnp.abs(l.bias)) for l in layers])
+        # layers = model.mlp.layers
+        # mean = lambda lis: sum(lis)/len(lis)
+        # ws = mean([jnp.mean(jnp.abs(l.weight)) for l in layers])
+        # bs = mean([jnp.mean(jnp.abs(l.bias)) for l in layers])
         # return find_weighted_loss([jnp.linalg.norm(pred-out)/jnp.linalg.norm(out)*100], weight_vals=wv)
-        return find_weighted_loss([jnp.linalg.norm(pred-out.T)/jnp.linalg.norm(out.T)*100, ws+bs], weight_vals=wv)
+        return find_weighted_loss([jnp.linalg.norm(pred-out.T)/jnp.linalg.norm(out.T)*100], weight_vals=wv)
 
     @eqx.filter_jit
     def make_step(inp, model, opt_state, out, key):
@@ -83,7 +81,7 @@ def train_alpha(
 
 
     idx = jnp.arange(inp.shape[0])
-    idx = jr.permutation(jr.PRNGKey(0), idx)
+    idx = jr.permutation(jr.PRNGKey(5000), idx)
 
     inp_train = inp[idx[:int(inp.shape[0]*prop_train)]]
     out_train = out[idx[:int(out.shape[0]*prop_train)]]
@@ -216,7 +214,7 @@ def main_alpha(train_func, filename, folder_name, restart=True, **kwargs):
         x_test = jnp.sum(jax.vmap(lambda v_tr, vt_t: jnp.outer(v_tr, vt_t), in_axes=[-1, 0])(v_train, vt_test), axis=0)
         y_pred_test = RRAE.func_decode(x_test, train=True)
         y_pred_test_o = RRAE.func_decode(x_test, train=False)
-        error_train, error_test, error_train_o, error_test_o = post_process(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, None, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, x_test_modes=x_test, file=folder_name)
+        error_train, error_test, error_train_o, error_test_o = post_process_interp(p_vals, p_test, problem, method, x_m, y_pred_train, v_train, vt_train, None, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, x_test_modes=x_test, file=folder_name)
         if not broke:
             with open(f"{filename}_alpha.pkl", "wb") as f:
                 dill.dump([x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs_new.append(kwargs)], f)
@@ -231,6 +229,6 @@ if __name__ == "__main__":
     filename = os.path.join(folder_name, f"{method}_{problem}")
     restart = True
     RRAE = load_eqx_nn(f"{filename}_nn.pkl", make_model)[0][0]
-    kwargs = {"model": RRAE.func_interp, "step_st":[2000, 2000], "lr_st":[1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_size":64, "depth":1, "batch_size_st":[64, 64, 64, -1], "prop_train":0.9}
+    kwargs = {"WX_":True, "model": RRAE.func_interp, "dropout":0.6, "step_st":[2000, 2000, 2000], "lr_st":[1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9], "width_size":1200, "depth":1, "batch_size_st":[-1, -1, -1, -1], "prop_train":0.9}
     main_alpha(train_alpha, filename, folder_name, restart, **kwargs)
     pdb.set_trace()

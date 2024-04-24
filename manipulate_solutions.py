@@ -29,7 +29,7 @@ def find_vs(filename, method):
 
 if __name__ == "__main__":
     method = "strong"
-    problem = "angelo" 
+    problem = "angelo_new" 
     prob_changed = ""
     pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" #   
     if prob_changed == "":
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     folder = f"{pre_folder}{prob_changed}/{problem}_{method}" # 
     folder_name = f"{folder}/"
     filename = os.path.join(folder_name, f"{method}_{problem}")
-    with open(f"{filename}.pkl", "rb") as f:
+    with open(f"{filename}_.pkl", "rb") as f:
         try:
             v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs = dill.load(f)
             # v_train, vt_train, x_m, y_pred_train, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, p_vals, p_test, kwargs_old, kwargs = dill.load(f)

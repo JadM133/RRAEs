@@ -146,7 +146,7 @@ def plot_sin_sin_gauss():
     fig1 = plt.figure(1)
     fig1.set_size_inches(18.5, 10.5)
     fig1 = fig1.add_subplot(3, 2, 1)
-    plt.subplots_adjusFt(hspace=0.8, wspace=0.25)
+    plt.subplots_adjust(hspace=0.8, wspace=0.25)
 
     def plot_problem(methods, colors, markers, problem, pre_folder, indices, ylabel, inc=0, sample=6):
         
