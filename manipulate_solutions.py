@@ -2,6 +2,7 @@ import os
 import dill
 import pdb
 import matplotlib.pyplot as plt
+from train_RRAE import plot_surfaces
 
 def find_vs(filename, method):
     if method == "weak" or method == "strong":
@@ -29,7 +30,7 @@ def find_vs(filename, method):
 
 if __name__ == "__main__":
     method = "strong"
-    problem = "angelo_new" 
+    problem = "welding" 
     prob_changed = ""
     pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" #   
     if prob_changed == "":
@@ -51,7 +52,8 @@ if __name__ == "__main__":
         os.remove(f"{filename}_.pkl")
         with open(f"{filename}_.pkl", 'wb') as f:
             dill.dump([v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs], f)
-
+    plot_surfaces(ts, y_pred_test, y_test, 0)
+    pdb.set_trace()
     print(f"Train error: {error_train}")
     print(f"Test error: {error_test}")
     pdb.set_trace()
