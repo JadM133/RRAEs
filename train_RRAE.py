@@ -340,14 +340,17 @@ class Func(eqx.Module):
         self.mat_end = mat_end
         self.post_proc_func = post_proc_func
 
-    def __call__(self, y, k=None, train=False):
+    def call_per_input(self, y, k=None, train=False):
         if not train and self.mat_end is not None:
             return self.post_proc_func(self.mat_end @ self.mlp(y, key=k))
         if not train:
             return self.post_proc_func(self.mlp(y, key=k))
         else:
             return self.mlp(y, key=k)
-
+    
+    def __call__(self, y, k=None, train=False):
+        return jnp.squeeze(jax.vmap(lambda x, kv, tr: self.call_per_input(jnp.expand_dims(x, -1), kv, tr), in_axes=[0, None, None])(y, k, train)).T
+    
 class v_vt_class(eqx.Module):
     v: jnp.array
     vt: jnp.array
@@ -377,24 +380,18 @@ class simple_koop_operator(eqx.Module):
 
     def __call__(self, ys, n_mode=1, key=jrandom.PRNGKey(0), train=False, pv=None, v1_now=None):
         x = self.func_encode(ys)
-        if len(ys.shape) > 2:
-            x = x.T
         if n_mode != -1:
             u, s, v = jnp.linalg.svd(x, full_matrices=False)
             sigs = s[:n_mode]
             v_now = v[:n_mode, :]
             u_now = u[:, :n_mode]
-            xs_m = jnp.sum(jax.vmap(lambda u, s, v: s*jnp.outer(u, v), in_axes=[-1, 0, 0])(u_now, sigs, v_now).T, axis=-1).T
+            xs_m = jnp.sum(jax.vmap(lambda u, s, v: s*jnp.outer(u, v), in_axes=[-1, 0, 0])(u_now, sigs, v_now).T, axis=-1)
         else:
             xs_m = x
             u_now = None
             v_now = None
             sigs = None
-        y = self.func_decode(xs_m, key, train)
-        # if v1_now is not None:
-        #     v_now = self.func_interp(pv.T, True)
-        #     x = jnp.sum(jax.vmap(lambda u, v: jnp.outer(u, v), in_axes=[-1, 0])(u_now, v_now).T, axis=-1).T
-        #     y = self.func_decode(x, key, train)
+        y = self.func_decode(xs_m, key, train).T
         return x, y, xs_m, (u_now, v_now, sigs)
 
     def interpolate(self):
@@ -432,7 +429,7 @@ def dataloader(arrays, batch_size, p_vals=None, *, key):
             end = start + batch_size
         kk += 1
 
-def make_model(key, data_size, data_size_end, mul_latent, dropout, WX_, v_vt, num_modes_vvt, width_enc, depth_enc, width_dec, depth_dec, activation_enc, activation_dec, post_proc_func=_identity, interp=True, width_i=64, depth_i=2, p_vals=None, modes=None, out_size=None,**kwargs):
+def make_model(key, data_size, data_size_end, mul_latent, dropout, WX_, v_vt, num_modes_vvt, width_enc, depth_enc, width_dec, depth_dec, activation_enc, activation_dec, post_proc_func=_identity, interp=True, width_i=64, depth_i=2, p_vals=None, modes=None, out_size=None,**kwargs): 
     func_encode = Func(data_size, width_enc, depth_enc, out_size=int(data_size*mul_latent), activation=activation_enc, key=key)
     if WX_:
         func_encode = WX(data_size, int(data_size*mul_latent))
@@ -454,15 +451,17 @@ class CNN(eqx.Module):
     layers: list
 
     def __init__(self, kernel_conv, stride, padding, kernel_pool, out_conv, data_dim0, data_dim1, out, width, depth, dropout, *, key, **kwargs):
-        key1, key2, key3, key4 = jax.random.split(key, 4)
+        key1, key2 = jax.random.split(key, 2)
         # Standard CNN setup: convolutional layer, followed by flattening,
         # with a small MLP on top.
 
         self.layers = [
-            eqx.nn.Conv2d(1, out_conv, stride=stride, padding=padding, kernel_size=kernel_conv, key=key1),
+            eqx.nn.Conv2d(1, int(out_conv/2), stride=stride, padding=padding, kernel_size=kernel_conv, key=key1),
+            jnn.softplus,
+            eqx.nn.Conv2d(int(out_conv/2), out_conv, stride=stride, padding=padding, kernel_size=kernel_conv, key=key1),
             jnn.softplus,
             lambda x: jnp.expand_dims(jnp.ravel(x), -1),
-            MLP_dropout(out_conv*(data_dim0+padding)*(data_dim1+padding), out, width, depth, eqx.nn.Dropout(dropout), key=key2),
+            MLP_dropout(out_conv*(data_dim0+2*padding)*(data_dim1+2*padding), out, width, depth, eqx.nn.Dropout(dropout), key=key2),
         ]
 
     def call_per_input(self, x):
@@ -471,7 +470,7 @@ class CNN(eqx.Module):
         return jnp.squeeze(x).T
     
     def __call__(self, x, *args, **kwargs):
-        return jnp.squeeze(jax.vmap(self.call_per_input)(x))
+        return jnp.squeeze(jax.vmap(self.call_per_input)(x)).T
 
 class CNN_trans(eqx.Module):
     layers: list
@@ -479,14 +478,16 @@ class CNN_trans(eqx.Module):
     def __init__(self, kernel_conv, stride, padding, kernel_pool, out_conv, data_dim0, data_dim1, out, width, depth, dropout, *, key, **kwargs):
         key1, key2, key3, key4 = jax.random.split(key, 4)
 
-        width = jnp.flip(width)
+        width = jnp.flip(np.array(width)).tolist()
 
         self.layers = [
             lambda x: jnp.expand_dims(jnp.ravel(x), -1),
-            MLP_dropout(out, out_conv*(data_dim0+padding)*(data_dim1+padding), width, depth, eqx.nn.Dropout(dropout), key=key2),
-            lambda x: jnp.reshape(x, (out_conv, data_dim0+padding, data_dim1+padding)),
+            MLP_dropout(out, out_conv*(data_dim0+2*padding)*(data_dim1+2*padding), width, depth, eqx.nn.Dropout(dropout), key=key2),
+            lambda x: jnp.reshape(x, (out_conv, data_dim0+2*padding, data_dim1+2*padding)),
             jnn.softplus,
-            eqx.nn. ConvTranspose2d(out_conv, 1, stride=stride, padding=padding, kernel_size=kernel_conv, key=key1),
+            eqx.nn.ConvTranspose2d(out_conv, int(out_conv/2), stride=stride, padding=padding, kernel_size=kernel_conv, key=key1),
+            jnn.softplus,
+            eqx.nn.ConvTranspose2d(int(out_conv/2), 1, stride=stride, padding=padding, kernel_size=kernel_conv, key=key1),
         ]
 
     def call_per_batch(self, x, *args, **kwargs):
@@ -499,14 +500,14 @@ class CNN_trans(eqx.Module):
     
 def make_conv_model(key, data_shape, data_size, data_size_end, mul_latent, dropout, WX_, v_vt, num_modes_vvt, width_enc, depth_enc, width_dec, depth_dec, activation_enc, activation_dec, kernel_conv, stride, padding, kernel_pool, out_conv, post_proc_func=_identity, interp=True, width_i=64, depth_i=2, p_vals=None, modes=None, out_size=None,**kwargs):
     key1, key2, key3 = jr.split(key, 3)
+    data_size = data_shape[-1]*data_shape[-2]
     func_encode = CNN(kernel_conv, stride, padding, kernel_pool, out_conv, data_shape[2], data_shape[3], int(data_size*mul_latent), width_enc, depth_enc, dropout, key=key1)
-    pdb.set_trace()
     if WX_:
         func_encode = WX(data_size, int(data_size*mul_latent))
     if out_size is None:
         out_size = data_size
 
-    func_decode = CNN_trans(kernel_conv, stride, padding, kernel_pool, out_conv, data_shape[2], data_shape[3], int(data_size*mul_latent), width_enc, depth_enc, dropout, key=key2)
+    func_decode = CNN_trans(kernel_conv, stride, padding, kernel_pool, out_conv, data_shape[2], data_shape[3], int(data_size*mul_latent), width_dec, depth_dec, dropout, key=key2)
     
     if interp:
         func_interp = Func(p_vals.shape[-1], width_i, depth_i, out_size=modes, dropout=dropout, key=key)
@@ -536,8 +537,8 @@ def train_loop_RRAE(
     loss_func=None,
     post_proc_func=_identity,
     seed=5678,
-    print_every=100,
-    stagn_every=80, # 80
+    print_every=20,
+    stagn_every=100, # 80
     reg=False,
     batch_size_st=[16, 16, 16, 16, 32],
     n_mode=-1,
@@ -561,6 +562,7 @@ def train_loop_RRAE(
     padding=None,
     kernel_pool=None,
     out_conv=None, 
+    regression=False,
     **kwargs
 ):
 
@@ -568,7 +570,7 @@ def train_loop_RRAE(
     loader_key, dropout_key = jr.split(key, 2)
     seed = 0
     model_key = jr.PRNGKey(seed)
-    parameters = {"kernel_conv": kernel_conv, "stride": stride, "padding": padding, "kernel_pool": kernel_pool, "out_conv": out_conv, "data_shape": ys.shape, "width_i": width_i, "out_size": int(output.shape[0]), "depth_i": depth_i, "modes":num_modes, "interp":interp, "p_vals":p_vals, "data_size": int(ys.shape[0]), "activation_enc":activation_enc, "post_proc_func":post_proc_func , "activation_dec":activation_dec, "data_size_end": int(ys.shape[-1]), "mul_latent": mul_latent, "dropout": dropout, "WX_": WX_, "v_vt": v_vt, "num_modes_vvt": num_modes_vvt, "width_enc": width_enc, "depth_enc": depth_enc, "width_dec": width_dec, "depth_dec": depth_dec, "seed": seed}
+    parameters = {"kernel_conv": kernel_conv, "stride": stride, "padding": padding, "kernel_pool": kernel_pool, "out_conv": out_conv, "data_shape": ys.shape, "width_i": width_i, "out_size": int(output.shape[-1]), "depth_i": depth_i, "modes":num_modes, "interp":interp, "p_vals":p_vals, "data_size": int(ys.shape[-1]), "activation_enc":activation_enc, "post_proc_func":post_proc_func , "activation_dec":activation_dec, "data_size_end": int(ys.shape[-1]), "mul_latent": mul_latent, "dropout": dropout, "WX_": WX_, "v_vt": v_vt, "num_modes_vvt": num_modes_vvt, "width_enc": width_enc, "depth_enc": depth_enc, "width_dec": width_dec, "depth_dec": depth_dec, "seed": seed}
     model_func = make_model if len(ys.shape) == 2 else make_conv_model
     model = model_func(key=model_key, **parameters)
     # UP TO HERE IT IS WORKING
@@ -640,10 +642,10 @@ def train_loop_RRAE(
 
         if (batch_size > ys.shape[-1]) or batch_size == -1:
             batch_size = ys.shape[-1]
-
-        for step, (yb, pv, out, idx, key) in zip(range(steps), dataloader([ys.T, p_vals, output.T, jnp.arange(0, ys.shape[-1], 1), keys], batch_size, key=loader_key)):
+        
+        for step, (yb, pv, out, idx, key) in zip(range(steps), dataloader([ys, p_vals, output, jnp.arange(0, ys.shape[-1], 1), keys], batch_size, key=loader_key)):
             start = time.time()
-            loss, model, opt_state, aux = make_step(yb.T, out.T, model, opt_state, batch_size, idx, key[0], pv, None, None)
+            loss, model, opt_state, aux = make_step(yb, out, model, opt_state, batch_size, idx, key[0], pv, None, None)
             end = time.time()
             t_t += end - start
             if (step % stagn_every) == 0:
@@ -655,9 +657,12 @@ def train_loop_RRAE(
                 loss_old = loss
 
             if (step % print_every) == 0 or step == steps - 1:
-                pred = np.zeros_like(aux)
-                pred[aux.argmax(0), np.arange(aux.shape[-1])] = 1
-                print(f"Step: {step}, Loss: {loss}, Computation time: {t_t}, Accuracy: {jnp.sum((pred == out.T))/pred.size*100}")
+                if regression:
+                    pred = np.zeros_like(aux)
+                    pred[aux.argmax(0), np.arange(aux.shape[-1])] = 1
+                    print(f"Step: {step}, Loss: {loss}, Computation time: {t_t}, Accuracy: {jnp.sum((pred == out.T))/pred.size*100}")
+                else:
+                    print(f"Step: {step}, Loss: {loss}, Computation time: {t_t}")
                 if widgetf is not None:
                     widgetf.setText(f"Loss: {loss}")
                 t_t = 0
@@ -1001,19 +1006,19 @@ def plot_surfaces(ts, solutions_pred, solutions_true, idx_):
     X_vec = X_vec[:idx+1]
     Y_vec = np.reshape(Y_vec, (idx+1, -1))[:, 0]
 
-    Z_n_true = np.reshape(solutions_true[:, idx_], (X_vec.shape[0], Y_vec.shape[0]))
+    Z_n_true = np.reshape(solutions_true[idx_], (X_vec.shape[0], Y_vec.shape[0]))
     axes[0].plot_surface(X_vec, Y_vec, Z_n_true, cmap=cm.coolwarm, linewidth=0, antialiased=False)
     axes[0].view_init(elev=0, azim=0, roll=0)
 
-    Z_n_true = np.reshape(solutions_true[:, idx_], (X_vec.shape[0], Y_vec.shape[0]))
+    Z_n_true = np.reshape(solutions_true[idx_], (X_vec.shape[0], Y_vec.shape[0]))
     surf = axes[1].plot_surface(X_vec, Y_vec, Z_n_true, cmap=cm.coolwarm, linewidth=0, antialiased=False)
     axes[1].view_init(elev=90, azim=-90, roll=0)
 
-    Z_n_pred = jnp.reshape(solutions_pred[:, idx_], (X_vec.shape[0], Y_vec.shape[0]))
+    Z_n_pred = jnp.reshape(solutions_pred[idx_], (X_vec.shape[0], Y_vec.shape[0]))
     axes[2].plot_surface(X_vec, Y_vec, Z_n_pred, cmap=cm.coolwarm, linewidth=0, antialiased=False)
     axes[2].view_init(elev=0, azim=0, roll=0)
 
-    Z_n_pred = jnp.reshape(solutions_pred[:, idx_], (X_vec.shape[0], Y_vec.shape[0]))
+    Z_n_pred = jnp.reshape(solutions_pred[idx_], (X_vec.shape[0], Y_vec.shape[0]))
     axes[3].plot_surface(X_vec, Y_vec, Z_n_pred, cmap=cm.coolwarm, linewidth=0, antialiased=False)
     axes[3].view_init(elev=90, azim=-90, roll=0)
 
@@ -1044,33 +1049,36 @@ def norm_divide_return(ts, y_all, p_all, prop_train=0.8, pod=False, test_end=0, 
     y_shift = (y_shift_old - jnp.mean(y_shift_old))/jnp.std(y_shift_old)
     y_test = (y_test_old - jnp.mean(y_shift_old))/jnp.std(y_shift_old)
 
+    y_shift = y_shift.T
+    y_test = y_test.T
+
     if conv == True:
-        X_vec, Y_vec = ts
+        X_vec = ts[0]
         idx = np.argmax(jnp.diff(X_vec[:, 0]) < 0)
-        y_shift = jnp.expand_dims(jax.vmap(lambda y : jnp.reshape(y, (idx+1, idx+1)), in_axes=[-1])(y_shift), 1)
-        y_test = jnp.expand_dims(jax.vmap(lambda y : jnp.reshape(y, (idx+1, idx+1)), in_axes=[-1])(y_test), 1)
+        y_shift = jnp.expand_dims(jax.vmap(lambda y : jnp.reshape(y, (idx+1, idx+1)), in_axes=[-1])(y_shift), 1)[:, :, 1:-1, 1:-1]
+        y_test = jnp.expand_dims(jax.vmap(lambda y : jnp.reshape(y, (idx+1, idx+1)), in_axes=[-1])(y_test), 1)[:, :, 1:-1, 1:-1]
 
     if output is None:
         output_shift = y_shift
         output_test = y_test
     else:
-        output_test = output[:, idx_test]
-        output_shift = jnp.delete(output, idx_test, 1)
+        output_test = output[idx_test]
+        output_shift = jnp.delete(output, idx_test, 0)
 
     inv_func = lambda xx: xx*jnp.std(y_shift_old)+jnp.mean(y_shift_old)
 
     if not pod:
         return ts, y_shift, y_test, p_vals, p_test, inv_func, y_shift_old, y_test_old, output_shift, output_test
 
-    u_now = determine_u_now(y_shift, eps=eps)
-    coeffs_shift = u_now.T @ y_shift
+    u_now = determine_u_now(y_shift.T, eps=eps)
+    coeffs_shift = u_now.T @ y_shift.T
     mean_vals = jnp.mean(coeffs_shift, axis=1)
     std_vals = jnp.std(coeffs_shift, axis=1)
     coeffs_shift = jax.vmap(lambda x, m, s: (x-m)/s)(coeffs_shift, mean_vals, std_vals)
-    coeffs_test = u_now.T @ y_test
+    coeffs_test = u_now.T @ y_test.T
     coeffs_test = jax.vmap(lambda x, m, s: (x-m)/s)(coeffs_test, mean_vals, std_vals)
     inv_func = lambda xx: u_now @ jax.vmap(lambda x, m, s: x*s+m)(xx, mean_vals, std_vals)
-    return ts, coeffs_shift, coeffs_test, p_vals, p_test, inv_func, y_shift, y_test, output_shift, output_test
+    return ts, coeffs_shift.T, coeffs_test.T, p_vals, p_test, inv_func, y_shift, y_test, output_shift, output_test
 
 def get_data(problem, **kwargs):
     match problem:
@@ -1262,8 +1270,7 @@ def get_data(problem, **kwargs):
             
             p_all = jnp.concatenate([p_all_train, p_all_test], 0)
             y_all = jnp.concatenate([y_all_train, y_all_test], -1)
-            
-            return norm_divide_return((X, Y), y_all, p_all, prop_train=0.8, test_end=p_all_test.shape[0], conv=True)
+            return norm_divide_return((X, Y), y_all, p_all, prop_train=0.8, test_end=p_all_test.shape[0])
 
         case "multiple_steps":
             create_steps = lambda p, w, t: np.bitwise_or.reduce(jnp.stack(my_vmap(lambda pp, w, t: ~((t < (pp - w/2)) | (t > (pp + w/2))))(p, args=(w, t))), 0)
@@ -1352,9 +1359,9 @@ def p_of_dim_n_equi_grid(v_train, vt_train, p_vals, p_test, model, **kwargs):
     
     vt_test = my_vmap_multiple_arrays(interpolate)(p_vals[interp_ps], p_test, vt_train[:, interp_ps.T].T).T
 
-    x_test = jnp.sum(jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(v_train, vt_test), axis=0)
-    y_test = model.func_decode(x_test, train=True)
-    y_test_o = model.func_decode(x_test, train=False)
+    x_test = jnp.sum(jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(v_train, vt_test), axis=0).T
+    y_test = model.func_decode(x_test, train=True).T
+    y_test_o = model.func_decode(x_test, train=False).T
     return x_test, y_test, y_test_o, vt_test
 
 def p_of_dim_1(v_train, vt_train, p_vals, p_test, model, ids=None, **kwargs):
@@ -1491,9 +1498,9 @@ def main_RRAE(method, prob_name, data_func, train_func, post_process_func, proce
     lambda_post = _identity if lambda_post is None else lambda_post
     assert is_test_inside(p_vals, p_test)
 
-    print(f"Shape of y_train is {y_shift.shape}, (T x N)")
+    print(f"Shape of y_train is {y_shift.shape}, (N x T)")
     print(f"Shape of p_vals is {p_vals.shape}, (N x P)")
-    print(f"Shape of output_train is {output_shift.shape}, (O x N)")
+    print(f"Shape of output_train is {output_shift.shape}, (N x O)")
     y_pred_train, x_m, model, v_train, vt_train, parameters, y_pred_train_o, y_shift, p_vals = train_func(y_shift, output_shift, n_mode=num_modes, num_modes_vvt=num_modes_vvt, dropout=0, v_vt=v_vt, WX_=Wx_, p_vals=p_vals, post_proc_func=lambda_post, method=method, **kwargs)
     # if (not train_nn) and  (p_vals.shape[-1] != 1) and (p_vals.shape[-1] != 2):
     #     print("Only P = 1 or P = 2 are supported without training a Neural Network , switching to training mode")
@@ -1568,11 +1575,11 @@ if __name__ == "__main__":
         "depth_i": 4,
         "num_modes": num_modes,
         "problem": problem,
-        "step_st": [2000, 2000, 2000],
+        "step_st": [2,],
         "lr_st": [1e-3, 1e-4, 1e-5],
-        "width_enc": 64,
-        "depth_enc": 1,
-        "width_dec": 64,
+        "width_enc": [32, 32, 64, 64, 128, 128],
+        "depth_enc": 6,
+        "width_dec": [128, 128, 64, 64, 32, 32],
         "depth_dec": 6,
         "mul_latent": 2,
         "batch_size_st": [20, 20, 20, 32, 32, 32, 32, 32, 32, 32, 32],
