@@ -23,9 +23,19 @@ import numpy as np
 _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
 
+
+def remove_keys_from_dict(d, keys):
+    return {k: v for k, v in d.items() if k not in keys}
+
+
+def merge_dicts(d1, d2):
+    return {**d1, **d2}
+
+
 def v_print(s, v):
     if v:
         print(s)
+
 
 def norm_divide_return(
     ts,
@@ -42,7 +52,7 @@ def norm_divide_return(
 ):
     def norm_vec(x):
         return (x - jnp.mean(x)) / jnp.std(x)
-    
+
     if norm_p:
         p_all = jnp.stack(my_vmap(lambda y: norm_vec(y))(p_all.T)).T
 
@@ -72,7 +82,6 @@ def norm_divide_return(
         y_shift = y_shift_old
         y_test = y_test_old
 
-
     if conv == True:
         X_vec = ts[0]
         idx = np.argmax(jnp.diff(X_vec[:, 0]) < 0)
@@ -97,9 +106,12 @@ def norm_divide_return(
         output_shift = jnp.delete(output, idx_test, 0)
 
     if norm_data:
+
         def inv_func(xx):
             return xx * jnp.std(y_shift_old) + jnp.mean(y_shift_old)
+
     else:
+
         def inv_func(xx):
             return xx
 
@@ -148,9 +160,10 @@ def norm_divide_return(
         output_test,
     )
 
+
 def get_data(problem, **kwargs):
-    """ Function that generates the examples presented in the paper."""
-    
+    """Function that generates the examples presented in the paper."""
+
     match problem:
         case "accelerate":
             ts = jnp.linspace(0, 2 * jnp.pi, 200)
@@ -167,25 +180,23 @@ def get_data(problem, **kwargs):
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
             return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
-        
+
         case "shift":
             ts = jnp.linspace(0, 2 * jnp.pi, 200)
 
             def sf_func(s, x):
                 return jnp.sin(x - s * jnp.pi)
 
-            p_vals = jnp.array([-0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4, 0.5])
-            p_vals = jnp.linspace(0, 1.5, 15)[:-1]
+            p_vals = jnp.linspace(0, 1.8, 19)[:-1]
             y_shift = jax.vmap(sf_func, in_axes=[0, None])(p_vals, ts).T
-            p_test = jnp.array([-0.15, 0.28, 0.41])
             p_test = jrandom.uniform(
-                jrandom.PRNGKey(0), (20,), minval=0 + 0.01, maxval=p_vals[-1] * 0.99
+                jrandom.PRNGKey(0), (80,), minval=0 + 0.01, maxval=p_vals[-1] * 0.99
             )
             y_test = jax.vmap(sf_func, in_axes=[0, None])(p_test, ts).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
             return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
-        
+
         case "stairs":
             Tend = 3.5  # [s]
             NT = 500
@@ -234,9 +245,7 @@ def get_data(problem, **kwargs):
             y_shift = jax.vmap(
                 lambda y: (y - jnp.mean(y_shift_old)) / jnp.std(y_shift_old),
                 in_axes=[-1],
-            )(
-                y_shift_old
-            ).T 
+            )(y_shift_old).T
             y_shift = y_shift[:, ~jnp.isnan(y_shift).any(axis=0)]
 
             p_test = jrandom.uniform(
@@ -561,9 +570,10 @@ def get_data(problem, **kwargs):
         case _:
             raise ValueError(f"Problem {problem} not recognized")
 
+
 def adaptive_TSVD(ys, eps=1, prop=0.1, full_matrices=True, verbose=True, **kwargs):
     """Adaptive truncated SVD for a given matrix ys.
-    
+
     Parameters
     ----------
     eps: float
@@ -579,6 +589,12 @@ def adaptive_TSVD(ys, eps=1, prop=0.1, full_matrices=True, verbose=True, **kwarg
     verbose: bool
         Whether to print the number of modes found or not.
     """
+    if ys.shape[0] == 1 or len(ys.shape) == 1:
+        if len(ys.shape) == 1:
+            ys = jnp.expand_dims(ys, 0)
+        u = jnp.ones((1, ys.shape[0]))
+        return u, jnp.array([1.0]), ys
+
     u, sv, v = jnp.linalg.svd(ys, full_matrices=full_matrices)
 
     def to_scan(state, inp):
@@ -587,8 +603,10 @@ def adaptive_TSVD(ys, eps=1, prop=0.1, full_matrices=True, verbose=True, **kwarg
         v_n = v[inp]
         pred = s_n * jnp.outer(u_n, v_n)
         return ((state[0].at[state[1]].set(pred), state[1] + 1), None)
-    
+
     while True:
+        if int(prop * sv.shape[0]) == 0:
+            prop = 1
         truncs = jnp.cumsum(
             jax.lax.scan(
                 to_scan,
@@ -604,12 +622,13 @@ def adaptive_TSVD(ys, eps=1, prop=0.1, full_matrices=True, verbose=True, **kwarg
             prop *= 2
             continue
         break
-        
+
     n_mode = jnp.argmax(errors < eps)
     n_mode = n_mode if n_mode != 0 else 1
     v_print(f"Number of modes for initial V is {n_mode}", verbose)
     u_now = u[:, :n_mode]
     return u_now, sv[:n_mode], v[:n_mode, :]
+
 
 def find_weighted_loss(terms, weight_vals=None):
     terms = jnp.asarray(terms, dtype=jnp.float32)
@@ -649,6 +668,7 @@ def dataloader(arrays, batch_size, p_vals=None, *, key):
             end = start + batch_size
         kk += 1
 
+
 def my_vmap(func, to_array=True):
     def map_func(*arrays, args=None, kwargs=None):
         sols = []
@@ -677,6 +697,7 @@ def my_vmap(func, to_array=True):
 
     return map_func
 
+
 class v_vt_class(eqx.Module):
     v: jnp.array
     vt: jnp.array
@@ -692,7 +713,9 @@ class v_vt_class(eqx.Module):
         self.vt = jax.vmap(lambda x: x / jnp.linalg.norm(x))(self.vt)
 
     def __call__(self):
-        return jax.vmap(lambda x: x / jnp.linalg.norm(x))(self.v) @ self.vt
+        norm_f = lambda x: x / jnp.linalg.norm(x)
+        U_mat = jax.vmap(norm_f, in_axes=[-1], out_axes=-1)(self.v)
+        return U_mat @ self.vt
 
 
 class MLP_dropout(Module, strict=True):
@@ -705,6 +728,7 @@ class MLP_dropout(Module, strict=True):
     out_size: Union[int, Literal["scalar"]] = field(static=True)
     width_size: tuple[int, ...]
     depth: tuple[int, ...]
+    final_activation: Callable
 
     def __init__(
         self,
@@ -716,6 +740,7 @@ class MLP_dropout(Module, strict=True):
         activation=_relu,
         use_bias=True,
         use_final_bias=True,
+        final_activation=_identity,
         *,
         key,
         **kwargs,
@@ -742,22 +767,31 @@ class MLP_dropout(Module, strict=True):
         self.width_size = width_size
         self.depth = depth
         self.dropout = dropout
-        self.activation = [
-            filter_vmap(filter_vmap(lambda: activation, axis_size=w), axis_size=depth)()
-            for w in width_size
-        ]
+        if depth != 0:
+            self.activation = [
+                filter_vmap(
+                    filter_vmap(lambda: activation, axis_size=w), axis_size=depth
+                )()
+                for w in width_size
+            ]
+        else:
+            self.activation = None
+        self.final_activation = final_activation
         self.use_bias = use_bias
         self.use_final_bias = use_final_bias
 
     @jax.named_scope("eqx.nn.MLP")
     def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
-        for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation)):
-            x = layer(x)
-            # x = self.dropout(x, key=key)
-            layer_activation = jtu.tree_map(lambda x: x[i] if is_array(x) else x, act)
-            x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
+        if self.depth != 0:
+            for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation)):
+                x = layer(x)
+                # x = self.dropout(x, key=key)
+                layer_activation = jtu.tree_map(
+                    lambda x: x[i] if is_array(x) else x, act
+                )
+                x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
         x = self.layers[-1](x)
-        x = self.activation[-1](x)
+        x = self.final_activation(x)
         return x
 
 
@@ -777,6 +811,7 @@ class Func(eqx.Module):
         inside_activation=None,
         final_activation=None,
         post_proc_func=_identity,
+        use_bias=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -784,7 +819,9 @@ class Func(eqx.Module):
         if out_size is None:
             out_size = data_size
 
-        final_activation = jnn.softplus if final_activation is None else final_activation # not used
+        final_activation = (
+            _identity if final_activation is None else final_activation
+        )  # not used
         inside_activation = (
             jnn.softplus if inside_activation is None else inside_activation
         )
@@ -797,6 +834,7 @@ class Func(eqx.Module):
             activation=inside_activation,
             dropout=eqx.nn.Dropout(dropout),
             final_activation=final_activation,
+            use_bias=use_bias,
             key=key,
         )
         self.post_proc_func = post_proc_func

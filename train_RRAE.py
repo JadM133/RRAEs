@@ -280,10 +280,10 @@ class Linear(Module, strict=True):
             x = jnp.squeeze(x)
         return x
 
-
 class MLP_dropout(Module, strict=True):
     layers: tuple[Linear, ...]
     activation: Callable
+    final_activation: Callable
     dropout: eqx.nn.Dropout
     use_bias: bool = field(static=True)
     use_final_bias: bool = field(static=True)
@@ -291,7 +291,7 @@ class MLP_dropout(Module, strict=True):
     out_size: Union[int, Literal["scalar"]] = field(static=True)
     width_size: int = field(static=True)
     depth: int = field(static=True)
-
+    
     def __init__(
         self,
         in_size,
@@ -300,11 +300,11 @@ class MLP_dropout(Module, strict=True):
         depth,
         dropout,
         activation=_relu,
+        final_activation=_identity,
         use_bias=True,
         use_final_bias=True,
         *,
-        key,
-        **kwargs,
+        key
     ):
 
         keys = jrandom.split(key, depth + 1)
@@ -312,43 +312,114 @@ class MLP_dropout(Module, strict=True):
         if depth == 0:
             layers.append(Linear(in_size, out_size, use_final_bias, key=keys[0]))
         else:
-            if not isinstance(width_size, list):
-                width_size = [width_size] * depth
-            layers.append(Linear(in_size, width_size[0], use_bias, key=keys[0]))
+            layers.append(Linear(in_size, width_size, use_bias, key=keys[0]))
             for i in range(depth - 1):
-                layers.append(
-                    Linear(width_size[i], width_size[i + 1], use_bias, key=keys[i + 1])
-                )
-            layers.append(
-                Linear(width_size[depth - 1], out_size, use_final_bias, key=keys[-1])
-            )
+                layers.append(Linear(width_size, width_size, use_bias, key=keys[i + 1]))
+            layers.append(Linear(width_size, out_size, use_final_bias, key=keys[-1]))
         self.layers = tuple(layers)
         self.in_size = in_size
         self.out_size = out_size
         self.width_size = width_size
         self.depth = depth
         self.dropout = dropout
-        self.activation = [
-            filter_vmap(filter_vmap(lambda: activation, axis_size=w), axis_size=depth)()
-            for w in width_size
-        ]
+        self.activation = filter_vmap(
+            filter_vmap(lambda: activation, axis_size=width_size), axis_size=depth
+        )()
+        if out_size == "scalar":
+            self.final_activation = final_activation
+        else:
+            self.final_activation = filter_vmap(
+                lambda: final_activation, axis_size=out_size
+            )()
         self.use_bias = use_bias
         self.use_final_bias = use_final_bias
 
     @jax.named_scope("eqx.nn.MLP")
     def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
-        for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation)):
+        for i, layer in enumerate(self.layers[:-1]):
+            if i == 0:
+                x = self.dropout(x, key=key)
             x = layer(x)
-            x = self.dropout(x, key=key)
-            layer_activation = jtu.tree_map(lambda x: x[i] if is_array(x) else x, act)
+            layer_activation = jtu.tree_map(
+                lambda x: x[i] if is_array(x) else x, self.activation
+            )
             x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
-
+            
         x = self.layers[-1](x)
-        # if self.out_size == "scalar":
-        x = self.activation[-1](x)
-        # else:
-        #     x = filter_vmap(lambda a, b: a(b))(self.final_activation, x)
+        if self.out_size == "scalar":
+            x = self.final_activation(x)
+        else:
+            x = filter_vmap(lambda a, b: a(b))(self.final_activation, x)
         return x
+    
+# class MLP_dropout(Module, strict=True):
+#     layers: tuple[Linear, ...]
+#     activation: Callable
+#     dropout: eqx.nn.Dropout
+#     use_bias: bool = field(static=True)
+#     use_final_bias: bool = field(static=True)
+#     in_size: Union[int, Literal["scalar"]] = field(static=True)
+#     out_size: Union[int, Literal["scalar"]] = field(static=True)
+#     width_size: int = field(static=True)
+#     depth: int = field(static=True)
+
+#     def __init__(
+#         self,
+#         in_size,
+#         out_size,
+#         width_size,
+#         depth,
+#         dropout,
+#         activation=_relu,
+#         use_bias=True,
+#         use_final_bias=True,
+#         *,
+#         key,
+#         **kwargs,
+#     ):
+
+#         keys = jrandom.split(key, depth + 1)
+#         layers = []
+#         if depth == 0:
+#             layers.append(Linear(in_size, out_size, use_final_bias, key=keys[0]))
+#         else:
+#             if not isinstance(width_size, list):
+#                 width_size = [width_size] * depth
+#             layers.append(Linear(in_size, width_size[0], use_bias, key=keys[0]))
+#             for i in range(depth - 1):
+#                 layers.append(
+#                     Linear(width_size[i], width_size[i + 1], use_bias, key=keys[i + 1])
+#                 )
+#             layers.append(
+#                 Linear(width_size[depth - 1], out_size, use_final_bias, key=keys[-1])
+#             )
+#         self.layers = tuple(layers)
+#         self.in_size = in_size
+#         self.out_size = out_size
+#         self.width_size = width_size
+#         self.depth = depth
+#         self.dropout = dropout
+#         self.activation = [
+#             filter_vmap(filter_vmap(lambda: activation, axis_size=w), axis_size=depth)()
+#             for w in width_size
+#         ]
+#         self.use_bias = use_bias
+#         self.use_final_bias = use_final_bias
+
+#     @jax.named_scope("eqx.nn.MLP")
+#     def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
+#         for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation)):
+#             x = layer(x)
+#             x = self.dropout(x, key=key)
+#             layer_activation = jtu.tree_map(lambda x: x[i] if is_array(x) else x, act)
+#             x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
+
+#         x = self.layers[-1](x)
+#         # if self.out_size == "scalar":
+#         x = self.activation[-1](x)
+#         # else:
+#         #     x = filter_vmap(lambda a, b: a(b))(self.final_activation, x)
+#         return x
 
 
 class Func(eqx.Module):
@@ -454,7 +525,7 @@ class simple_koop_operator(eqx.Module):
         self, ys, n_mode=1, key=jrandom.PRNGKey(0), train=False, pv=None, v1_now=None
     ):
         x = self.func_encode(ys)
-        if n_mode != -1:
+        if n_mode != -1 and x.shape[0] > num_modes and len(x.shape) == 2:
             u, s, v = jnp.linalg.svd(x, full_matrices=False)
             sigs = s[:n_mode]
             v_now = v[:n_mode, :]
@@ -466,6 +537,9 @@ class simple_koop_operator(eqx.Module):
                 axis=-1,
             )
         else:
+            print("SVD not performed")
+            if len(x.shape) == 1:
+                x = jnp.expand_dims(x, -1)
             xs_m = x
             u_now = None
             v_now = None
@@ -814,7 +888,7 @@ def train_loop_RRAE(
     loss_func=None,
     post_proc_func=_identity,
     seed=5678,
-    print_every=20,
+    print_every=100,
     stagn_every=100,  # 80
     reg=False,
     batch_size_st=[16, 16, 16, 16, 32],
@@ -968,8 +1042,8 @@ def train_loop_RRAE(
 
         keys = jr.split(dropout_key, steps)
 
-        if (batch_size > ys.shape[-1]) or batch_size == -1:
-            batch_size = ys.shape[-1]
+        if (batch_size > ys.shape[0]) or batch_size == -1:
+            batch_size = ys.shape[0]
 
         for step, (yb, pv, out, idx, key) in zip(
             range(steps),
@@ -1632,8 +1706,8 @@ def get_data(problem, **kwargs):
             y_test = jax.vmap(func, in_axes=[0, None])(p_test, ts).T
             return (
                 ts,
-                y_shift,
-                y_test,
+                y_shift.T,
+                y_test.T,
                 jnp.expand_dims(p_vals, axis=-1),
                 jnp.expand_dims(p_test, axis=-1),
                 None,
@@ -1658,15 +1732,15 @@ def get_data(problem, **kwargs):
             y_test = jax.vmap(sf_func, in_axes=[0, None])(p_test, ts).T
             return (
                 ts,
-                y_shift,
-                y_test,
+                y_shift.T,
+                y_test.T,
                 jnp.expand_dims(p_vals, axis=-1),
                 jnp.expand_dims(p_test, axis=-1),
                 None,
                 None,
                 None,
-                y_shift,
-                y_test,
+                y_shift.T,
+                y_test.T,
             )
         case "stairs":
             Tend = 3.5  # [s]
@@ -2568,9 +2642,7 @@ if __name__ == "__main__":
         "depth_i": 4,
         "num_modes": num_modes,
         "problem": problem,
-        "step_st": [
-            1000, 1000
-        ],
+        "step_st": [2000, 2000],
         "lr_st": [1e-3, 1e-4, 1e-5],
         "width_enc": 64,
         "depth_enc": 1,

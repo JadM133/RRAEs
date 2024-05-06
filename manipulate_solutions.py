@@ -1,8 +1,7 @@
 import os
-import dill
 import pdb
-import matplotlib.pyplot as plt
-from train_RRAE import plot_surfaces
+from training_classes import Trainor_class
+import dill
 
 def find_vs(filename, method):
     if method == "weak" or method == "strong":
@@ -32,7 +31,7 @@ if __name__ == "__main__":
     method = "strong"
     problem = "shift" 
     prob_changed = ""
-    pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" #   
+    pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" #   
     if prob_changed == "":
         prob_changed = problem        
     folder = f"{pre_folder}{prob_changed}/{problem}_{method}" # 
@@ -56,3 +55,16 @@ if __name__ == "__main__":
     print(f"Train error: {error_train}")
     print(f"Test error: {error_test}")
     pdb.set_trace()
+
+# if __name__=="__main__":
+#     method = "strong"
+#     problem = "shift" 
+#     folder=f"{problem}/{method}_{problem}/"
+#     file=f"{method}_{problem}"
+#     trainor = Trainor_class()
+#     trainor.load(os.path.join(folder, file))
+#     print(f"Train error: {trainor.error_train}")
+#     print(f"Train original error: {trainor.error_train_o}")
+#     print(f"Test error: {trainor.error_test}")
+#     print(f"Test original error: {trainor.error_test_o}")
+#     pdb.set_trace()

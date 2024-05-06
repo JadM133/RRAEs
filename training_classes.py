@@ -9,8 +9,20 @@ from utilities import _identity
 import equinox as eqx
 import jax.tree_util as jtu
 import optax
-from utilities import dataloader, find_weighted_loss, adaptive_TSVD, v_print
+from utilities import (
+    dataloader,
+    find_weighted_loss,
+    adaptive_TSVD,
+    v_print,
+    remove_keys_from_dict,
+    merge_dicts,
+)
+import os
 import time
+import dill
+import shutil
+import matplotlib.pyplot as plt
+
 
 class Interpolator(ABC):
 
@@ -85,6 +97,8 @@ def p_of_dim_n_equi_grid(y_train, x_train, x_test):
     vt_test = my_vmap(interpolate)(
         x_train[interp_ps], x_test, y_train[:, interp_ps.T].T
     ).T
+    if len(vt_test.shape) == 1:
+        vt_test = np.expand_dims(vt_test, 0)
     return vt_test
 
 
@@ -95,7 +109,7 @@ class Objects_Interpolator_nD(Interpolator):
     grids in every other dimension. The arrays are expected to ahve the following shapes:
 
     x_train: (n_samples, n_dims)
-    y_train: (n_modes, n_samples) # n_modes is the number of values at every point, 
+    y_train: (n_modes, n_samples) # n_modes is the number of values at every point,
                                   # these are interpolated seperately.
     x_test: (n_test_samples, n_dims)
 
@@ -113,15 +127,39 @@ class Objects_Interpolator_nD(Interpolator):
     def __call__(self, x_new, *args, **kwargs):
         return self.model(x_new)
 
-class Trainor_class():
-    def __init__(self, model_cls, interpolation_cls, **kwargs):
-        self.model = model_cls(**kwargs)
-        self.model_params = self.model.params
-        self.interpolation = interpolation_cls(**kwargs)
-        self.kwargs = kwargs
+
+class Trainor_class:
+    def __init__(
+        self, model_cls=None, interpolation_cls=None, folder=None, file=None, **kwargs
+    ):
+        if model_cls is not None:
+            self.model = model_cls(**kwargs)
+        if interpolation_cls is not None:
+            self.interpolation = interpolation_cls(**kwargs)
+        self.all_kwargs = {
+            **kwargs,
+            "model_cls": model_cls,
+            "interpolation_cls": interpolation_cls,
+        }
+
+        self.folder = folder
+        if folder is not None:
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+
+        self.file = file
         self.fitted = False
 
-    def fit(self, 
+    def set_model(self, model):
+        self.model = model
+        self.all_kwargs["model_cls"] = model
+
+    def set_interpolation(self, interpolation):
+        self.interpolation = interpolation
+        self.all_kwargs["interpolation_cls"] = interpolation
+
+    def fit(
+        self,
         input,
         output,
         output_o=None,
@@ -129,64 +167,107 @@ class Trainor_class():
         step_st=[3000, 3000],  # 000, 8000],
         lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
         print_every=20,
-        stagn_every=100, 
+        stagn_every=100,
         batch_size_st=[16, 16, 16, 16, 32],
         mul_lr=None,
-        mul_lr_func=None, #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
+        mul_lr_func=None,  #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
         regression=False,
         verbose=True,
+        loss_kwargs={},
         *,
         training_key,
-        **kwargs):
-        
+        **kwargs,
+    ):
+
+        if (self.all_kwargs["model_cls"] is None) or (
+            self.all_kwargs["interpolation_cls"] is None
+        ):
+            raise ValueError(
+                "Model and Interpolation classes must be provided for fitting."
+            )
+
         self.x_train = input
         self.y_train = output
         self.y_train_o = output_o
 
-        if mul_lr is None:
-            mul_lr = [1,]*len(lr_st)
-
         model = self.model
 
+        if mul_lr is None:
+            mul_lr = [
+                1,
+            ] * len(lr_st)
+
         if (loss_func == "Strong") or loss_func is None:
-            norm_loss = lambda x1, x2: jnp.linalg.norm(x1-x2)/jnp.linalg.norm(x2)*100
+            norm_loss = (
+                lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
+            )
+
             @eqx.filter_value_and_grad(has_aux=True)
-            def loss_func(model, input, out, idx, key):
+            def loss_func(model, input, out, idx, **kwargs):
                 pred = model(input)
-                wv = jnp.array([1.0,])
-                return find_weighted_loss([norm_loss(pred, out)], weight_vals=wv), (pred,)
-            
+                wv = jnp.array([1.0])
+                return find_weighted_loss([norm_loss(pred, out)], weight_vals=wv), (
+                    pred,
+                )
+
         elif loss_func == "Weak":
-            norm_loss = lambda x1, x2: jnp.linalg.norm(x1-x2)/jnp.linalg.norm(x2)*100
+            norm_loss = (
+                lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
+            )
+
             @eqx.filter_value_and_grad(has_aux=True)
-            def loss_func(model, input, out, idx, key):
+            def loss_func(model, input, out, idx, **kwargs):
                 pred = model(input)
                 x = model.encode(input)
                 wv = jnp.array([1.0, 1.0])
                 return find_weighted_loss(
                     [
                         norm_loss(pred, out),
-                        jnp.linalg.norm(x - model.v_vt()[:, idx]) / jnp.linalg.norm(x) * 100,
+                        jnp.linalg.norm(x - model.v_vt()[:, idx])
+                        / jnp.linalg.norm(x)
+                        * 100,
                     ],
                     weight_vals=wv,
                 ), (pred,)
-    
+
+        elif loss_func == "nuc":
+            norm_loss = (
+                lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
+            )
+
+            @eqx.filter_value_and_grad(has_aux=True)
+            def loss_func(model, input, out, idx, lambda_nuc, **kwargs):
+                pred = model(input)
+                wv = jnp.array([1.0, lambda_nuc])
+                return find_weighted_loss(
+                    [
+                        norm_loss(pred, out),
+                        jnp.linalg.norm(
+                            model._perform_in_latent.mlp.layers[0].weight, "nuc"
+                        ),
+                    ],
+                    weight_vals=wv,
+                ), (pred,)
+
         @eqx.filter_jit
-        def make_step(input, out, model, opt_state, idx, key):
-            (loss, aux), grads = loss_func(model, input, out, idx, key)
+        def make_step(model, input, out, opt_state, idx, **loss_kwargs):
+            (loss, aux), grads = loss_func(model, input, out, idx, **loss_kwargs)
             updates, opt_state = optim.update(grads, opt_state)
             model = eqx.apply_updates(model, updates)
             return loss, model, opt_state, aux
 
         v_print("Training the RRAE...", verbose)
-        filter_spec = jtu.tree_map(lambda _: False, model)
+
         if mul_lr_func is not None:
+            filter_spec = jtu.tree_map(lambda _: False, model)
             is_acc = eqx.tree_at(
                 mul_lr_func,
                 filter_spec,
-                replace=(True, True),
+                replace=(True,)*len(mul_lr_func(model)),
             )
             is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
+
+        t_all = 0
 
         for steps, lr, batch_size, mul_l in zip(step_st, lr_st, batch_size_st, mul_lr):
             stagn_num = 0
@@ -204,21 +285,21 @@ class Trainor_class():
             filtered_model = eqx.filter(model, eqx.is_inexact_array)
             opt_state = optim.init(filtered_model)
 
-            keys = jr.split(training_key, steps+1)
-
             if (batch_size > input.shape[-1]) or batch_size == -1:
                 batch_size = input.shape[-1]
 
-            for step, (input_b, out, idx, key) in zip(
+            for step, (input_b, out, idx) in zip(
                 range(steps),
                 dataloader(
-                    [input.T, output.T, jnp.arange(0, input.shape[-1], 1), keys[1:]],
+                    [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
                     batch_size,
-                    key=keys[0],
+                    key=training_key,
                 ),
             ):
                 start = time.time()
-                loss, model, opt_state, aux = make_step(input_b.T, out.T, model, opt_state, idx, key[0])
+                loss, model, opt_state, aux = make_step(
+                    model, input_b.T, out.T, opt_state, idx, **loss_kwargs
+                )
                 end = time.time()
                 t_t += end - start
                 if (step % stagn_every) == 0:
@@ -234,27 +315,110 @@ class Trainor_class():
                         pred = np.zeros_like(aux)
                         pred[aux.argmax(0), np.arange(aux.shape[-1])] = 1
                         v_print(
-                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}, Accuracy: {jnp.sum((pred == out.T))/pred.size*100}", verbose
+                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}, Accuracy: {jnp.sum((pred == out.T))/pred.size*100}",
+                            verbose,
                         )
                     else:
-                        v_print(f"Step: {step}, Loss: {loss}, Computation time: {t_t}", verbose)
+                        v_print(
+                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
+                            verbose,
+                        )
+                    t_all += t_t
                     t_t = 0
 
         model = eqx.nn.inference_mode(model)
         self.model = model
-        
+        self.t_all = t_all
         return model
-    
-    def post_process(self, y_test=None, x_test=None, p_train=None, p_test=None,  save=False, **kwargs):
+
+    def plot_results(self, ts=None, filename=None):
+        if filename is None:
+            filename = os.path.join(self.folder, self.file)
+        if not hasattr(self, "error_train"):
+            raise ValueError(
+                "Model must be post_processed before plotting."
+                "Try running post_process() first."
+            )
+
+        if ts is None and not hasattr(self, "ts"):
+            raise ValueError("Time steps must be provided for plotting.")
+        if ts is None:
+            ts = self.ts
+
+        plt.plot(ts, self.y_train, color="blue", label=r"$X$")
+        plt.plot(ts, self.y_pred_train, color="red", label=r"$\tilde{X}$")
+        plt.title("Predictions over Train")
+        plt.legend()
+        plt.savefig(f"{filename}_train.pdf")
+        plt.clf()
+
+        if self.y_train_o is not None:
+            plt.plot(ts, self.y_train_o, color="blue", label=r"$X_o$")
+            plt.plot(ts, self.y_pred_train_o, color="red", label=r"$\tilde{X}_o$")
+            plt.title("Predictions over original Train")
+            plt.legend()
+            plt.savefig(f"{filename}_train_original.pdf")
+            plt.clf()
+
+        if hasattr(self, "y_pred_test"):
+            plt.plot(ts, self.y_test, color="blue", label=r"$X$")
+            plt.plot(ts, self.y_pred_test, color="red", label=r"$\tilde{X}$")
+            plt.title("Predictions over Test")
+            plt.legend()
+            plt.savefig(f"{filename}_test.pdf")
+            plt.clf()
+
+            if self.y_test_o is not None:
+                plt.plot(ts, self.y_test_o, color="blue", label=r"$X_o$")
+                plt.plot(ts, self.y_pred_test_o, color="red", label=r"$\tilde{X}_o$")
+                plt.title("Predictions over original Test")
+                plt.legend()
+                plt.savefig(f"{filename}_test_original.pdf")
+                plt.clf()
+
+        if (self.p_train is not None) and (self.p_test is not None):
+            for i, (tr, te) in enumerate(zip(self.vt_train, self.vt_test)):
+                if self.vt_train.shape[0] == 1:
+                    plt.scatter(self.p_test, te, color="red", label="Test")
+                    plt.scatter(self.p_train, tr, color="blue", label="Train")
+                    
+                else:
+                    plt.scatter(
+                        jnp.linspace(0, tr.shape[0], te.shape[0]),
+                        te,
+                        color="red",
+                        label="Test",
+                    )
+                    plt.scatter(
+                        jnp.linspace(0, tr.shape[0], tr.shape[0]),
+                        tr,
+                        color="blue",
+                        label="Train",
+                    )
+                plt.title("Interpolated cofficients")
+                plt.legend()
+                plt.savefig(f"{filename}_coeffs_mode_{i}.pdf")
+                plt.clf()
+
+    def post_process(
+        self,
+        y_test=None,
+        y_test_o=None,
+        x_test=None,
+        p_train=None,
+        p_test=None,
+        save=False,
+        **kwargs,
+    ):
         """Performs post-processing to find the relative error of the RRAE model.
-        
+
         Parameters:
         -----------
         y_test: jnp.array
             The test data to be used for the error calculation.
         x_test: jnp.array
             The test input. If this is provided the error_test will be computed by sipmly giving
-            x_test to the model. 
+            x_test to the model.
         p_train: jnp.array
             The training data to be used for the interpolation. If this is provided along with p_test (next),
             the error_test will be computed by interpolating the latent space of the model and then decoding it.
@@ -264,55 +428,140 @@ class Trainor_class():
             If anything other than False, the model as well as the results will be saved in f"{save}".pkl
         """
         y_pred_train = self.model(self.x_train)
-        error_train = jnp.linalg.norm(y_pred_train - self.y_train)/jnp.linalg.norm(self.y_train)*100
+        error_train = (
+            jnp.linalg.norm(y_pred_train - self.y_train)
+            / jnp.linalg.norm(self.y_train)
+            * 100
+        )
         print("Train error: ", error_train)
+        self.y_pred_train = y_pred_train
+        self.error_train = error_train
+        self.p_train = p_train
+        self.p_test = p_test
 
         if self.y_train_o is not None:
             y_pred_train_o = self.model(self.x_train, train=False)
-            error_train_o = jnp.linalg.norm(y_pred_train_o - self.y_train_o)/jnp.linalg.norm(self.y_train_o)*100
+            error_train_o = (
+                jnp.linalg.norm(y_pred_train_o - self.y_train_o)
+                / jnp.linalg.norm(self.y_train_o)
+                * 100
+            )
+            self.y_pred_train_o = y_pred_train_o
             print("Train error_o: ", error_train_o)
         else:
             error_train_o = None
 
+        self.error_train_o = error_train_o
+        self.y_test = y_test
+
         if x_test is not None:
             y_pred_test = self.model(x_test)
-            error_test = jnp.linalg.norm(y_pred_test - y_test)/jnp.linalg.norm(y_test)*100
+            error_test = (
+                jnp.linalg.norm(y_pred_test - y_test) / jnp.linalg.norm(y_test) * 100
+            )
             print("Test error: ", error_test)
 
             if self.y_train_o is not None:
                 y_pred_test_o = self.model(x_test, train=False)
-                error_test_o = jnp.linalg.norm(y_pred_test_o - y_test)/jnp.linalg.norm(y_test)*100
+                error_test_o = (
+                    jnp.linalg.norm(y_pred_test_o - y_test)
+                    / jnp.linalg.norm(y_test)
+                    * 100
+                )
                 print("Test error_o: ", error_test_o)
             else:
                 error_test_o = None
 
         elif (p_train is not None) and (p_test is not None):
-            u_vec, sing, vt = adaptive_TSVD(self.model.encode(self.x_train), full_matrices=False, verbose=False, **kwargs)
+            latent_train = self.model.latent(self.x_train)
+            self.latent_train = latent_train
+            u_vec, sing, vt = adaptive_TSVD(
+                latent_train, full_matrices=False, verbose=True, **kwargs
+            )
             sv = jnp.expand_dims(sing, 0)
             v = jnp.multiply(sv, u_vec)
             self.v = v
             self.vt_train = vt
             self.vt_test = self.interpolate(p_test, p_train, vt, save=save)
-            latent_test = jnp.sum(jax.vmap(lambda o1, o2 : jnp.outer(o1, o2), in_axes=[-1, 0])(self.v, self.vt_test), 0)
+            latent_test = jnp.sum(
+                jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
+                    self.v, self.vt_test
+                ),
+                0,
+            )
+            self.latent_test = latent_test
             y_pred_test = self.model.decode(latent_test)
-            error_test = jnp.linalg.norm(y_pred_test - y_test)/jnp.linalg.norm(y_test)*100
+            error_test = (
+                jnp.linalg.norm(y_pred_test - y_test) / jnp.linalg.norm(y_test) * 100
+            )
             print("Test error: ", error_test)
-
-            if self.y_train_o is not None:
+            self.y_test_o = y_test_o
+            if self.y_test_o is not None:
                 y_pred_test_o = self.model.decode(latent_test, train=False)
-                error_test_o = jnp.linalg.norm(y_pred_test_o - y_test)/jnp.linalg.norm(y_test)*100
+                self.y_pred_test_o = y_pred_test_o
+                error_test_o = (
+                    jnp.linalg.norm(y_pred_test_o - y_test)
+                    / jnp.linalg.norm(y_test)
+                    * 100
+                )
                 print("Test error_o: ", error_test_o)
             else:
                 error_test_o = None
         else:
             error_test = None
             error_test_o = None
-        
+
+        self.y_pred_test = y_pred_test
+        self.error_test = error_test
+        self.error_test_o = error_test_o
+
         return error_train, error_test, error_train_o, error_test_o
-    
+
     def interpolate(self, x_new, x_interp, y_interp, save=False):
         if self.fitted:
             return self.interpolation(x_new)
         self.interpolation.fit(x_interp, y_interp)
         self.fitted = True
         return self.interpolation(x_new)
+
+    def save(self, filename=None, erase=True, **kwargs):
+        """Saves the"""
+        if self.all_kwargs["model_cls"] is None:
+            raise ValueError("Model class must be provided for saving.")
+
+        if self.all_kwargs["interpolation_cls"] is None:
+            raise ValueError("Interpolation class must be provided for saving.")
+
+        if filename is None:
+            filename = os.path.join(self.folder, self.file)
+            if erase:
+                shutil.rmtree(self.folder)
+                os.makedirs(self.folder)
+
+        with open(f"{filename}.pkl", "wb") as f:
+            dill.dump(self.all_kwargs, f)
+            eqx.tree_serialise_leaves(f, self.model)
+            dill.dump(
+                merge_dicts(
+                    remove_keys_from_dict(
+                        self.__dict__, ("model", "interpolation", "all_kwargs")
+                    ),
+                    kwargs,
+                ),
+                f,
+            )
+
+    def load(self, filename):
+        with open(f"{filename}.pkl", "rb") as f:
+            self.all_kwargs = dill.load(f)
+
+            self.model_cls = self.all_kwargs["model_cls"]
+            self.interpolation_cls = self.all_kwargs["interpolation_cls"]
+
+            self.model = self.model_cls(**self.all_kwargs)
+            self.model = eqx.tree_deserialise_leaves(f, self.model)
+            self.interpolation = self.interpolation_cls(**self.all_kwargs)
+            attributes = dill.load(f)
+            for key in attributes:
+                setattr(self, key, attributes[key])
+            self.fitted = True
