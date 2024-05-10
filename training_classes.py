@@ -197,7 +197,7 @@ class Trainor_class:
                 1,
             ] * len(lr_st)
 
-        if (loss_func == "Strong") or loss_func is None:
+        if (loss_func == "Strong") or (loss_func is None) or (loss_func == "Vanilla"):
             norm_loss = (
                 lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
             )
@@ -376,29 +376,18 @@ class Trainor_class:
                 plt.savefig(f"{filename}_test_original.pdf")
                 plt.clf()
 
-        if (self.p_train is not None) and (self.p_test is not None):
+        if (self.p_train is not None) and (self.p_test is not None) and (self.vt_test is not None):
             for i, (tr, te) in enumerate(zip(self.vt_train, self.vt_test)):
                 if self.vt_train.shape[0] == 1:
                     plt.scatter(self.p_test, te, color="red", label="Test")
                     plt.scatter(self.p_train, tr, color="blue", label="Train")
-                    
+                    plt.title("Interpolated cofficients")
+                    plt.legend()
+                    plt.savefig(f"{filename}_coeffs_mode_{i}.pdf")
+                    plt.clf()      
                 else:
-                    plt.scatter(
-                        jnp.linspace(0, tr.shape[0], te.shape[0]),
-                        te,
-                        color="red",
-                        label="Test",
-                    )
-                    plt.scatter(
-                        jnp.linspace(0, tr.shape[0], tr.shape[0]),
-                        tr,
-                        color="blue",
-                        label="Train",
-                    )
-                plt.title("Interpolated cofficients")
-                plt.legend()
-                plt.savefig(f"{filename}_coeffs_mode_{i}.pdf")
-                plt.clf()
+                    pass
+
 
     def post_process(
         self,
@@ -408,6 +397,7 @@ class Trainor_class:
         p_train=None,
         p_test=None,
         save=False,
+        modes=None,
         **kwargs,
     ):
         """Performs post-processing to find the relative error of the RRAE model.
@@ -476,20 +466,25 @@ class Trainor_class:
             latent_train = self.model.latent(self.x_train)
             self.latent_train = latent_train
             u_vec, sing, vt = adaptive_TSVD(
-                latent_train, full_matrices=False, verbose=True, **kwargs
+                latent_train, full_matrices=False, verbose=True, modes=modes, **kwargs
             )
             sv = jnp.expand_dims(sing, 0)
             v = jnp.multiply(sv, u_vec)
             self.v = v
             self.vt_train = vt
-            self.vt_test = self.interpolate(p_test, p_train, vt, save=save)
-            latent_test = jnp.sum(
-                jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
-                    self.v, self.vt_test
-                ),
-                0,
-            )
+            if modes == "all":
+                latent_test = self.interpolate(p_test, p_train, latent_train, save=save)
+                self.vt_test = None
+            else:
+                self.vt_test = self.interpolate(p_test, p_train, vt, save=save)
+                latent_test = jnp.sum(
+                    jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
+                        self.v, self.vt_test
+                    ),
+                    0,
+                )
             self.latent_test = latent_test
+
             y_pred_test = self.model.decode(latent_test)
             error_test = (
                 jnp.linalg.norm(y_pred_test - y_test) / jnp.linalg.norm(y_test) * 100

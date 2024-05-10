@@ -339,9 +339,6 @@ class LoRAE(IRMAE):
             **kwargs
         )
 
-    def perform_in_latent(self, y, *args, **kwargs):
-        return jnn.relu(super().perform_in_latent(y, *args, **kwargs))
-
 class Strong_RRAE_CNN(Autoencoder):
     _encode: Func
     _decode: Func

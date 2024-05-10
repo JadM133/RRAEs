@@ -27,9 +27,9 @@ def find_vs(filename, method):
     else:
         return None, None, None
 
-if __name__ == "__main__":
+if __name__ == "__main_":
     method = "strong"
-    problem = "shift" 
+    problem = "mult_gausses" 
     prob_changed = ""
     pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" #   
     if prob_changed == "":
@@ -56,15 +56,16 @@ if __name__ == "__main__":
     print(f"Test error: {error_test}")
     pdb.set_trace()
 
-# if __name__=="__main__":
-#     method = "strong"
-#     problem = "shift" 
-#     folder=f"{problem}/{method}_{problem}/"
-#     file=f"{method}_{problem}"
-#     trainor = Trainor_class()
-#     trainor.load(os.path.join(folder, file))
-#     print(f"Train error: {trainor.error_train}")
-#     print(f"Train original error: {trainor.error_train_o}")
-#     print(f"Test error: {trainor.error_test}")
-#     print(f"Test original error: {trainor.error_test_o}")
-#     pdb.set_trace()
+if __name__=="__main__":
+    method = "IRMAE"
+    problem = "mult_freqs" 
+    folder=f"{problem}/{method}_{problem}/"
+    file=f"{method}_{problem}"
+    trainor = Trainor_class()
+    trainor.load(os.path.join(folder, file))
+    print(f"Train error: {trainor.error_train}")
+    print(f"Train original error: {trainor.error_train_o}")
+    print(f"Test error: {trainor.error_test}")
+    print(f"Test original error: {trainor.error_test_o}")
+    print(f"Time spent: {trainor.t_all}")
+    pdb.set_trace()

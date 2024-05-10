@@ -272,13 +272,13 @@ def get_data(problem, **kwargs):
 
             p_vals_0 = jrandom.uniform(
                 jrandom.PRNGKey(140),
-                (100,),
+                (1000,),
                 minval=0.8 * jnp.pi + 0.01,
                 maxval=jnp.pi - 0.01,
             )
             p_vals_1 = jrandom.uniform(
                 jrandom.PRNGKey(8),
-                (100,),
+                (1000,),
                 minval=0.3 * jnp.pi + 0.01,
                 maxval=jnp.pi / 2 - 0.01,
             )
@@ -343,10 +343,10 @@ def get_data(problem, **kwargs):
             p_vals_1 = jnp.tile(jnp.linspace(4, 6, 25), 25)
             p_vals = jnp.stack([p_vals_0, p_vals_1], axis=-1)
             p_test_0 = jrandom.uniform(
-                jrandom.PRNGKey(100), (100,), minval=1.1, maxval=2.9
+                jrandom.PRNGKey(100), (1000,), minval=1.1, maxval=2.9
             )
             p_test_1 = jrandom.uniform(
-                jrandom.PRNGKey(0), (100,), minval=4.1, maxval=5.9
+                jrandom.PRNGKey(0), (1000,), minval=4.1, maxval=5.9
             )
             p_test = jnp.stack([p_test_0, p_test_1], axis=-1)
 
@@ -571,7 +571,7 @@ def get_data(problem, **kwargs):
             raise ValueError(f"Problem {problem} not recognized")
 
 
-def adaptive_TSVD(ys, eps=1, prop=0.1, full_matrices=True, verbose=True, **kwargs):
+def adaptive_TSVD(ys, eps=0.2, prop=0.1, full_matrices=True, verbose=True, modes=None, **kwargs):
     """Adaptive truncated SVD for a given matrix ys.
 
     Parameters
@@ -597,6 +597,11 @@ def adaptive_TSVD(ys, eps=1, prop=0.1, full_matrices=True, verbose=True, **kwarg
 
     u, sv, v = jnp.linalg.svd(ys, full_matrices=full_matrices)
 
+    if modes is not None:
+        if modes == "all":
+            return u, sv, v
+        return u[:, :modes], sv[:modes], v[:modes, :]
+    
     def to_scan(state, inp):
         u_n = u[:, inp]
         s_n = sv[inp]
