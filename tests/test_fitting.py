@@ -7,6 +7,8 @@ from AE_classes import (
     Strong_RRAE_CNN,
     Weak_RRAE_CNN,
     Vanilla_AE_CNN,
+    IRMAE_MLP,
+    LoRAE_MLP,
 )
 import jax.numpy as jnp
 import equinox as eqx
@@ -17,10 +19,12 @@ from utilities import find_weighted_loss
 @pytest.mark.parametrize(
     "model_cls, sh, lf",
     [
-        (Strong_RRAE_MLPs, (500, 10), "Strong"),
+        (Strong_RRAE_MLPs, (500, 10), None),
         (Vanilla_AE_MLP, (500, 10), None),
         (Weak_RRAE_MLPs, (500, 10), "Weak"),
-        (Strong_RRAE_CNN, (500, 10, 10), "Strong"),
+        (IRMAE_MLP, (500, 10), None),
+        (LoRAE_MLP, (500, 10), "nuc"),
+        (Strong_RRAE_CNN, (500, 10, 10), None),
         (Vanilla_AE_CNN, (500, 10, 10), None),
         (Weak_RRAE_CNN, (500, 10, 10), "Weak"),
     ],
@@ -37,9 +41,8 @@ def test_fitting(model_cls, sh, lf):
         key=jrandom.PRNGKey(0),
     )
     kwargs = {
-        "step_st": [
-            2,
-        ]
+        "step_st": [2],
+        "loss_kwargs": {"lambda_nuc": 0.001},
     }
     try:
         trainor.fit(

@@ -844,7 +844,7 @@ class Func(eqx.Module):
         )
         self.post_proc_func = post_proc_func
 
-    def __call__(self, y, k=None, train=True):
+    def __call__(self, y, k=None, train=True, **kwargs):
         if not train:
             return self.post_proc_func(self.mlp(y, key=k))
         else:

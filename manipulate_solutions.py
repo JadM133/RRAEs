@@ -58,7 +58,7 @@ if __name__ == "__main_":
 
 if __name__=="__main__":
     method = "IRMAE"
-    problem = "mult_freqs" 
+    problem = "mult_gausses" 
     folder=f"{problem}/{method}_{problem}/"
     file=f"{method}_{problem}"
     trainor = Trainor_class()
