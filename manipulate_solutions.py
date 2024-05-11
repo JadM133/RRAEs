@@ -29,7 +29,7 @@ def find_vs(filename, method):
 
 if __name__ == "__main_":
     method = "strong"
-    problem = "mult_gausses" 
+    problem = "mult_freqs" 
     prob_changed = ""
     pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" #   
     if prob_changed == "":
@@ -57,15 +57,27 @@ if __name__ == "__main_":
     pdb.set_trace()
 
 if __name__=="__main__":
-    method = "IRMAE"
-    problem = "mult_gausses" 
-    folder=f"{problem}/{method}_{problem}/"
-    file=f"{method}_{problem}"
-    trainor = Trainor_class()
-    trainor.load(os.path.join(folder, file))
-    print(f"Train error: {trainor.error_train}")
-    print(f"Train original error: {trainor.error_train_o}")
-    print(f"Test error: {trainor.error_test}")
-    print(f"Test original error: {trainor.error_test_o}")
-    print(f"Time spent: {trainor.t_all}")
+    import matplotlib.pyplot as plt
+    import jax.numpy as jnp
+    names=["Vanilla", "Strong", "Weak", "IRMAE"]
+    names=["Strong"]
+    for i, name in enumerate(names):
+        method = name
+        problem = "mult_gausses" 
+        folder=f"{problem}/{method}_{problem}/"
+        file=f"{method}_{problem}"
+        trainor = Trainor_class()
+        trainor.load(os.path.join(folder, file))
+        print(f"Train error: {trainor.error_train}")
+        print(f"Train original error: {trainor.error_train_o}")
+        print(f"Test error: {trainor.error_test}")
+        print(f"Test original error: {trainor.error_test_o}")
+        print(f"Time spent: {trainor.t_all}")
+        ss, vv, dd = jnp.linalg.svd(trainor.model.latent(trainor.x_train))
+        plt.figure(1)
+        plt.plot(vv[:20]/jnp.max(vv), label=name)
+        plt.figure(2)
+        plt.scatter(i, trainor.error_test, label=name)
+    plt.legend()
+    plt.show()
     pdb.set_trace()

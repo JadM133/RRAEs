@@ -5,8 +5,8 @@ from AE_classes import (
     Weak_RRAE_MLPs,
     Vanilla_AE_MLP,
     Vanilla_AE_CNN,
-    IRMAE,
-    LoRAE,
+    IRMAE_MLP,
+    LoRAE_MLP,
 )
 from training_classes import Trainor_class, Objects_Interpolator_nD
 import jax.random as jrandom
@@ -19,11 +19,11 @@ import os
 
 if __name__ == "__main__":
     problem = "mult_gausses"
-    method = "IRMAE"
+    method = "Strong"
     loss_func = "Strong"
 
     latent_size = 4500
-    k_max = 6
+    k_max = 2
 
     (
         ts,
@@ -49,9 +49,9 @@ if __name__ == "__main__":
         case "Vanilla":
             model_cls = Vanilla_AE_MLP
         case "IRMAE":
-            model_cls = IRMAE
+            model_cls = IRMAE_MLP
         case "LoRAE":
-            model_cls = LoRAE
+            model_cls = LoRAE_MLP
 
     interpolation_cls = Objects_Interpolator_nD
     trainor = Trainor_class(
@@ -62,21 +62,18 @@ if __name__ == "__main__":
         k_max=k_max,
         folder=f"{problem}/{method}_{problem}/",
         file=f"{method}_{problem}",
+        linear_l=0,
         key=jrandom.PRNGKey(0),
     )
 
     kwargs = {
-        "step_st": [2000, 2000, 2000, 2000],
-        "depth_enc": 1,
-        "width_enc": 64,
-        "depth_dec": 6,
-        "width_dec": 64,
+        "step_st": [2000, 2000, 2000],
         "batch_size_st": [20, 20, 20, 20],
-        "lr_st": [1e-3, 1e-4, 1e-5, 1e-6],
+        "lr_st": [1e-3, 1e-4, 1e-5],
         "print_every": 100,
         "loss_kwargs": {"lambda_nuc":0.001},
-        # "mul_lr":[100, 100, 100],
-        # "mul_lr_func": lambda tree: (tree.v_vt.vt,)
+        # "mul_lr":[0.2, 1, 1],
+        # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
     }
 
     trainor.fit(

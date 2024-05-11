@@ -273,14 +273,14 @@ def get_data(problem, **kwargs):
             p_vals_0 = jrandom.uniform(
                 jrandom.PRNGKey(140),
                 (1000,),
-                minval=0.8 * jnp.pi + 0.01,
-                maxval=jnp.pi - 0.01,
+                minval=p_vals_0[0] * 1.001,
+                maxval=p_vals_0[-1] * 0.999,
             )
             p_vals_1 = jrandom.uniform(
                 jrandom.PRNGKey(8),
                 (1000,),
-                minval=0.3 * jnp.pi + 0.01,
-                maxval=jnp.pi / 2 - 0.01,
+                minval=p_vals_1[0] * 1.001,
+                maxval=p_vals_1[-1] * 0.999,
             )
             p_test = jnp.stack([p_vals_0, p_vals_1], axis=-1)
             y_test = jax.vmap(lambda p: jnp.sin(p[0] * ts) + jnp.sin(p[1] * ts))(
@@ -339,14 +339,20 @@ def get_data(problem, **kwargs):
 
         case "mult_gausses":
 
-            p_vals_0 = jnp.repeat(jnp.linspace(1, 3, 25), 25)
-            p_vals_1 = jnp.tile(jnp.linspace(4, 6, 25), 25)
+            p_vals_0 = jnp.repeat(jnp.linspace(1, 3, 10), 10)
+            p_vals_1 = jnp.tile(jnp.linspace(4, 6, 10), 10)
             p_vals = jnp.stack([p_vals_0, p_vals_1], axis=-1)
             p_test_0 = jrandom.uniform(
-                jrandom.PRNGKey(100), (1000,), minval=1.1, maxval=2.9
+                jrandom.PRNGKey(1000),
+                (1000,),
+                minval=p_vals_0[0] * 1.001,
+                maxval=p_vals_0[-1] * 0.999,
             )
             p_test_1 = jrandom.uniform(
-                jrandom.PRNGKey(0), (1000,), minval=4.1, maxval=5.9
+                jrandom.PRNGKey(50),
+                (1000,),
+                minval=p_vals_1[0] * 1.001,
+                maxval=p_vals_1[-1] * 0.999,
             )
             p_test = jnp.stack([p_test_0, p_test_1], axis=-1)
 
@@ -571,7 +577,9 @@ def get_data(problem, **kwargs):
             raise ValueError(f"Problem {problem} not recognized")
 
 
-def adaptive_TSVD(ys, eps=0.2, prop=0.1, full_matrices=True, verbose=True, modes=None, **kwargs):
+def adaptive_TSVD(
+    ys, eps=0.2, prop=0.1, full_matrices=True, verbose=True, modes=None, **kwargs
+):
     """Adaptive truncated SVD for a given matrix ys.
 
     Parameters
@@ -601,7 +609,7 @@ def adaptive_TSVD(ys, eps=0.2, prop=0.1, full_matrices=True, verbose=True, modes
         if modes == "all":
             return u, sv, v
         return u[:, :modes], sv[:modes], v[:modes, :]
-    
+
     def to_scan(state, inp):
         u_n = u[:, inp]
         s_n = sv[inp]
@@ -725,7 +733,9 @@ class v_vt_class(eqx.Module):
 
 class MLP_dropout(Module, strict=True):
     layers: tuple[Linear, ...]
+    layers_l: tuple[Linear, ...]
     activation: Callable
+    activation_l: Callable
     dropout: eqx.nn.Dropout
     use_bias: bool = field(static=True)
     use_final_bias: bool = field(static=True)
@@ -734,6 +744,7 @@ class MLP_dropout(Module, strict=True):
     width_size: tuple[int, ...]
     depth: tuple[int, ...]
     final_activation: Callable
+    final_activation_l: Callable
 
     def __init__(
         self,
@@ -743,9 +754,12 @@ class MLP_dropout(Module, strict=True):
         depth,
         dropout,
         activation=_relu,
+        activation_l=_identity,
         use_bias=True,
         use_final_bias=True,
         final_activation=_identity,
+        final_activation_l=_identity,
+        linear_l=0,
         *,
         key,
         **kwargs,
@@ -753,6 +767,7 @@ class MLP_dropout(Module, strict=True):
 
         keys = jrandom.split(key, depth + 1)
         layers = []
+        layers_l = []
         if depth == 0:
             layers.append(Linear(in_size, out_size, use_final_bias, key=keys[0]))
         else:
@@ -766,12 +781,20 @@ class MLP_dropout(Module, strict=True):
             layers.append(
                 Linear(width_size[depth - 1], out_size, use_final_bias, key=keys[-1])
             )
+            width_size_l = [width_size[-1]] * (linear_l - 1)
+            for i in range(linear_l):
+                layers_l.append(
+                    Linear(out_size, out_size, use_bias=False, key=keys[-1])
+                )
+
         self.layers = tuple(layers)
+        self.layers_l = tuple(layers_l)
         self.in_size = in_size
         self.out_size = out_size
         self.width_size = width_size
         self.depth = depth
         self.dropout = dropout
+
         if depth != 0:
             self.activation = [
                 filter_vmap(
@@ -779,9 +802,16 @@ class MLP_dropout(Module, strict=True):
                 )()
                 for w in width_size
             ]
+            self.activation_l = [
+                filter_vmap(
+                    filter_vmap(lambda: _identity, axis_size=w), axis_size=depth
+                )()
+                for w in width_size_l
+            ]
         else:
             self.activation = None
         self.final_activation = final_activation
+        self.final_activation_l = final_activation_l
         self.use_bias = use_bias
         self.use_final_bias = use_final_bias
 
@@ -797,6 +827,17 @@ class MLP_dropout(Module, strict=True):
                 x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
         x = self.layers[-1](x)
         x = self.final_activation(x)
+        if self.depth != 0:
+            for i, (layer, act) in enumerate(
+                zip(self.layers_l[:-1], self.activation_l)
+            ):
+                x = layer(x)
+                # x = self.dropout(x, key=key)
+                layer_activation = jtu.tree_map(
+                    lambda x: x[i] if is_array(x) else x, act
+                )
+                x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
+            x = self.final_activation_l(x)
         return x
 
 
@@ -811,6 +852,7 @@ class Func(eqx.Module):
         depth,
         out_size=None,
         dropout=0,
+        linear_l=0,
         *,
         key,
         inside_activation=None,
@@ -840,6 +882,7 @@ class Func(eqx.Module):
             dropout=eqx.nn.Dropout(dropout),
             final_activation=final_activation,
             use_bias=use_bias,
+            linear_l=linear_l,
             key=key,
         )
         self.post_proc_func = post_proc_func

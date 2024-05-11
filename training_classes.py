@@ -186,6 +186,22 @@ class Trainor_class:
                 "Model and Interpolation classes must be provided for fitting."
             )
 
+        training_params = {
+            "loss_func": loss_func,
+            "step_st": step_st,
+            "lr_st": lr_st,
+            "print_every": print_every,
+            "stagn_every": stagn_every,
+            "batch_size_st": batch_size_st,
+            "mul_lr": mul_lr,
+            "mul_lr_func": mul_lr_func,
+            "regression": regression,
+            "verbose": verbose,
+            "loss_kwargs": loss_kwargs,
+            "training_key": training_key,
+            "kwargs": kwargs,
+        }
+        self.all_kwargs = {**self.all_kwargs, **training_params, **kwargs}
         self.x_train = input
         self.y_train = output
         self.y_train_o = output_o
@@ -228,7 +244,12 @@ class Trainor_class:
                         * 100,
                     ],
                     weight_vals=wv,
-                ), (pred,)
+                ), (
+                    norm_loss(pred, out),
+                    jnp.linalg.norm(x - model.v_vt()[:, idx])
+                    / jnp.linalg.norm(x)
+                    * 100,
+                )
 
         elif loss_func == "nuc":
             norm_loss = (
@@ -263,7 +284,7 @@ class Trainor_class:
             is_acc = eqx.tree_at(
                 mul_lr_func,
                 filter_spec,
-                replace=(True,)*len(mul_lr_func(model)),
+                replace=(True,) * len(mul_lr_func(model)),
             )
             is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
 
@@ -319,10 +340,16 @@ class Trainor_class:
                             verbose,
                         )
                     else:
-                        v_print(
-                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
-                            verbose,
-                        )
+                        if len(aux) == 2:
+                            v_print(
+                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
+                                verbose,
+                            )
+                        else:
+                            v_print(
+                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
+                                verbose,
+                            )
                     t_all += t_t
                     t_t = 0
 
@@ -376,7 +403,11 @@ class Trainor_class:
                 plt.savefig(f"{filename}_test_original.pdf")
                 plt.clf()
 
-        if (self.p_train is not None) and (self.p_test is not None) and (self.vt_test is not None):
+        if (
+            (self.p_train is not None)
+            and (self.p_test is not None)
+            and (self.vt_test is not None)
+        ):
             for i, (tr, te) in enumerate(zip(self.vt_train, self.vt_test)):
                 if self.vt_train.shape[0] == 1:
                     plt.scatter(self.p_test, te, color="red", label="Test")
@@ -384,10 +415,9 @@ class Trainor_class:
                     plt.title("Interpolated cofficients")
                     plt.legend()
                     plt.savefig(f"{filename}_coeffs_mode_{i}.pdf")
-                    plt.clf()      
+                    plt.clf()
                 else:
                     pass
-
 
     def post_process(
         self,
@@ -509,7 +539,7 @@ class Trainor_class:
         self.y_pred_test = y_pred_test
         self.error_test = error_test
         self.error_test_o = error_test_o
-
+        print("Total computation time: ", self.t_all)
         return error_train, error_test, error_train_o, error_test_o
 
     def interpolate(self, x_new, x_interp, y_interp, save=False):

@@ -51,10 +51,8 @@ class Test_AEs_shapes:
         model = IRMAE_MLP(x, latent, linear_l=2, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
-        y2 = model.perform_in_latent(y)
-        assert y2.shape == (latent, dim_D)
-        assert len(model._perform_in_latent.mlp.layers) == 2
-        x = model.decode(y2)
+        assert len(model._encode.mlp.layers_l) == 2
+        x = model.decode(y)
         assert x.shape == (500, dim_D)
 
     def test_LoRAE_MLP(self, latent, num_modes, dim_D):
@@ -62,10 +60,8 @@ class Test_AEs_shapes:
         model = LoRAE_MLP(x, latent, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
-        y2 = model.perform_in_latent(y)
-        assert y2.shape == (latent, dim_D)
-        assert len(model._perform_in_latent.mlp.layers) == 1
-        x = model.decode(y2)
+        assert len(model._encode.mlp.layers_l) == 1
+        x = model.decode(y)
         assert x.shape == (500, dim_D)
 
     def test_Strong_CNN(self, latent, num_modes, dim_D):

@@ -62,6 +62,7 @@ class Autoencoder(eqx.Module):
         _perform_in_latent=None,
         _decode=None,
         map_latent=True,
+        linear_l=0,
         *,
         key,
         **kwargs):
@@ -74,6 +75,7 @@ class Autoencoder(eqx.Module):
                 width_enc,
                 depth_enc,
                 out_size=latent_size,
+                linear_l=linear_l,
                 key=key_e,
             )
         else:
@@ -283,8 +285,6 @@ class IRMAE_MLP(Autoencoder):
         data,
         latent_size,
         linear_l=2,
-        linear_width=None,
-        key_linear=None,
         *,
         key,
         **kwargs
@@ -295,25 +295,11 @@ class IRMAE_MLP(Autoencoder):
                 warnings.warn("k_max can not be specified for the model proposed, switching to -1 (all modes)")
             kwargs.pop("k_max")
 
-        linear_width = latent_size if linear_width is None else linear_width
-        key_linear = jrandom.PRNGKey(0) if key_linear is None else key_linear
-
-        _perform_in_latent = Func(
-            latent_size,
-            linear_width,
-            linear_l-1,
-            out_size=latent_size,
-            inside_activation=_identity,
-            post_proc_func=_identity,
-            use_bias=False,
-            key=key_linear,
-        )
-
         super().__init__(
             data,
             latent_size,
             -1,
-            _perform_in_latent=_perform_in_latent,
+            linear_l=linear_l,
             key=key,
             **kwargs
         )
