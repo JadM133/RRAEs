@@ -130,7 +130,7 @@ class Objects_Interpolator_nD(Interpolator):
 
 class Trainor_class:
     def __init__(
-        self, model_cls=None, interpolation_cls=None, folder=None, file=None, **kwargs
+        self, model_cls=None, interpolation_cls=None, folder=None, file=None, ts=None, **kwargs
     ):
         if model_cls is not None:
             self.model = model_cls(**kwargs)
@@ -146,7 +146,7 @@ class Trainor_class:
         if folder is not None:
             if not os.path.exists(folder):
                 os.makedirs(folder)
-
+        self.ts = ts
         self.file = file
         self.fitted = False
 
@@ -167,7 +167,7 @@ class Trainor_class:
         step_st=[3000, 3000],  # 000, 8000],
         lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
         print_every=20,
-        stagn_every=100,
+        stagn_every=None,
         batch_size_st=[16, 16, 16, 16, 32],
         mul_lr=None,
         mul_lr_func=None,  #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
@@ -213,28 +213,28 @@ class Trainor_class:
                 1,
             ] * len(lr_st)
 
-        if (loss_func == "Strong") or (loss_func is None) or (loss_func == "Vanilla"):
-            norm_loss = (
+        norm_loss_ = (
                 lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
             )
+
+        if (loss_func == "Strong") or (loss_func is None) or (loss_func == "Vanilla"):
 
             @eqx.filter_value_and_grad(has_aux=True)
             def loss_func(model, input, out, idx, **kwargs):
                 pred = model(input)
                 wv = jnp.array([1.0])
-                return find_weighted_loss([norm_loss(pred, out)], weight_vals=wv), (
+                return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (
                     pred,
                 )
 
         elif loss_func == "Weak":
-            norm_loss = (
-                lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
-            )
 
             @eqx.filter_value_and_grad(has_aux=True)
-            def loss_func(model, input, out, idx, **kwargs):
+            def loss_func(model, input, out, idx, norm_loss=None, **kwargs):
+                if norm_loss is None:
+                    norm_loss = norm_loss_
                 pred = model(input)
-                x = model.encode(input)
+                x = model.latent(input)
                 wv = jnp.array([1.0, 1.0])
                 return find_weighted_loss(
                     [
@@ -252,19 +252,18 @@ class Trainor_class:
                 )
 
         elif loss_func == "nuc":
-            norm_loss = (
-                lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
-            )
 
             @eqx.filter_value_and_grad(has_aux=True)
-            def loss_func(model, input, out, idx, lambda_nuc, **kwargs):
+            def loss_func(model, input, out, idx, lambda_nuc, norm_loss=None, **kwargs):
+                if norm_loss is None:
+                    norm_loss = norm_loss_
                 pred = model(input)
                 wv = jnp.array([1.0, lambda_nuc])
                 return find_weighted_loss(
                     [
                         norm_loss(pred, out),
                         jnp.linalg.norm(
-                            model._perform_in_latent.mlp.layers[0].weight, "nuc"
+                            model._encode.mlp.layers_l[0].weight, "nuc"
                         ),
                     ],
                     weight_vals=wv,
@@ -323,13 +322,14 @@ class Trainor_class:
                 )
                 end = time.time()
                 t_t += end - start
-                if (step % stagn_every) == 0:
-                    if jnp.abs(loss_old - loss) / jnp.abs(loss_old) * 100 < 1:
-                        stagn_num += 1
-                        if stagn_num > 10:
-                            v_print("Stagnated....", verbose)
-                            break
-                    loss_old = loss
+                if stagn_every is not None:
+                    if (step % stagn_every) == 0:
+                        if jnp.abs(loss_old - loss) / jnp.abs(loss_old) * 100 < 1:
+                            stagn_num += 1
+                            if stagn_num > 10:
+                                v_print("Stagnated....", verbose)
+                                break
+                        loss_old = loss
 
                 if (step % print_every) == 0 or step == steps - 1:
                     if regression:
@@ -358,7 +358,7 @@ class Trainor_class:
         self.t_all = t_all
         return model
 
-    def plot_results(self, ts=None, filename=None):
+    def plot_results(self, ts=None, ts_o=None, filename=None):
         if filename is None:
             filename = os.path.join(self.folder, self.file)
         if not hasattr(self, "error_train"):
@@ -371,19 +371,23 @@ class Trainor_class:
             raise ValueError("Time steps must be provided for plotting.")
         if ts is None:
             ts = self.ts
+        else:
+            self.ts = ts
+        if ts_o is None:
+            ts_o = self.ts_o
+        else:
+            self.ts_o = ts_o
 
         plt.plot(ts, self.y_train, color="blue", label=r"$X$")
         plt.plot(ts, self.y_pred_train, color="red", label=r"$\tilde{X}$")
         plt.title("Predictions over Train")
-        plt.legend()
         plt.savefig(f"{filename}_train.pdf")
         plt.clf()
 
         if self.y_train_o is not None:
-            plt.plot(ts, self.y_train_o, color="blue", label=r"$X_o$")
-            plt.plot(ts, self.y_pred_train_o, color="red", label=r"$\tilde{X}_o$")
+            plt.plot(ts_o, self.y_train_o, color="blue", label=r"$X_o$")
+            plt.plot(ts_o, self.y_pred_train_o, color="red", label=r"$\tilde{X}_o$")
             plt.title("Predictions over original Train")
-            plt.legend()
             plt.savefig(f"{filename}_train_original.pdf")
             plt.clf()
 
@@ -391,15 +395,13 @@ class Trainor_class:
             plt.plot(ts, self.y_test, color="blue", label=r"$X$")
             plt.plot(ts, self.y_pred_test, color="red", label=r"$\tilde{X}$")
             plt.title("Predictions over Test")
-            plt.legend()
             plt.savefig(f"{filename}_test.pdf")
             plt.clf()
 
             if self.y_test_o is not None:
-                plt.plot(ts, self.y_test_o, color="blue", label=r"$X_o$")
-                plt.plot(ts, self.y_pred_test_o, color="red", label=r"$\tilde{X}_o$")
+                plt.plot(ts_o, self.y_test_o, color="blue", label=r"$X_o$")
+                plt.plot(ts_o, self.y_pred_test_o, color="red", label=r"$\tilde{X}_o$")
                 plt.title("Predictions over original Test")
-                plt.legend()
                 plt.savefig(f"{filename}_test_original.pdf")
                 plt.clf()
 
@@ -413,7 +415,6 @@ class Trainor_class:
                     plt.scatter(self.p_test, te, color="red", label="Test")
                     plt.scatter(self.p_train, tr, color="blue", label="Train")
                     plt.title("Interpolated cofficients")
-                    plt.legend()
                     plt.savefig(f"{filename}_coeffs_mode_{i}.pdf")
                     plt.clf()
                 else:
@@ -484,8 +485,8 @@ class Trainor_class:
             if self.y_train_o is not None:
                 y_pred_test_o = self.model(x_test, train=False)
                 error_test_o = (
-                    jnp.linalg.norm(y_pred_test_o - y_test)
-                    / jnp.linalg.norm(y_test)
+                    jnp.linalg.norm(y_pred_test_o - y_test_o)
+                    / jnp.linalg.norm(y_test_o)
                     * 100
                 )
                 print("Test error_o: ", error_test_o)
@@ -525,7 +526,7 @@ class Trainor_class:
                 y_pred_test_o = self.model.decode(latent_test, train=False)
                 self.y_pred_test_o = y_pred_test_o
                 error_test_o = (
-                    jnp.linalg.norm(y_pred_test_o - y_test)
+                    jnp.linalg.norm(y_pred_test_o - y_test_o)
                     / jnp.linalg.norm(y_test)
                     * 100
                 )
@@ -535,13 +536,23 @@ class Trainor_class:
         else:
             error_test = None
             error_test_o = None
+            y_pred_test = None
+            y_pred_test_o = None
 
         self.y_pred_test = y_pred_test
+        self.y_pred_test_o = y_pred_test_o
         self.error_test = error_test
         self.error_test_o = error_test_o
         print("Total computation time: ", self.t_all)
         return error_train, error_test, error_train_o, error_test_o
 
+    def sing_vals(self):
+        svs = jnp.linalg.svd(self.model.latent(self.x_train), full_matrices=False)[1]
+        plt.plot(svs[:40]/svs[0], marker="o")
+        plt.ylim(0, 0.4)
+        plt.show()
+        return svs
+    
     def interpolate(self, x_new, x_interp, y_interp, save=False):
         if self.fitted:
             return self.interpolation(x_new)

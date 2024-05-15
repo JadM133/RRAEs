@@ -19,7 +19,7 @@ from equinox._filters import is_array
 import pdb
 from operator import itemgetter
 import numpy as np
-
+import warnings
 _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
 
@@ -53,27 +53,33 @@ def norm_divide_return(
     def norm_vec(x):
         return (x - jnp.mean(x)) / jnp.std(x)
 
-    if norm_p:
+    if norm_p and p_all is not None:
         p_all = jnp.stack(my_vmap(lambda y: norm_vec(y))(p_all.T)).T
 
     if test_end == 0:
-        res = jnp.stack(
-            my_vmap(lambda p: (p > jnp.min(p)) & (p < jnp.max(p)))(p_all.T)
-        ).T
-        idx = jnp.linspace(0, res.shape[0] - 1, res.shape[0], dtype=int)
-        cbt_idx = idx[jnp.sum(res, 1) == res.shape[1]]  # could be test
-        permut_idx = jrandom.permutation(jrandom.PRNGKey(200), cbt_idx.shape[0])
-        idx_test = cbt_idx[permut_idx][: int(res.shape[0] * (1 - prop_train))]
+        if p_all is not None:
+            res = jnp.stack(
+                my_vmap(lambda p: (p > jnp.min(p)) & (p < jnp.max(p)))(p_all.T)
+            ).T
+            idx = jnp.linspace(0, res.shape[0] - 1, res.shape[0], dtype=int)
+            cbt_idx = idx[jnp.sum(res, 1) == res.shape[1]]  # could be test
+            permut_idx = jrandom.permutation(jrandom.PRNGKey(200), cbt_idx.shape[0])
+            idx_test = cbt_idx[permut_idx][: int(res.shape[0] * (1 - prop_train))]
+        else:
+            idx_test = jrandom.permutation(jrandom.PRNGKey(200), y_all.shape[-1])[
+                : int(y_all.shape[-1] * (1 - prop_train))
+            ]
 
         p_test = p_all[idx_test]
         p_vals = jnp.delete(p_all, idx_test, 0)
         y_test_old = y_all[:, idx_test]
         y_shift_old = jnp.delete(y_all, idx_test, 1)
     else:
-        p_test = p_all[-test_end:]
-        p_vals = p_all[: len(p_all) - test_end]
-        y_test_old = y_all[:, -test_end:]
-        y_shift_old = y_all[:, : y_all.shape[-1] - test_end]
+        if p_all is not None:
+            p_test = p_all[-test_end:]
+            p_vals = p_all[: len(p_all) - test_end]
+        y_test_old = y_all[..., -test_end:]
+        y_shift_old = y_all[..., : y_all.shape[-1] - test_end]
 
     if norm_data:
         y_shift = (y_shift_old - jnp.mean(y_shift_old)) / jnp.std(y_shift_old)
@@ -82,21 +88,22 @@ def norm_divide_return(
         y_shift = y_shift_old
         y_test = y_test_old
 
-    if conv == True:
-        X_vec = ts[0]
-        idx = np.argmax(jnp.diff(X_vec[:, 0]) < 0)
-        y_shift = jnp.expand_dims(
-            jax.vmap(lambda y: jnp.reshape(y, (idx + 1, idx + 1)), in_axes=[-1])(
-                y_shift
-            ),
-            1,
-        )[:, :, 1:-1, 1:-1]
-        y_test = jnp.expand_dims(
-            jax.vmap(lambda y: jnp.reshape(y, (idx + 1, idx + 1)), in_axes=[-1])(
-                y_test
-            ),
-            1,
-        )[:, :, 1:-1, 1:-1]
+    # if conv == True:
+    #     if ts is not None:
+    #     X_vec = ts[0]
+    #     idx = np.argmax(jnp.diff(X_vec[:, 0]) < 0)
+    #     y_shift = jnp.expand_dims(
+    #         jax.vmap(lambda y: jnp.reshape(y, (idx + 1, idx + 1)), in_axes=[-1])(
+    #             y_shift
+    #         ),
+    #         1,
+    #     )[:, :, 1:-1, 1:-1]
+    #     y_test = jnp.expand_dims(
+    #         jax.vmap(lambda y: jnp.reshape(y, (idx + 1, idx + 1)), in_axes=[-1])(
+    #             y_test
+    #         ),
+    #         1,
+    #     )[:, :, 1:-1, 1:-1]
 
     if output is None:
         output_shift = y_shift
@@ -115,8 +122,12 @@ def norm_divide_return(
         def inv_func(xx):
             return xx
 
-    p_vals = jnp.expand_dims(p_vals, -1) if len(p_vals.shape) == 1 else p_vals
-    p_test = jnp.expand_dims(p_test, -1) if len(p_test.shape) == 1 else p_test
+    if p_all is not None:
+        p_vals = jnp.expand_dims(p_vals, -1) if len(p_vals.shape) == 1 else p_vals
+        p_test = jnp.expand_dims(p_test, -1) if len(p_test.shape) == 1 else p_test
+    else:
+        p_vals = None
+        p_test = None
 
     if not pod:
         return (
@@ -132,14 +143,15 @@ def norm_divide_return(
             output_test,
         )
 
-    u_now, _, _ = adaptive_TSVD(y_shift.T, eps=eps)
-    coeffs_shift = u_now.T @ y_shift.T
+    u_now, _, _ = adaptive_TSVD(y_shift, eps=eps, verbose=True)
+    coeffs_shift = u_now.T @ y_shift
     mean_vals = jnp.mean(coeffs_shift, axis=1)
     std_vals = jnp.std(coeffs_shift, axis=1)
     coeffs_shift = jax.vmap(lambda x, m, s: (x - m) / s)(
         coeffs_shift, mean_vals, std_vals
     )
-    coeffs_test = u_now.T @ y_test.T
+
+    coeffs_test = u_now.T @ y_test
     coeffs_test = jax.vmap(lambda x, m, s: (x - m) / s)(
         coeffs_test, mean_vals, std_vals
     )
@@ -147,10 +159,17 @@ def norm_divide_return(
     def inv_func(xx):
         return u_now @ jax.vmap(lambda x, m, s: x * s + m)(xx, mean_vals, std_vals)
 
+    if output is None:
+        output_shift = coeffs_shift
+        output_test = coeffs_test
+    else:
+        output_test = output[idx_test]
+        output_shift = jnp.delete(output, idx_test, 0)
+
     return (
         ts,
-        coeffs_shift.T,
-        coeffs_test.T,
+        coeffs_shift,
+        coeffs_test,
         p_vals,
         p_test,
         inv_func,
@@ -171,10 +190,13 @@ def get_data(problem, **kwargs):
             def func(f, x):
                 return jnp.sin(f * jnp.pi * x)
 
-            p_vals = jnp.linspace(1 / 3, 1, 150)[:-1]
+            p_vals = jnp.linspace(1 / 3, 1, 15)[:-1]
             y_shift = jax.vmap(func, in_axes=[0, None])(p_vals, ts).T
             p_test = jrandom.uniform(
-                jrandom.PRNGKey(0), (200,), minval=1 / 3 + 0.01, maxval=1 - 0.01
+                jrandom.PRNGKey(0),
+                (300,),
+                minval=p_vals[0] * 1.00001,
+                maxval=p_vals[-1] * 0.99999,
             )
             y_test = jax.vmap(func, in_axes=[0, None])(p_test, ts).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
@@ -187,10 +209,13 @@ def get_data(problem, **kwargs):
             def sf_func(s, x):
                 return jnp.sin(x - s * jnp.pi)
 
-            p_vals = jnp.linspace(0, 1.8, 19)[:-1]
+            p_vals = jnp.linspace(0, 1.8, 18)[:-1]
             y_shift = jax.vmap(sf_func, in_axes=[0, None])(p_vals, ts).T
             p_test = jrandom.uniform(
-                jrandom.PRNGKey(0), (80,), minval=0 + 0.01, maxval=p_vals[-1] * 0.99
+                jrandom.PRNGKey(0),
+                (80,),
+                minval=p_vals[0] * 1.00001,
+                maxval=p_vals[-1] * 0.99999,
             )
             y_test = jax.vmap(sf_func, in_axes=[0, None])(p_test, ts).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
@@ -250,20 +275,21 @@ def get_data(problem, **kwargs):
 
             p_test = jrandom.uniform(
                 jrandom.PRNGKey(0),
-                (100,),
-                minval=jnp.min(p_vals) + 0.01,
-                maxval=jnp.max(p_vals) - 0.01,
+                (300,),
+                minval=jnp.min(p_vals) * 1.00001,
+                maxval=jnp.max(p_vals) * 0.99999,
             )
             y_test = jax.vmap(
                 lambda y: (y - jnp.mean(y_shift_old)) / jnp.std(y_shift_old)
             )(jax.vmap(create_escal)(p_test)).T
-
+            y_all = jnp.concatenate([y_shift, y_test], axis=-1)
+            p_all = jnp.concatenate([p_vals, p_test], axis=0)
             ts = jnp.arange(0, y_shift.shape[0], 1)
-            return norm_divide_return(ts, y_shift, p_vals, test_end=y_test.shape[-1])
+            return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
 
         case "mult_freqs":
-            p_vals_0 = jnp.repeat(jnp.linspace(0.8 * jnp.pi, jnp.pi, 25), 25)
-            p_vals_1 = jnp.tile(jnp.linspace(0.3 * jnp.pi, 0.5 * jnp.pi, 25), 25)
+            p_vals_0 = jnp.repeat(jnp.linspace(0.5 * jnp.pi, jnp.pi, 15), 15)
+            p_vals_1 = jnp.tile(jnp.linspace(0.3 * jnp.pi, 0.8 * jnp.pi, 15), 15)
             p_vals = jnp.stack([p_vals_0, p_vals_1], axis=-1)
             ts = jnp.arange(0, 5 * jnp.pi, 0.01)
             y_shift = jax.vmap(lambda p: jnp.sin(p[0] * ts) + jnp.sin(p[1] * ts))(
@@ -376,62 +402,113 @@ def get_data(problem, **kwargs):
             return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
 
         case "avrami_noise":
-            n = 4
-            N = jnp.repeat(jnp.linspace(1, 3, 20), 20)
-            G = jnp.tile(jnp.linspace(1, 3, 20), 20)
-            p_vals = jnp.stack([N, G], axis=-1)
+            n = jnp.repeat(jnp.repeat(jnp.linspace(2, 3.5, 10), 10), 10)
+            N = jnp.tile(jnp.repeat(jnp.linspace(1.5, 3, 10), 10), 10)
+            G = jnp.tile(jnp.tile(jnp.linspace(1.5, 3, 10), 10), 10)
+            p_vals = jnp.stack([n, N, G], axis=-1)
+            p_test_0 = jrandom.uniform(
+                jrandom.PRNGKey(10),
+                (5000,),
+                minval=n[0] * 1.0001,
+                maxval=n[-1] * 0.99999,
+            )
             p_test_1 = jrandom.uniform(
-                jrandom.PRNGKey(100), (150,), minval=N[0] + 0.01, maxval=N[-1] - 0.01
+                jrandom.PRNGKey(100),
+                (5000,),
+                minval=N[0] * 1.00001,
+                maxval=N[-1] * 0.99999,
             )
             p_test_2 = jrandom.uniform(
-                jrandom.PRNGKey(0), (150,), minval=G[0] + 0.01, maxval=G[-1] - 0.01
+                jrandom.PRNGKey(0),
+                (5000,),
+                minval=G[0] * 1.00001,
+                maxval=G[-1] * 0.999999,
             )
-            p_test = jnp.stack([p_test_1, p_test_2], axis=-1)
-
-            ts = jnp.arange(0, 1.5, 0.005)
-            y_shift = jax.vmap(
-                lambda p, t: 1 - jnp.exp(-jnp.pi * p[0] * p[1] ** 3 / 3 * t**n),
-                in_axes=[0, None],
-            )(p_vals, ts).T
-            y_test = jax.vmap(
-                lambda p, t: 1 - jnp.exp(-jnp.pi * p[0] * p[1] ** 3 / 3 * t**n),
-                in_axes=[0, None],
-            )(p_test, ts).T
-
-            noise_keys_train = jrandom.split(jrandom.PRNGKey(0), y_shift.shape[-1])
-            noise_keys_test = jrandom.split(jrandom.PRNGKey(50), y_test.shape[-1])
-            y_shift = jax.vmap(
-                lambda y, k: y + jrandom.normal(k, y.shape) * 0.01, in_axes=[-1, 0]
-            )(y_shift, noise_keys_train).T
-            y_test = jax.vmap(
-                lambda y, k: y + jrandom.normal(k, y.shape) * 0.01, in_axes=[-1, 0]
-            )(y_test, noise_keys_test).T
-            y_all = jnp.concatenate([y_shift, y_test], axis=-1)
-            p_all = jnp.concatenate([p_vals, p_test], axis=0)
-            return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
-
-        case "avrami":
-            n = 4
-            N = jnp.repeat(jnp.linspace(1.5, 3, 20), 20)
-            G = jnp.tile(jnp.linspace(1.5, 3, 20), 20)
-            p_vals = jnp.stack([N, G], axis=-1)
-            p_test_1 = jrandom.uniform(
-                jrandom.PRNGKey(100), (150,), minval=N[0] + 0.01, maxval=N[-1] - 0.01
-            )
-            p_test_2 = jrandom.uniform(
-                jrandom.PRNGKey(0), (150,), minval=G[0] + 0.01, maxval=G[-1] - 0.01
-            )
-            p_test = jnp.stack([p_test_1, p_test_2], axis=-1)
+            p_test = jnp.stack([p_test_0, p_test_1, p_test_2], axis=-1)
 
             ts = jnp.arange(0, 1.5, 0.01)
             y_shift = jax.vmap(
-                lambda p, t: 1 - jnp.exp(-jnp.pi * p[0] * p[1] ** 3 / 3 * t**n),
+                lambda p, t: 1 - jnp.exp(-jnp.pi * p[1] * p[2] ** 3 / 3 * t ** p[0]),
                 in_axes=[0, None],
             )(p_vals, ts).T
             y_test = jax.vmap(
-                lambda p, t: 1 - jnp.exp(-jnp.pi * p[0] * p[1] ** 3 / 3 * t**n),
+                lambda p, t: 1 - jnp.exp(-jnp.pi * p[1] * p[2] ** 3 / 3 * t ** p[0]),
                 in_axes=[0, None],
             )(p_test, ts).T
+
+            to_remove = np.bitwise_or.reduce(
+                (p_test >= jnp.max(p_vals, 0)) | (p_test <= jnp.min(p_vals, 0)),
+                1,
+            )
+            p_test = jnp.delete(p_test, to_remove, 0)
+            y_test = jnp.delete(y_test, to_remove, 1)
+            y_test = jnp.delete(
+                y_test,
+                np.bitwise_or.reduce((p_test >= jnp.maxp_vals, 0))
+                | (p_test <= jnp.min(p_vals, 0)),
+                1,
+            )
+            print(y_test.shape)
+            y_all = jnp.concatenate([y_shift, y_test], axis=-1)
+            p_all = jnp.concatenate([p_vals, p_test], axis=0)
+
+            noise_keys = jrandom.split(jrandom.PRNGKey(0), y_all.shape[-1])
+            y_all = jax.vmap(
+                lambda y, k: y + jrandom.normal(k, y.shape) * 0.01, in_axes=[-1, 0]
+            )(y_all, noise_keys).T
+            return norm_divide_return(
+                ts, y_all, p_all, eps=1.4, pod=True, test_end=y_test.shape[-1]
+            )
+
+        case "avrami":
+            n = jnp.repeat(jnp.repeat(jnp.linspace(2.5, 3.5, 3), 3), 3)
+            N = jnp.tile(jnp.repeat(jnp.linspace(1.2, 3, 3), 3), 3)
+            G = jnp.tile(jnp.tile(jnp.linspace(1.2, 3, 3), 3), 3)
+            p_vals = jnp.stack([n, N, G], axis=-1)
+            p_test_0 = jrandom.uniform(
+                jrandom.PRNGKey(10),
+                (2000,),
+                minval=n[0] * 1.0001,
+                maxval=n[-1] * 0.99999,
+            )
+            p_test_1 = jrandom.uniform(
+                jrandom.PRNGKey(100),
+                (2000,),
+                minval=N[0] * 1.00001,
+                maxval=N[-1] * 0.99999,
+            )
+            p_test_2 = jrandom.uniform(
+                jrandom.PRNGKey(0),
+                (2000,),
+                minval=G[0] * 1.00001,
+                maxval=G[-1] * 0.999999,
+            )
+            p_test = jnp.stack([p_test_0, p_test_1, p_test_2], axis=-1)
+
+            ts = jnp.arange(0, 1.5, 0.01)
+            y_shift = jax.vmap(
+                lambda p, t: 1 - jnp.exp(-jnp.pi * p[1] * p[2] ** 3 / 3 * t ** p[0]),
+                in_axes=[0, None],
+            )(p_vals, ts).T
+            y_test = jax.vmap(
+                lambda p, t: 1 - jnp.exp(-jnp.pi * p[1] * p[2] ** 3 / 3 * t ** p[0]),
+                in_axes=[0, None],
+            )(p_test, ts).T
+
+            to_remove = np.bitwise_or.reduce(
+                (p_test >= jnp.max(p_vals, 0)) | (p_test <= jnp.min(p_vals, 0)),
+                1,
+            )
+            p_test = jnp.delete(p_test, to_remove, 0)
+            y_test = jnp.delete(y_test, to_remove, 1)
+            y_test = jnp.delete(
+                y_test,
+                np.bitwise_or.reduce(
+                    (p_test >= jnp.max(p_vals, 0)) | (p_test <= jnp.min(p_vals, 0)),
+                    1,
+                ),
+                1,
+            )
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
             return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
@@ -486,7 +563,7 @@ def get_data(problem, **kwargs):
             p_all = jnp.concatenate([p_all_train, p_all_test], 0)
             y_all = jnp.concatenate([y_all_train, y_all_test], -1)
             return norm_divide_return(
-                (X, Y), y_all, p_all, prop_train=0.8, test_end=p_all_test.shape[0]
+                (X, Y), y_all, p_all, test_end=p_all_test.shape[0]
             )
 
         case "multiple_steps":
@@ -571,6 +648,53 @@ def get_data(problem, **kwargs):
             output_all = output_all[:, permutation]
             return norm_divide_return(
                 t, y_all, jnp.expand_dims(p_all, -1), prop_train=0.8, output=output_all
+            )
+
+        case "mnist_new":
+            import torchvision
+
+            normalise_data = torchvision.transforms.Compose(
+                [
+                    torchvision.transforms.ToTensor(),
+                    torchvision.transforms.Normalize((0.5,), (0.5,)),
+                ]
+            )
+            train_dataset = torchvision.datasets.MNIST(
+                "MNIST",
+                train=True,
+                download=True,
+                transform=normalise_data,
+            )
+            test_dataset = torchvision.datasets.MNIST(
+                "MNIST",
+                train=False,
+                download=True,
+                transform=normalise_data,
+            )
+            x_train = my_vmap(lambda x: x[0])(train_dataset).T
+            x_test = my_vmap(lambda x: x[0])(test_dataset).T
+            x_all = jnp.squeeze(jnp.concatenate([x_train, x_test], axis=-1))
+
+            if "mlp" in kwargs.keys():
+                if kwargs["mlp"]:
+                    y_train = my_vmap(lambda x: x[1])(train_dataset)
+                    y_test = my_vmap(lambda x: x[1])(test_dataset)
+
+                    idx = np.arange(0, y_train.shape[0], 1)
+                    y_now_tr = np.zeros((y_train.shape[0], jnp.max(y_train)+1))
+                    all_idx = np.stack([idx, y_train])
+                    y_now_tr[all_idx[0, :], all_idx[1, :]] = 1
+
+                    idx = np.arange(0, y_test.shape[0], 1)
+                    y_now_t = np.zeros((y_test.shape[0], jnp.max(y_test)+1))
+                    all_idx = np.stack([idx, y_test])
+                    y_now_t[all_idx[0, :], all_idx[1, :]] = 1
+
+                    return jnp.array(y_now_tr), jnp.squeeze(x_test), jnp.array(y_now_t) # [45000:]
+            x_all = x_all # [..., 45000:]
+
+            return norm_divide_return(
+                None, x_all, None, test_end=x_test.shape[-1], norm_data=False
             )
 
         case _:
@@ -702,7 +826,6 @@ def my_vmap(func, to_array=True):
                 return final_sols
             return jnp.array([jnp.squeeze(jnp.stack(sol, axis=0)) for sol in sols])
         except:
-            pdb.set_trace()
             if to_array:
                 return jnp.array(sols)
             else:
@@ -736,7 +859,7 @@ class MLP_dropout(Module, strict=True):
     layers_l: tuple[Linear, ...]
     activation: Callable
     activation_l: Callable
-    dropout: eqx.nn.Dropout
+    dropout: eqx.nn.Dropout = 0
     use_bias: bool = field(static=True)
     use_final_bias: bool = field(static=True)
     in_size: Union[int, Literal["scalar"]] = field(static=True)
@@ -752,7 +875,7 @@ class MLP_dropout(Module, strict=True):
         out_size,
         width_size,
         depth,
-        dropout,
+        dropout=eqx.nn.Dropout(0),
         activation=_relu,
         activation_l=_identity,
         use_bias=True,
@@ -913,6 +1036,7 @@ class CNN(eqx.Module):
         key,
         **kwargs,
     ):
+
         key1, key2 = jax.random.split(key, 2)
 
         self.layers = [
@@ -927,7 +1051,11 @@ class CNN(eqx.Module):
             jnn.softplus,
             lambda x: jnp.expand_dims(jnp.ravel(x), -1),
             lambda x: MLP_dropout(
-                out_conv * (data_dim0 + padding) * (data_dim1 + padding),
+                int(out_conv
+                * ((data_dim0 + 2 * padding - kernel_conv)
+                / stride +1)
+                * ((data_dim1 + 2 * padding - kernel_conv)
+                / stride +1)),
                 out,
                 width,
                 depth,
@@ -970,7 +1098,11 @@ class CNN_trans(eqx.Module):
             lambda x: jnp.expand_dims(jnp.ravel(x), -1),
             lambda x: MLP_dropout(
                 out,
-                out_conv * (data_dim0 + padding) * (data_dim1 + padding),
+                int(out_conv
+                * ((data_dim0 + 2 * padding - kernel_conv)
+                / stride +1)
+                * ((data_dim1 + 2 * padding - kernel_conv)
+                / stride +1)),
                 width,
                 depth,
                 eqx.nn.Dropout(dropout),
@@ -988,6 +1120,221 @@ class CNN_trans(eqx.Module):
                 kernel_size=kernel_conv,
                 key=key1,
             ),
+        ]
+
+    def __call__(self, x, *args, **kwargs):
+        for layer in self.layers:
+            x = layer(x)
+        return jnp.squeeze(x)
+
+class MNIST_patrick_CNN(eqx.Module):
+    layers: list
+
+    def __init__(
+        self,
+        latent_size,
+        kernel_conv=4,
+        stride=2,
+        padding=1,
+        *,
+        key,
+        **kwargs,
+    ):
+        keys = jrandom.split(key, 5)
+
+        self.layers = [
+            eqx.nn.Conv2d(
+                1,
+                32,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[0],
+            ),
+            jnn.relu,
+            eqx.nn.Conv2d(
+                32,
+                64,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[1],
+            ),
+            jnn.relu,
+            eqx.nn.Conv2d(
+                64,
+                128,
+                kernel_size=7,
+                key=keys[2],
+            ),
+            jnn.relu,
+            jnp.ravel,
+            MLP_dropout(128, latent_size, 64, 2, key=keys[4], **kwargs),
+        ]
+
+    def __call__(self, x, *args, **kwargs):
+        x = jnp.expand_dims(x, 0)
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+class MNIST_patrick_CNN_trans(eqx.Module):
+    layers: list
+
+    def __init__(
+        self,
+        latent_size,
+        kernel_conv=4,
+        stride=2,
+        padding=1,
+        *,
+        key,
+        **kwargs,
+    ):
+        keys = jax.random.split(key, 4)
+        if latent_size < 128:
+            warnings.warn(
+                "Latent size is smaller than 128, which is the size of the last layer of the encoder."
+            )
+
+        self.layers = [
+            MLP_dropout(latent_size, 128, 64, 2, key=keys[0], **kwargs),
+            lambda x: jnp.reshape(x, (128, 1, 1)),
+            eqx.nn.ConvTranspose2d(
+                128,
+                64,
+                kernel_size=7,
+                key=keys[1],
+            ),
+            jnn.relu,
+            eqx.nn.ConvTranspose2d(
+                64,
+                32,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[2],
+            ),
+            jnn.relu,
+            eqx.nn.ConvTranspose2d(
+                32,
+                1,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[2],
+            ),
+            jnn.tanh,
+        ]
+
+    def __call__(self, x, *args, **kwargs):
+        for layer in self.layers:
+            x = layer(x)
+        return jnp.squeeze(x)
+    
+class MNIST_CNN(eqx.Module):
+    layers: list
+
+    def __init__(
+        self,
+        latent_size,
+        kernel_conv=4,
+        stride=2,
+        padding=1,
+        *,
+        key,
+        **kwargs,
+    ):
+        keys = jrandom.split(key, 5)
+
+        self.layers = [
+            eqx.nn.Conv2d(
+                1,
+                32,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[0],
+            ),
+            jnn.relu,
+            eqx.nn.Conv2d(
+                32,
+                64,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[1],
+            ),
+            jnn.relu,
+            eqx.nn.Conv2d(
+                64,
+                128,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[2],
+            ),
+            jnn.relu,
+            eqx.nn.Conv2d(
+                128,
+                256,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[3],
+            ),
+            jnn.relu,
+            lambda x: jnp.ravel(x),
+            MLP_dropout(256, latent_size, 64, 2, key=keys[4], **kwargs),
+        ]
+
+    def __call__(self, x, *args, **kwargs):
+        x = jnp.expand_dims(x, 0)
+        for layer in self.layers:
+            x = layer(x)
+        return x
+    
+
+class MNIST_CNN_trans(eqx.Module):
+    layers: list
+
+    def __init__(
+        self,
+        latent_size,
+        kernel_conv=4,
+        stride=2,
+        padding=1,
+        *,
+        key,
+        **kwargs,
+    ):
+        keys = jax.random.split(key, 4)
+        if latent_size < 1568:
+            warnings.warn(
+                "Latent size is smaller than 1568, which is the size of the last layer of the encoder."
+            )
+
+        self.layers = [
+            MLP_dropout(latent_size, 1568, 64, 2, key=keys[0], **kwargs),
+            lambda x: jnp.reshape(x, (32, 7, 7)),
+            eqx.nn.ConvTranspose2d(
+                32,
+                8,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[1],
+            ),
+            jnn.relu,
+            eqx.nn.ConvTranspose2d(
+                8,
+                1,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=keys[2],
+            ),
+            jnn.tanh,
         ]
 
     def __call__(self, x, *args, **kwargs):

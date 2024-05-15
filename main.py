@@ -18,73 +18,75 @@ import matplotlib.pyplot as plt
 import os
 
 if __name__ == "__main__":
-    problem = "mult_gausses"
-    method = "Strong"
-    loss_func = "Strong"
+    for prob in ["mult_freqs"]:
+        problem = prob
+        method = "LoRAE"
+        loss_func = "nuc"
 
-    latent_size = 4500
-    k_max = 2
+        latent_size = 2800
+        k_max = 14
 
-    (
-        ts,
-        x_train,
-        x_test,
-        p_train,
-        p_test,
-        inv_func,
-        y_train_o,
-        y_test_o,
-        y_train,
-        y_test,
-    ) = get_data(problem)
+        (
+            ts,
+            x_train,
+            x_test,
+            p_train,
+            p_test,
+            inv_func,
+            y_train_o,
+            y_test_o,
+            y_train,
+            y_test,
+        ) = get_data(problem)
 
-    print(f"Shape of data is {x_train.shape} and {x_test.shape}")
-    print(f"method is {method}")
+        print(f"Shape of data is {x_train.shape} and {x_test.shape}")
+        print(f"method is {method}")
 
-    match method:
-        case "Strong":
-            model_cls = Strong_RRAE_MLPs
-        case "Weak":
-            model_cls = Weak_RRAE_MLPs
-        case "Vanilla":
-            model_cls = Vanilla_AE_MLP
-        case "IRMAE":
-            model_cls = IRMAE_MLP
-        case "LoRAE":
-            model_cls = LoRAE_MLP
+        match method:
+            case "Strong":
+                model_cls = Strong_RRAE_MLPs
+            case "Weak":
+                model_cls = Weak_RRAE_MLPs
+            case "Vanilla":
+                model_cls = Vanilla_AE_MLP
+            case "IRMAE":
+                model_cls = IRMAE_MLP
+            case "LoRAE":
+                model_cls = LoRAE_MLP
 
-    interpolation_cls = Objects_Interpolator_nD
-    trainor = Trainor_class(
-        model_cls,
-        interpolation_cls,
-        data=x_train,
-        latent_size=latent_size, # 4600
-        k_max=k_max,
-        folder=f"{problem}/{method}_{problem}/",
-        file=f"{method}_{problem}",
-        linear_l=0,
-        key=jrandom.PRNGKey(0),
-    )
+        interpolation_cls = Objects_Interpolator_nD
+        trainor = Trainor_class(
+            model_cls,
+            interpolation_cls,
+            data=x_train,
+            latent_size=latent_size, # 4600
+            k_max=k_max,
+            folder=f"{problem}/{method}_{problem}/",
+            file=f"{method}_{problem}",
+            # linear_l=2,
+            post_proc_func=inv_func,
+            key=jrandom.PRNGKey(0),
+        )
+        kwargs = {
+            "step_st": [2000, 2000, 4000],
+            "batch_size_st": [20, 20, 20, 20],
+            "lr_st": [1e-3, 1e-4, 1e-5],
+            "print_every": 100,
+            "loss_kwargs": {"lambda_nuc":0.001},
+            # "mul_lr":[0.81, 0.81, 0.81, 1],
+            # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
+        }
 
-    kwargs = {
-        "step_st": [2000, 2000, 2000],
-        "batch_size_st": [20, 20, 20, 20],
-        "lr_st": [1e-3, 1e-4, 1e-5],
-        "print_every": 100,
-        "loss_kwargs": {"lambda_nuc":0.001},
-        # "mul_lr":[0.2, 1, 1],
-        # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
-    }
-
-    trainor.fit(
-        x_train,
-        y_train,
-        None,
-        loss_func=loss_func,
-        training_key=jrandom.PRNGKey(50),
-        **kwargs,
-    )
-    e0, e1, e2, e3 = trainor.post_process(y_test, None, None, p_train, p_test, modes="all")
-    pdb.set_trace()
-    trainor.save(ts=ts, p_train=p_train, p_test=p_test)
+        trainor.fit(
+            x_train,
+            y_train,
+            y_train_o,
+            loss_func=loss_func,
+            training_key=jrandom.PRNGKey(50),
+            **kwargs,
+        )
+        e0, e1, e2, e3 = trainor.post_process(y_test, y_test_o, None, p_train, p_test, modes="all")
+        pdb.set_trace()
+        trainor.save(p_train=p_train, p_test=p_test)
+        # trainor.plot_results(ts=jnp.arange(0, y_test.shape[0], 1), ts_o=ts)
     pdb.set_trace()
