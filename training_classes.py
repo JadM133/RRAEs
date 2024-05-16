@@ -592,11 +592,10 @@ class Trainor_class:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
             self.interpolation_cls = self.all_kwargs["interpolation_cls"]
-            pdb.set_trace()
             self.model = self.model_cls(**self.all_kwargs)
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             self.interpolation = self.interpolation_cls(**self.all_kwargs)
-            attributes = dill.load(f)
-            for key in attributes:
-                setattr(self, key, attributes[key])
+            # attributes = dill.load(f)
+            # for key in attributes:
+            #     setattr(self, key, attributes[key])
             self.fitted = True

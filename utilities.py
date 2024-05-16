@@ -650,7 +650,7 @@ def get_data(problem, **kwargs):
                 t, y_all, jnp.expand_dims(p_all, -1), prop_train=0.8, output=output_all
             )
 
-        case "mnist_new":
+        case "mnist_":
             import torchvision
 
             normalise_data = torchvision.transforms.Compose(

@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex RRAEs-paper"] 1715859218.01245 "RRAEs-paper.aux" "RRAEs-paper.bbl" "RRAEs-paper" 1715859313.44018 0
+["bibtex RRAEs-paper"] 1715859218.01245 "RRAEs-paper.aux" "RRAEs-paper.bbl" "RRAEs-paper" 1715860678.18912 0
   "./sn-bibliography.bib" 1715846978 41591 ee068fec71c953b90cc3794deb6212f2 ""
-  "RRAEs-paper.aux" 1715859311 12210 bf2647a11cd73ac8c11f567d976ac3c3 "pdflatex"
+  "RRAEs-paper.aux" 1715860676 12210 bf2647a11cd73ac8c11f567d976ac3c3 "pdflatex"
   "c:/texlive/2023/texmf-dist/bibtex/bst/natbib/plainnat.bst" 1709741095 26816 ffe5423d2019860bad9f54bc402fac15 ""
   (generated)
   "RRAEs-paper.bbl"
   "RRAEs-paper.blg"
   (rewritten before read)
-["pdflatex"] 1715859309.2707 "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_NeurIPS/RRAEs-paper.tex" "RRAEs-paper.pdf" "RRAEs-paper" 1715859313.44063 0
+["pdflatex"] 1715860673.34167 "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_NeurIPS/RRAEs-paper.tex" "RRAEs-paper.pdf" "RRAEs-paper" 1715860678.18974 0
   "../figures/p_vals_1.pdf" 1714658001 23366 f8e7784e1f1ea32d2c784b7e3840f290 ""
   "../figures/p_vals_2.pdf" 1714658001 25672 62ff5f740d7f56c562e5e5e2d6060ce6 ""
   "../figures/sin.pdf" 1713193596 16822 f18863640bff59f300ab320f1872363c ""
@@ -15,11 +15,11 @@
   "../figures/sin_shift_plot_test.pdf" 1715853536 30640 9a9739af36d19ae63eaa9fc83df4deb4 ""
   "../figures/sin_sin_gauss_plot_test.pdf" 1715857665 41483 45f8725e22d2c982e13172892c20bc4d ""
   "../figures/sing_vals_gauss.pdf" 1715858624 27727 e771a79a2ee353d799e64425d5ddb2b3 ""
-  "RRAEs-paper.aux" 1715859311 12210 bf2647a11cd73ac8c11f567d976ac3c3 "pdflatex"
+  "RRAEs-paper.aux" 1715860676 12210 bf2647a11cd73ac8c11f567d976ac3c3 "pdflatex"
   "RRAEs-paper.bbl" 1715859218 9639 2c96c7e4c43e617ffea40e925f683ff9 "bibtex RRAEs-paper"
-  "RRAEs-paper.out" 1715859311 2218 c23d46245d6ce52224e202fc23d18364 "pdflatex"
-  "RRAEs-paper.tex" 1715859308 51016 88e2e36fb7d31972b551e446327b246d ""
-  "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_NeurIPS/RRAEs-paper.tex" 1715859308 51016 88e2e36fb7d31972b551e446327b246d ""
+  "RRAEs-paper.out" 1715860676 2218 c23d46245d6ce52224e202fc23d18364 "pdflatex"
+  "RRAEs-paper.tex" 1715859341 51011 5e9d83e5948e40c0b687419d74fa0bbd ""
+  "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_NeurIPS/RRAEs-paper.tex" 1715859341 51011 5e9d83e5948e40c0b687419d74fa0bbd ""
   "c:/texlive/2023/texmf-dist/fonts/enc/dvips/base/8r.enc" 1709739114 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "c:/texlive/2023/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc" 1709738612 2971 def0b6c1f0b107b3b936def894055589 ""
   "c:/texlive/2023/texmf-dist/fonts/map/fontname/texfonts.map" 1709739532 3524 cb3e574dea2d1052e39280babc910dc8 ""

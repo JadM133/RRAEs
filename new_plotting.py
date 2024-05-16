@@ -6,6 +6,7 @@ import pdb
 import sys
 import matplotlib
 from training_classes import Trainor_class
+from utilities import get_data
 
 folder_for_all = "figures/"
 
@@ -389,12 +390,13 @@ def plot_MNIST():
         matplotlib.rc('xtick', labelsize=20) 
         matplotlib.rc('ytick', labelsize=20) 
         fig, axes = plt.subplots(len(all_trainors), points+2, figsize=(1.5*points, 2*len(all_trainors)))
+        x_train = get_data("mnist_")[1]
         for i, trainor in enumerate(all_trainors):
-            lat = trainor.model.latent(trainor.x_train)
+            lat = trainor.model.latent(x_train)
             latent_1 = lat[..., k1]
             latent_2 = lat[..., k2]
-            sample_1 = trainor.x_train[..., k1]
-            sample_2 = trainor.x_train[..., k2]
+            sample_1 = x_train[..., k1]
+            sample_2 = x_train[..., k2]
             prop_left = jnp.linspace(0, 1, points+2)[1:-1]
             latents = (latent_1 + prop_left[:, None] * (latent_2 - latent_1)).T
             interp_res = trainor.model.decode(latents)

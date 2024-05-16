@@ -291,7 +291,7 @@ class LoRAE_MLP(IRMAE_MLP):
         super().__init__(data, latent_size, linear_l=1, key=key, **kwargs)
 
 
-class MNIST_CNN_Autoencoder(Autoencoder):
+class CNN_Autoencoder(Autoencoder):
     def __init__(
         self,
         data,
@@ -337,7 +337,7 @@ class MNIST_CNN_Autoencoder(Autoencoder):
         )
 
 
-class new_MNIST_CNN_Autoencoder(Autoencoder):
+class MNIST_CNN_Autoencoder(Autoencoder):
     def __init__(
         self,
         data,
