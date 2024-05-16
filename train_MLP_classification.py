@@ -208,7 +208,7 @@ def save_eqx_nn(filename, hyperparams, models):
 
 
 def main_alpha(train_func, trainor, output, x_test, output_test, **kwargs):
-
+    
     mlp_model, hyperparams, pred_train, pred_test, acc_train, acc_test = train_func(
         trainor.model.latent(trainor.x_train).T,
         output,
@@ -229,7 +229,7 @@ def main_alpha(train_func, trainor, output, x_test, output_test, **kwargs):
 
 
 if __name__ == "__main__":
-    method = "Vanilla"
+    method = "Strong"
     problem = "mnist_new"
     folder = f"{problem}/{method}_{problem}/"
     file = f"{method}_{problem}"

@@ -5,14 +5,15 @@ import dill
 import pdb
 import sys
 import matplotlib
+from training_classes import Trainor_class
 
 folder_for_all = "figures/"
 
 def plot_sin_escal():
-    methods = ["AE", "Strong", "Weak"]
-    colors = ["b", "g", "r"]
-    markers = ["p", "o", "*"]
-    pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" # 
+    methods = ["Vanilla", "Strong"]
+    colors = ["b", "g"]
+    markers = ["p", "o"]
+    pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" # 
     matplotlib.rc('xtick', labelsize=20) 
     matplotlib.rc('ytick', labelsize=20) 
     fig1 = plt.figure(1)
@@ -27,12 +28,24 @@ def plot_sin_escal():
     def plot_problem(methods, colors, markers, problem, pre_folder, indices, inc=0, ylabel=None, sample=6):
         
         for j, (method, color, mark) in enumerate(zip(methods, colors, markers)):          
-            folder = f"{pre_folder}{problem}/{problem}_{method}" # 
-            folder_name = f"{folder}/"
-            filename = os.path.join(folder_name, f"{method}_{problem}")
+            folder = f"{problem}/{method}_{problem}/"
+            file = f"{method}_{problem}"
+            trainor = Trainor_class()
+            trainor.load(os.path.join(folder, file))
+            ts = trainor.ts
 
-            with open(f"{filename}_.pkl", "rb") as f:
-                v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs = dill.load(f)
+            if ts is None and problem == "shift":
+                ts = jnp.linspace(0, 2*jnp.pi, trainor.x_train.shape[0])
+            if ts is None and problem == "stairs":
+                ts = jnp.linspace(0, 500, trainor.x_train.shape[0])
+
+            y_test = trainor.y_test
+            y_pred_test = trainor.y_pred_test
+            p_test = trainor.p_test
+            x_m = trainor.model.latent(trainor.x_train)
+            vt_train = trainor.vt_train
+            vt_test = trainor.vt_test
+            p_vals = trainor.p_train
 
             plt.figure(1)
             if j == 0:
@@ -52,32 +65,43 @@ def plot_sin_escal():
                 plt.xlabel(r'$t_v$', fontsize=20)
                 plt.ylabel(ylabel, fontsize=20)
                 plt.title("Test on " + r"$p_d$" + f" = {p_test[i][0]:.2f}", fontsize=20)
-                plt.legend(fontsize=10)
+                plt.legend(fontsize=12)
             plt.figure(2)
             plt.subplot(1, 2, inc+1)
             if method == "AE":
                 y1 = x_m
-                y2 = x_test
+                y2 = vt_test
             else:
                 y1 = vt_train
                 y2 = vt_test
-            if inc == 1:
-                y1 = (y1 - jnp.min(y1))/(jnp.max(y1) - jnp.min(y1))
-                y2 = (y2 - jnp.min(y2))/(jnp.max(y2) - jnp.min(y2))
+            if inc == 1 or inc == 0:
+                y1_old = y1
+                y1 = (y1 - jnp.min(y1_old))/(jnp.max(y1_old) - jnp.min(y1_old))
+                y2 = (y2 - jnp.min(y1_old))/(jnp.max(y1_old) - jnp.min(y1_old))
+
+            if method == "Vanilla":
+                method = "DAE"
+            elif method == "Strong":
+                method = "RRAE (Strong)"
+
             plt.scatter(p_vals, y1, color=color, label=f"{method}-train", marker="o")
             plt.scatter(p_test, y2, color=color, label=f"{method}-test", marker="x")
             if j == 0 and inc == 0:
-                plt.vlines([p_vals[-1][0], 0.9], [-10., -10.,], [y1[0, -1], y1[0, -1]], color="black", linestyle="--")
-                plt.hlines(y1[0, -1], 0.9, p_vals[-1], color="black", linestyle="--")
+                plt.vlines([p_vals[-1][0], 1.3], [-0.5, -0.5,], [y1[0, -1], y1[0, -1]], color="black", linestyle="--")
+                plt.hlines(y1[0, -1], 1.3, p_vals[-1], color="black", linestyle="--")
+                plt.vlines([p_vals[0][0], 0.27], [-0.5, -0.5,], [y1[0, 0], y1[0, 0]], color="black", linestyle="--")
+                plt.hlines(y1[0, 0], 0.27, p_vals[0], color="black", linestyle="--")
+
+
             plt.xlabel(r"$p_d$", fontsize=20)
             plt.ylabel(r"$\alpha$", fontsize=15)
             if inc == 0:
-                plt.ylim(-10, 9)
+                plt.ylim(-0.5, 1.5)
             plt.legend(fontsize=12)
 
 
-    plot_problem(methods, colors, markers, "shift", pre_folder, [1, 3], ylabel=r"$f_{shift}(t_v, p_d)$", inc=0)
-    plot_problem(methods, colors, markers, "stairs", pre_folder, [1, 3], ylabel=r"$f_{stair}(t_v, p_d, \text{args})$", inc=1)
+    plot_problem(methods, colors, markers, "shift", pre_folder, [10, 3], ylabel=r"$f_{shift}(t_v, p_d)$", inc=0)
+    plot_problem(methods, colors, markers, "stairs", pre_folder, [10, 3], ylabel=r"$f_{stair}(t_v, p_d, \text{args})$", inc=1)
     plt.savefig(os.path.join(folder_for_all, f"sin_shift_plot_latent.pdf"))
     plt.figure(1)
     plt.savefig(os.path.join(folder_for_all, f"sin_shift_plot_test.pdf"))
@@ -137,41 +161,54 @@ def plot_p_vals():
     plt.clf()
 
 def plot_sin_sin_gauss():
-    methods = ["AE", "Strong", "Weak"]
-    colors = ["b", "g", "r"]
-    markers = ["p", "o", "*"] 
-    pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" # 
+    methods = ["Strong", "Weak"]
+    colors = ["g", "r"]
+    markers = ["o", "*"] 
+    pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" # 
     matplotlib.rc('xtick', labelsize=20) 
     matplotlib.rc('ytick', labelsize=20) 
     fig1 = plt.figure(1)
     fig1.set_size_inches(18.5, 10.5)
-    fig1 = fig1.add_subplot(3, 2, 1)
-    plt.subplots_adjust(hspace=0.8, wspace=0.25)
+    fig1 = fig1.add_subplot(2, 2, 1)
+    plt.subplots_adjust(hspace=0.5, wspace=0.25)
 
     def plot_problem(methods, colors, markers, problem, pre_folder, indices, ylabel, inc=0, sample=6):
         
         for j, (method, color, mark) in enumerate(zip(methods, colors, markers)):          
-            folder = f"{pre_folder}{problem}/{problem}_{method}" # 
-            folder_name = f"{folder}/"
-            filename = os.path.join(folder_name, f"{method}_{problem}")
+            
+            folder = f"{problem}/{method}_{problem}/"
+            file = f"{method}_{problem}"
+            trainor = Trainor_class()
+            trainor.load(os.path.join(folder, file))
+            ts = trainor.ts
+            if ts is None and problem == "mult_gausses":
+                ts = jnp.arange(0, 6, 0.005)
+            elif ts is None and problem == "mult_freqs":
+                ts = jnp.arange(0, 5 * jnp.pi, 0.01)
 
-            with open(f"{filename}_.pkl", "rb") as f:
-                v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs = dill.load(f)              
+            y_test = trainor.y_test
+            y_pred_test = trainor.y_pred_test
+            p_test = trainor.p_test
+            x_m = trainor.model.latent(trainor.x_train)
+            vt_train = trainor.vt_train
+            vt_test = trainor.vt_test
+            p_vals = trainor.p_train
+
             plt.figure(1)
             if j == 0:
                 for i_, i in enumerate(indices):
-                    plt.subplot(3, 2, i_+1+(inc*2))
+                    plt.subplot(2, 2, i_+1+(inc*2))
                     lab = f"True"
                     plt.plot(ts[:], y_test[:, i], label=lab, color="darkgray", linestyle="--", linewidth=2, zorder=0)
                     
         
             for i_, i in enumerate(indices):
-                plt.subplot(3, 2, i_+1+inc*2)
+                plt.subplot(2, 2, i_+1+inc*2)
                 lab = f"{method}"
                 plt.scatter(ts[::sample], y_pred_test[::sample, i], s=24, edgecolors="none", label=lab, c=color, marker=mark)
                 
             for i_, i in enumerate(indices):
-                plt.subplot(3, 2, i_+1+inc*2)
+                plt.subplot(2, 2, i_+1+inc*2)
                 plt.xlabel(r'$t_v$', fontsize=20)
                 plt.ylabel(ylabel, fontsize=20)
                 if p_test.shape[-1] == 2:
@@ -182,9 +219,8 @@ def plot_sin_sin_gauss():
                 plt.legend(fontsize=10)
 
 
-    plot_problem(methods, colors, markers, "accelerate", pre_folder, [39, 1], r"$f_{acc}(t_v, p_d)$", inc=0, sample=6) # 58
-    plot_problem(methods, colors, markers, "mult_freqs", pre_folder, [44, 70], r"$f_{freqs}(t_v, \mathbf{p}_d)$", inc=1, sample=24)
-    plot_problem(methods, colors, markers, "mult_gausses", pre_folder, [98, 3], r"$f_{gauss}(t_v, \mathbf{p}_d)$", inc=2, sample=24)
+    plot_problem(methods, colors, markers, "mult_freqs", pre_folder, [44, 70], r"$f_{freqs}(t_v, \mathbf{p}_d)$", inc=0, sample=24)
+    plot_problem(methods, colors, markers, "mult_gausses", pre_folder, [98, 3], r"$f_{gauss}(t_v, \mathbf{p}_d)$", inc=1, sample=24)
 
     plt.savefig(os.path.join(folder_for_all, f"sin_sin_gauss_plot_test.pdf"))
     plt.show()
@@ -287,6 +323,103 @@ def plot_avramis():
 
     plt.show()
 
+def plot_sing_vals():
+    methods = ["Strong", "Weak", "IRMAE_2", "IRMAE_4"]
+    pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" # 
+    matplotlib.rc('xtick', labelsize=20) 
+    matplotlib.rc('ytick', labelsize=20) 
+    fig1 = plt.figure(1)
+    fig1.set_size_inches(18.5, 10.5)
+    fig1 = fig1.add_subplot(1, 2, 1)
+    plt.subplots_adjust(hspace=0.5, wspace=0.25)
+
+    def plot_problem(methods, colors, markers, problem, pre_folder, indices, ylabel, inc=0, sample=6):
+        
+        for j, (method,) in enumerate(zip(methods)):          
+            
+            folder = f"{problem}/{method}_{problem}/"
+            file = f"{method}_{problem}"
+            trainor = Trainor_class()
+            trainor.load(os.path.join(folder, file))
+            ts = trainor.ts
+            if ts is None and problem == "mult_gausses":
+                ts = jnp.arange(0, 6, 0.005)
+            elif ts is None and problem == "mult_freqs":
+                ts = jnp.arange(0, 5 * jnp.pi, 0.01)
+
+            y_test = trainor.y_test
+            y_pred_test = trainor.y_pred_test
+            p_test = trainor.p_test
+            x_m = trainor.model.latent(trainor.x_train)
+            ss, vv, dd = jnp.linalg.svd(trainor.model.latent(trainor.x_train), full_matrices=False)
+        
+            vt_train = trainor.vt_train
+            vt_test = trainor.vt_test
+            p_vals = trainor.p_train
+
+            plt.figure(1)
+            plt.subplot(1, 2, inc+1)
+            if method == "IRMAE_2":
+                method = "IRMAE (l=2)"
+            elif method == "IRMAE_4":
+                method = "IRMAE (l=4)"
+            if inc == 0:
+                plt.plot(vv[:40] / jnp.max(vv), label=method, marker="o")
+            if inc == 1:
+                plt.plot(jnp.arange(20, 80, 1), vv[20:80] / jnp.max(vv), label=method, marker="o")
+                plt.yscale("log")
+    
+            plt.xlabel(r'Index', fontsize=20)
+            plt.ylabel(ylabel, fontsize=20)
+            if inc == 0:
+                plt.title("Normalized singular values of the latent space", fontsize=15)
+            else:
+                plt.title("Normalized singular values of the latent space - log", fontsize=15)
+            plt.legend(fontsize=10)
+
+
+    plot_problem(methods, None, None, "mult_gausses", pre_folder, [44, 70], r"$\sigma$", inc=0, sample=24)
+    plot_problem(methods, None, None, "mult_gausses", pre_folder, [98, 3], r"$\sigma$", inc=1, sample=24)
+
+    plt.savefig(os.path.join(folder_for_all, f"sing_vals_gauss.pdf"))
+    plt.show()
+
+def plot_MNIST():
+    def interpolate_MNIST_figs(all_trainors, k1, k2, points):
+        matplotlib.rc('xtick', labelsize=20) 
+        matplotlib.rc('ytick', labelsize=20) 
+        fig, axes = plt.subplots(len(all_trainors), points+2, figsize=(1.5*points, 2*len(all_trainors)))
+        for i, trainor in enumerate(all_trainors):
+            lat = trainor.model.latent(trainor.x_train)
+            latent_1 = lat[..., k1]
+            latent_2 = lat[..., k2]
+            sample_1 = trainor.x_train[..., k1]
+            sample_2 = trainor.x_train[..., k2]
+            prop_left = jnp.linspace(0, 1, points+2)[1:-1]
+            latents = (latent_1 + prop_left[:, None] * (latent_2 - latent_1)).T
+            interp_res = trainor.model.decode(latents)
+            figs = [interp_res[..., i] for i in range(interp_res.shape[-1])]
+            figs.insert(0, sample_1)
+            figs.append(sample_2)
+            for j, ax in enumerate(axes[i]):
+                ax.imshow(figs[j], cmap="gray")
+                ax.axis("off")
+            plt.tight_layout()
+            plt.show()
+        
+    names = ["Weak", "Strong_8", "IRMAE_2"]
+    all_trainors = []
+    for i, name in enumerate(names):
+        method = name
+        problem = "mnist_"
+        folder = f"{problem}/{method}_{problem}/"
+        file = f"{method}_{problem}"
+        trainor = Trainor_class()
+        trainor.load(os.path.join(folder, file))
+        all_trainors.append(trainor)
+    
+    interpolate_MNIST_figs(all_trainors, 1, 10, 7)
+
 if __name__ == "__main__":
     try:
         prob = sys.argv[1]
@@ -301,5 +434,9 @@ if __name__ == "__main__":
             plot_avramis()
         case "p_vals":
             plot_p_vals()
+        case "sing":
+            plot_sing_vals()
+        case "MNIST":
+            plot_MNIST()
         case _:
             raise ValueError("Invalid problem")

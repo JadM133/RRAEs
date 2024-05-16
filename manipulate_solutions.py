@@ -152,31 +152,16 @@ if __name__ == "__main_":
     print(f"Test error: {error_test}")
     pdb.set_trace()
 
-def interpolate_MNIST_figs(model, sample_1, sample_2, latent_1, latent_2, points):
-    fig, axes = plt.subplots(1, points, figsize=(1.5*points, 2))
-    prop_left = jnp.linspace(0, 1, points+2)[1:-1]
-    latents = (latent_1 + prop_left[:, None] * (latent_2 - latent_1)).T
-    interp_res = model.decode(latents)
-    figs = [interp_res[..., i] for i in range(interp_res.shape[-1])]
-    figs.insert(0, sample_1)
-    figs.append(sample_2)
-    for i, ax in enumerate(axes):
-        ax.imshow(figs[i], cmap="gray")
-        ax.axis("off")
-    plt.tight_layout()
-    plt.show()
-
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import jax.numpy as jnp
 
-    names = ["Vanilla", "Strong"]
-    names=["Vanilla"]
+    names = ["Strong_8"]
     all_trainors = []
     for i, name in enumerate(names):
         method = name
-        problem = "mnist_new"
+        problem = "mnist_"
         folder = f"{problem}/{method}_{problem}/"
         file = f"{method}_{problem}"
         trainor = Trainor_class()
