@@ -116,23 +116,37 @@ def plot_p_vals():
     matplotlib.rc('ytick', labelsize=20) 
     fig1 = plt.figure(1)
     fig1.set_size_inches(18.5, 10.5)
-    fig1 = fig1.add_subplot(1, 3, 1)
+    fig1 = fig1.add_subplot(1, 2, 1)
     plt.subplots_adjust(wspace=0.35)
     fig2 = plt.figure(2)
     fig2.set_size_inches(18.5, 10.5)
-    fig2 = fig2.add_subplot(1, 3, 1)
+    fig2 = fig2.add_subplot(1, 2, 1)
     plt.subplots_adjust(wspace=0.35)
 
     def plot_problem(methods, colors, markers, problems, pre_folder, indices, inc=0, ylabel=None, sample=6, bypi=False):
         plt.figure(inc+1)
         for j, (problem,) in enumerate(zip(problems,)): 
-            plt.subplot(1, 3, j+1)         
-            folder = f"{pre_folder}{problem}/{problem}_strong" # 
-            folder_name = f"{folder}/"
-            filename = os.path.join(folder_name, f"strong_{problem}")
+            plt.subplot(1, 2, j+1)         
+            
+            folder = f"{problem}/Strong_{problem}/"
+            file = f"Strong_{problem}"
+            trainor = Trainor_class()
+            trainor.load(os.path.join(folder, file))
+            ts = trainor.ts
 
-            with open(f"{filename}_.pkl", "rb") as f:
-                v_train, vt_train, vt_test, x_m, y_pred_train, x_test, y_pred_test, y_shift, y_test, y_original, y_pred_train_o, y_test_original, y_pred_test_o, ts, error_train, error_test, error_train_o, error_test_o, p_vals, p_test, kwargs_old, kwargs = dill.load(f)
+            if ts is None and problem == "shift":
+                ts = jnp.linspace(0, 2*jnp.pi, trainor.x_train.shape[0])
+            if ts is None and problem == "stairs":
+                ts = jnp.linspace(0, 500, trainor.x_train.shape[0])
+
+            y_test = trainor.y_test
+            y_pred_test = trainor.y_pred_test
+            p_test = trainor.p_test
+            x_m = trainor.model.latent(trainor.x_train)
+            vt_train = trainor.vt_train
+            vt_test = trainor.vt_test
+            p_vals = trainor.p_train
+
             
             if vt_train.shape[0] != 1:
                 if bypi and j == 0:
@@ -153,8 +167,8 @@ def plot_p_vals():
             plt.legend(fontsize=12, loc="upper left")
 
 
-    plot_problem(None, colors, markers, ["shift", "stairs", "accelerate"], pre_folder, [1, 3], ylabel=r"$f_{shift}(t_v, p_d)$", inc=0)
-    plot_problem(None, colors, markers, ["mult_freqs", "mult_gausses", "avrami-10"], pre_folder, [1, 3], ylabel=r"$f_{stair}(t_v, p_d, \text{args})$", inc=1, bypi=True)
+    plot_problem(None, colors, markers, ["shift", "stairs"], pre_folder, [1, 3], ylabel=r"$f_{shift}(t_v, p_d)$", inc=0)
+    plot_problem(None, colors, markers, ["mult_freqs", "mult_gausses"], pre_folder, [1, 3], ylabel=r"$f_{stair}(t_v, p_d, \text{args})$", inc=1, bypi=True)
 
     plt.savefig(os.path.join(folder_for_all, f"p_vals_2.pdf"))
     plt.figure(1)
@@ -325,7 +339,7 @@ def plot_avramis():
     plt.show()
 
 def plot_sing_vals():
-    methods = ["Strong", "Weak", "IRMAE_2", "IRMAE_4"]
+    methods = ["Strong", "Weak", "IRMAE_2", "IRMAE_4", "LoRAE"]
     pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" # 
     matplotlib.rc('xtick', labelsize=20) 
     matplotlib.rc('ytick', labelsize=20) 
