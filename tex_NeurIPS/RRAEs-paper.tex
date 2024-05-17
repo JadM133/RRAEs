@@ -97,7 +97,7 @@
 
 
 \begin{abstract}
-    The efficiency of classical Autoencoders (AEs) is limited in many practical situations. When the latent space is reduced through autoencoders, feature extraction becomes possible. However, overfitting is a common issue, leading to 'holes' in AEs' interpolation capabilities. On the other hand, increasing the latent dimension results in a better approximation with fewer non-linearly coupled features (e.g., Koopman theory or kPCA), but it doesn't necessarily lead to dimensionality reduction, which makes feature extraction problematic. As a result, interpolating using Autoencoders gets harder. In this work, we introduce the Rank Reduction Autoencoder (RRAE), an autoencoder with an enlarged latent space, which is constrained to have few dominant singular values (i.e., low-rank). The latent space of RRAEs is large enough to enable accurate predictions while enabling efficient feature extraction. As a result, the proposed autoencoder features a minimal rank linear latent space. To achieve what's proposed, two formulations are presented, a strong and a weak one, that build a reduced basis that accurately represents the latent space. The first formulation consists of a truncated SVD in the latent space, while the second one adds a penalty term to the loss function. We show the efficiency of our formulations by using both of them for interpolation tasks and comparing the results to state-of-the-art autoencoders.
+    The efficiency of classical Autoencoders (AEs) is limited in many practical situations. When the latent space is reduced through autoencoders, feature extraction becomes possible. However, overfitting is a common issue, leading to 'holes' in AEs' interpolation capabilities. On the other hand, increasing the latent dimension results in a better approximation with fewer non-linearly coupled features (e.g., Koopman theory or kPCA), but it doesn't necessarily lead to dimensionality reduction, which makes feature extraction problematic. As a result, interpolating using Autoencoders gets harder. In this work, we introduce the Rank Reduction Autoencoder (RRAE), an autoencoder with an enlarged latent space, which is constrained to have few dominant singular values (i.e., low-rank). The latent space of RRAEs is large enough to enable accurate predictions while enabling efficient feature extraction. As a result, the proposed autoencoder features a minimal rank linear latent space. To achieve what's proposed, two formulations are presented, a strong and a weak one, that builds a reduced basis that accurately represents the latent space. The first formulation consists of a truncated SVD in the latent space, while the second one adds a penalty term to the loss function. We show the efficiency of our formulations by using both of them for interpolation tasks and comparing the results to state-of-the-art autoencoders.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -107,14 +107,14 @@ On the other hand, autoencoders with Neural Networks as their encoding and decod
 
 % This has led to multiple enhancements such as Variational \cite{doersch2016tutorial}, or Sparse Autoencoders \cite{ng2011sparse} which improved Autoencoders overall but did not definitively solve the interpolation issues.
 
-Neural Networks are increasingly being used for nonlinear reduction techniques \cite{barnett2022neuralnetworkaugmented}. Recently, the Implicit Rank-Minimizing Autoencoder (IRMAE) \cite{jing2020implicit}, and the Low-Rank Autoencoder (LoRAE) \cite{mazumder2023learning} showcased how increasing the latent space dimension while encouraging a low-rank achieves better results, including interpolation. If the latent space has a low rank, the efficiency of all presented interpolation techniques (even linear interpolation) in the latent space is enhanced. The resulting Autoencoder would benefit from the large data dimensionality of the latent space to find better approximations while allowing feature extraction because of its low rank. The architecture of IRMAE consists of adding linear layers between the encoder and the latent space, while LoRAE only adds one linear layer as well as its nuclear norm as a penalty for the loss. While both papers show how their resulting latent spaces have a lower rank compared to Vanilla and Variational Autoencoders, their work has some limitations. First, while both architectures can find a low-rank latent space or one with singular values that are sharply decreasing, they do not force the small singular values to go to zero. Accordingly, the decoder always has some noise from the small singular values, even though we intend to remove them entirely. In addition, the computational time of both architectures highly depends on the latent space dimension $L$. Since a long latent space is crucial in achieving better results, both IRMAEs and LoRAEs can be computationally expensive. Finally, both architectures do not provide explicit control over the rank of the latent space. While they have tuning parameters, we show later in the paper that their proposed parameters can not reach a rank that is as low as we desire.
+Neural Networks are increasingly being used for nonlinear reduction techniques \cite{barnett2022neuralnetworkaugmented}. Recently, the Implicit Rank-Minimizing Autoencoder (IRMAE) \cite{jing2020implicit}, and the Low-Rank Autoencoder (LoRAE) \cite{mazumder2023learning} showcased how increasing the latent space dimension while encouraging a low-rank achieves better results, including interpolation. If the latent space has a low rank, the efficiency of all presented interpolation techniques (including basic linear interpolation) in the latent space is enhanced. The resulting Autoencoder would benefit from the large data dimensionality of the latent space to find better approximations while allowing feature extraction because of its low rank. The architecture of IRMAE consists of adding linear layers between the encoder and the latent space, while LoRAE only adds one linear layer as well as its nuclear norm as a penalty for the loss. While both papers show how their resulting latent spaces have a lower rank compared to Vanilla and Variational Autoencoders, their work has some limitations. First, while both architectures can find a low-rank latent space with singular values that are sharply decreasing, they do not force the small singular values to go to zero. Accordingly, the decoder always has some noise from the small singular values, even though ideally, we would like to remove their effect entirely. In addition, the computational time of both architectures highly depends on the latent space dimension $L$. Since a long latent space is crucial for achieving better results, both IRMAEs and LoRAEs can be computationally expensive. Finally, both architectures do not provide explicit control over the rank of the latent space. While they have tuning parameters, we show later in the paper that their proposed parameters can not reach a rank that is as low as we desire.
 
-In this paper, we present Rank Reduction Autoencoders (RRAEs), which have large latent spaces restricted to have a low rank. By enforcing the latent space to accept a linear reduction (hence a lower rank), we show that our model resolves the issues previously mentioned. Our architecture includes two proposed formulations: (i) a strong and (ii) a weak one. Throughout the paper, we show that the strong formulation finds orthogonal basis vectors and forms a reduced POD basis, while the weak formulation is allowed to find non-orthogonal ones. We show that both formulations can interpolate efficiently between high-rank synthetic solutions while achieving a lower rank than the IRMAE and the LoRAE. We also demonstrate how both formulations can overcome other architectures in both interpolation and classification on the MNIST dataset.
+In this paper, we present Rank Reduction Autoencoders (RRAEs), which have large latent spaces restricted to have a low rank. By enforcing the latent space to accept a linear reduction (hence a lower rank), we show that our model resolves the issues previously mentioned. Our architecture includes two proposed formulations: (i) a strong and (ii) a weak one. Throughout the paper, we show that the strong formulation finds orthogonal basis vectors and forms a reduced POD basis, while the weak formulation is allowed to find non-orthogonal ones. We show that both formulations can interpolate efficiently between high-rank synthetic solutions while achieving a lower rank than the IRMAE and the LoRAE. We also demonstrate how both formulations can overcome other architectures when interpolating over the MNIST dataset, with a significantly lower rank.
 
-The present paper is structured as follows: section \ref{sec:HT} presents the architecture and both proposed formulations. Next, we explain our interpolation strategy in section \ref{sec:interp}. Section \ref{sec:insights} explains the insights behind long latent spaces with a low rank on two synthetic examples. Then, we compare the interpolation capabilities of RRAEs with Vanilla AEs, IRMAE, and LoRAE on a variety of problems in section \ref{sec:Nuemrical}. Finally, we summarize the main original contributions of the present paper in Section \ref{sec:conclusions}.
+The present paper is structured as follows: section \ref{sec:HT} presents the architecture and both proposed formulations. Section \ref{sec:insights} explains the insights behind long latent spaces with a low rank on two synthetic examples. Then, we compare the interpolation capabilities of RRAEs with IRMAEs, and LoRAEs on a variety of problems in section \ref{sec:Nuemrical}. We explain the limitations of the proposed formulations in section \ref{sec:limitations}, before finally summarizing the main original contributions of the present paper in section \ref{sec:conclusions}.
 
 \section{Rank Reduction Autoencoders (RRAEs)}\label{sec:HT}
-To define the architecture of RRAEs, we begin by defining autoencoder notations. Let $\{X_i\}_{i\in [1, D]} \in \mathbb{R}^T$ be a set of $D$ series of observations, each having $T$ degrees of freedom. We define our input $X\in \mathbb{R}^{T\times D}$ with $X_i$ as its $i$th column. Let, $Y \in \mathbb{R}^{L\times D}$, with $L$, the chosen dimension\footnote[1]{See Section \ref{sec:extensions} for details.} of the latent space. We also define the encoding map $e: \mathbb{R}^{T\times D} \xrightarrow{} \mathbb{R}^{L\times D}$ and the decoding map $d: \mathbb{R}^{L\times D} \xrightarrow{} \mathbb{R}^{T\times D}$. The Vanilla autoencoder can be written as the following two operations,
+To define the architecture of RRAEs, we begin by defining autoencoder notations. Let $\{X_i\}_{i\in [1, D]} \in \mathbb{R}^T$ be a set of $D$ series of observations, each having $T$ degrees of freedom. We define our input $X\in \mathbb{R}^{T\times D}$ with $X_i$ as its $i$th column. Let, $Y \in \mathbb{R}^{L\times D}$, with $L$, the chosen dimension\footnote[1]{See Appendix \ref{apdx:train} for details on the choice of $L$.} of the latent space. We also define the encoding map $e: \mathbb{R}^{T\times D} \xrightarrow{} \mathbb{R}^{L\times D}$ and the decoding map $d: \mathbb{R}^{L\times D} \xrightarrow{} \mathbb{R}^{T\times D}$. The Vanilla autoencoder can be written as the following two operations,
 \begin{equation}
     Y = e(X), \qquad \tilde{X} = d(Y).
 \end{equation}
@@ -122,7 +122,7 @@ In practice, we usually enforce that the output of the autoencoder gives us back
 \begin{equation}
     \mathcal{L}(X, \tilde{X}) = \Vert X-\Tilde{X}\Vert_2, \quad \text{where,} \quad \Vert \cdot\Vert_2 \text{ is the $L2$-norm}.
 \end{equation}
-The idea behind RRAEs is to enforce the latent matrix to have a low rank while finding a reduced basis. In other words, if $Y$ has a rank $r$, let $Y = U\Sigma V$ be the Singular Value Decomposition (SVD) \cite{stewart1993early, nakatsukasa2017accuracy} of $Y$, with $Y\in\mathbb{R}^{L\times D}$, $U\in\mathbb{R}^{L\times r}$, and $\Sigma \in\mathbb{R}^{r\times r}$, and $V\in\mathbb{R}^{r\times D}$. Let $\{\sigma_i\}_{i \in [1, r]}$ be the sorted diagonal values of $\Sigma$. Thus, by considering the $k$ most significant modes (choice of $k$ detailed in Section \ref{sec:extensions}), it results,
+The idea behind RRAEs is to enforce the latent matrix to have a low rank while finding a reduced basis. In other words, if $Y$ has a rank $r$, let $Y = U\Sigma V$ be the Singular Value Decomposition (SVD) \cite{stewart1993early, nakatsukasa2017accuracy} of $Y$, with $U\in\mathbb{R}^{L\times r}$, $\Sigma \in\mathbb{R}^{r\times r}$, and $V\in\mathbb{R}^{r\times D}$. Let $\{\sigma_i\}_{i \in [1, r]}$ be the sorted diagonal values of $\Sigma$. Thus, by considering the $k$ most significant modes (choice of $k$ detailed in Appendix \ref{apdx:train}), it results,
 \begin{equation}\label{eqn:trunc}
     Y = \sum_{i=1}^r\sigma_iU_iV_i^T \qquad\Rightarrow\qquad Y\approx \sum_{i=1}^k\sigma_iU_iV_i^T, \qquad k\ll r,
 \end{equation}
@@ -304,42 +304,42 @@ Based on \eqref{eqn:alphas}, and \eqref{eqn:mat_form}, we propose two formulatio
     \item \underline{The Strong formulation:} Unlike the weak formulation, this architecture enforces, in a strong manner, the maximum dimension of the reduced basis of the latent space. Similarly to the weak formulation, we begin by choosing the maximum rank $k_{max}$ of the latent space. Then, as seen in red in Figure \ref{fig:mdoel_arch}, a truncated SVD (of order $k_{max}$) of the latent space is given to the decoder, instead of the latent space itself. Accordingly, the input of the decoder will have at most $k_{max}$ dominant singular values. We refer to this method as the Strong formulation since we strictly enforce the latent space to have a rank that's lower or equal to $k_{max}$. In this case, the basis vectors and coefficients are simply the ones found by the truncated SVD.
 \end{enumerate}
 
-In both formulations, $k_{max}$ is a hyperparameter to be chosen. We propose a strategy to choose this hyperparameter and show its effect on training in Section \ref{sec:extensions}.
+In both formulations, $k_{max}$ is a hyperparameter to be chosen. We propose a strategy to choose this hyperparameter and discuss its effect in Appendix \ref{apdx:train}.
 
 When using the strong formulation, we compute a POD basis since the vectors are by construction orthogonal. The orthogonality of the basis vectors, as well as refraining from adding terms in the loss, can make both the training and interpolation better. On the other hand, backpropagation through the singular value decomposition is not common in practice. All the work presented in this paper was performed using \texttt{equinox} in \texttt{JAX}, where gradients of the singular value decomposition are implemented and accessible.
 
 Both formulations reduce the limitations of IRMAE and LoRAE. We sum up our contributions as follows:
 \begin{enumerate}
-    \item RRAEs lead to low-rank latent spaces that have many singular values exactly equal to zero. Since the strong formulation uses a truncated SVD, this is automatically enforced. The weak formulation, on the other hand, would minimize that when the loss tends to zero. As shown later in the paper, this leads to RRAEs being more efficient in interpolation and classification.
-    \item The computational overhead of RRAEs can be much lower, especially for large latent spaces. For the strong formulation, for the results shown in the paper, we use batches, and hence the SVD is only performed on a matrix of size $L\times bs$, $bs$ being that batch size compared to the IRMAE or LoRAE which perform gradient descent/find the nuclear norm of an $L\times L$ matrix. For the weak formulation, the added computational cost is minimal since we only use two trainable vectors. Some of the average computational times can be found in the Appendix.
-    \item Both formulations give us explicit control over the rank of the latent space. As shown next in the paper, we can control the latent space to have a lower rank than IRMAE and LoRAE, which helps in feature extraction.
+    \item RRAEs with a strong formulation lead to low-rank latent spaces that have many singular values exactly equal to zero. In other words, the decoder will get a sum of exactly $k_{max}$ rank-one updates. As will be shown later in the paper, this gives the strong formulation an advantage for training and interpolation.
+    \item The computational overhead of RRAEs can be much lower, especially for large latent spaces. For the strong formulation, when batches are used, the SVD is only performed on a matrix of size $L\times bs$, $bs$ being the batch size. Similarly, for the weak formulation, the added computational cost is minimal since the trainable matrices are of shape $L \times k_{max}$ and $k_{max} \times D$ with $k_{max} \ll L$. On the other hand, the IRMAE or the LoRAE either perform a gradient descent or find the nuclear norm of an $L\times L$ matrix. Since a large latent space dimension $L$ usually helps in achieving better results, both IRMAEs and LoRAEs can be computationally challenging. 
+    \item Both formulations give us explicit control over the rank of the latent space. As shown next in the paper, we can control the latent space to have a lower rank than IRMAE and LoRAE, which leads to better interpolation and could help for feature extraction in future applications.
 \end{enumerate}
 
-\section{Interpolation in the latent space}\label{sec:interp}
-The fact that motivated us to make this proposal is the limitations of linear interpolation between solutions when the solution matrix is high-rank. Take, for instance, sinusoidal curves shifted by a scalar $p$ (i.e. $\sin(x+p)$). As can be seen in Figure \ref{fig:sin}, interpolating linearly between the curves corresponding to parameters $p_0 = 0$ and $p_1 = \pi$ to find the middle curve at $p^*= \pi/2$ (i.e. simply the sum divided by two) leads to the horizontal line at zero, instead of finding the correct curve shifted towards the middle.
+% \section{Interpolation in the latent space}\label{sec:interp}
+% The fact that motivated us to make this proposal is the limitations of linear interpolation between solutions when the solution matrix is high-rank. Take, for instance, sinusoidal curves shifted by a scalar $p$ (i.e. $\sin(x+p)$). As can be seen in Figure \ref{fig:sin}, interpolating linearly between the curves corresponding to parameters $p_0 = 0$ and $p_1 = \pi$ to find the middle curve at $p^*= \pi/2$ (i.e. simply the sum divided by two) leads to the horizontal line at zero, instead of finding the correct curve shifted towards the middle.
 
 
-\begin{figure}[!b]
-    \centering
-    \includegraphics[clip, trim=0.2cm 0.3cm 0cm 1cm, width=0.54\textwidth]{sin.pdf}
-    \caption{Result when interpolating linearly between two shifted sine curves, showing why linear interpolation is not a good choice for problems with multiple dominant singular values.}
-    \label{fig:sin}
-\end{figure}
+% \begin{figure}[!b]
+%     \centering
+%     \includegraphics[clip, trim=0.2cm 0.3cm 0cm 1cm, width=0.54\textwidth]{sin.pdf}
+%     \caption{Result when interpolating linearly between two shifted sine curves, showing why linear interpolation is not a good choice for problems with multiple dominant singular values.}
+%     \label{fig:sin}
+% \end{figure}
 
 
-By mapping the data into a larger latent space while enforcing a low rank, we can find a space where a linear interpolation would be possible to represent the interpolated curve, before going back to the original space, using the decoder.
+% By mapping the data into a larger latent space while enforcing a low rank, we can find a space where a linear interpolation would be possible to represent the interpolated curve, before going back to the original space, using the decoder.
 
-Both proposed formulations allow us to approximate the latent space by \eqref{eqn:alphas}. Now let's suppose that every series of observations $X_d$ is tied to a vector of parameters $\mathbf{p}_d \in \mathbb{R}^P$. Accordingly, and since the basis vectors (i.e. columns of $U$) are the same for any solution, we can interpolate between the coefficients $\alpha_{j,d}$,
-\begin{equation}
-    Y_d=\sum_{j=1}^{k_{max}}\alpha_{j,d}U_j \qquad \Longrightarrow \qquad Y_d(\textbf{p}_d) = \sum_{j=1}^{k_{max}}\gamma_j(\textbf{p}_d)U_j,
-\end{equation}
-where each $\gamma_j: \mathbb{R}^P \xrightarrow{} \mathbb{R}$, could be any mapping, that maps all the training parameters to the corresponding $\alpha_{j,d}$, and allows us to interpolate when used on new values of $\mathbf{p}$. Since we interpolate between coefficients, the computational cost of RRAEs for interpolation is the same as the cost of using a Vanilla Autoencoder with a latent space of dimension $k_{max}$.
+% Both proposed formulations allow us to approximate the latent space by \eqref{eqn:alphas}. Now let's suppose that every series of observations $X_d$ is tied to a vector of parameters $\mathbf{p}_d \in \mathbb{R}^P$. Accordingly, and since the basis vectors (i.e. columns of $U$) are the same for any solution, we can interpolate between the coefficients $\alpha_{j,d}$,
+% \begin{equation}
+%     Y_d=\sum_{j=1}^{k_{max}}\alpha_{j,d}U_j \qquad \Longrightarrow \qquad Y_d(\textbf{p}_d) = \sum_{j=1}^{k_{max}}\gamma_j(\textbf{p}_d)U_j,
+% \end{equation}
+% where each $\gamma_j: \mathbb{R}^P \xrightarrow{} \mathbb{R}$, could be any mapping, that maps all the training parameters to the corresponding $\alpha_{j,d}$, and allows us to interpolate when used on new values of $\mathbf{p}$. Since we interpolate between coefficients, the computational cost of RRAEs for interpolation is the same as the cost of using a Vanilla Autoencoder with a latent space of dimension $k_{max}$.
 
-For instance, for a parameter space of dimension one and sorted coefficients, we can interpolate linearly by writing,
-\begin{equation}
-    \gamma_j(p) = \alpha_{j,m} + \frac{\alpha_{j, m+1}-\alpha_{j,m}}{p_{m+1}-p_{m}}(p-p_{m}), \qquad \forall p \in [p_m, p_{m+1}].
-\end{equation}
-In this paper, we show that interpolating linearly for parametric spaces of dimension one, and bilinearly for those of dimension two is enough. In general, each $\gamma_j$ can be approximated by any regression, including a Neural Network, or the sPGD.
+% For instance, for a parameter space of dimension one and sorted coefficients, we can interpolate linearly by writing,
+% \begin{equation}
+%     \gamma_j(p) = \alpha_{j,m} + \frac{\alpha_{j, m+1}-\alpha_{j,m}}{p_{m+1}-p_{m}}(p-p_{m}), \qquad \forall p \in [p_m, p_{m+1}].
+% \end{equation}
+% In this paper, we show that interpolating linearly for parametric spaces of dimension one, and bilinearly for those of dimension two is enough. In general, each $\gamma_j$ can be approximated by any regression, including a Neural Network, or the sPGD.
 \section{Insights behind Long latent spaces with low rank}\label{sec:insights}
 An enlarged latent space can exhibit a linear behavior (as employed for instance in the Koopman theory, or the kPCA). Furthermore, a latent space with a reduced basis allows us to interpolate better, as well as extract features. The Diabolo Autoencoder on the other hand has ``holes'' in its interpolation \cite{jing2020implicit}, since it does not find a basis, but only a set of coefficients that are helpful for the decoder to retrieve the solution. Since the decoder is highly nonlinear, the coefficients can be anything, which leads to overfitting.
 
@@ -399,41 +399,37 @@ On the other hand, as proposed earlier, a longer latent space allows us to find 
 
 Finally, the right part of the figure depicts that when the curves are simple to separate and are characterized by only one parameter, both architectures can find monotonic coefficients that fit both the train and test sets. We conclude that even though long latent spaces have many advantages, they are not always necessary, especially when the solution is simple and separable.
 \section{Testing on Numerical Data}\label{sec:Nuemrical}
-The solutions interpolated in the previous section were only characterized by one parameter. However, when the dimension of the parametric space is bigger than one, RRAEs are expected to outperform DAEs even more. In this section, we test RRAEs and compare them to DAEs, IRMAEs, and LoRAEs on two examples with a parametric space of dimension two, as well as on the MNIST dataset for interpolation and classification.
+The solutions interpolated in the previous section were only characterized by one parameter. In this section, we test RRAEs and compare them to IRMAEs, and LoRAEs on two examples with a parametric space of dimension two, as well as on the MNIST dataset.
 \subsection{Examples with two parameters}\label{sec:numerical_example}
-We generated two challenging synthetic tests for interpolation. First, we propose the sum of two sine curves with different frequencies, as well as two Gaussian bumps in two different locations. We show how in such examples that both our formulations result in latent spaces with a lower rank and better results than IRMAEs and LoRAEs for the hyperparameters chosen (again, training details can be found in Appendix \ref{apdx:train}). We define the columns of our input matrix $X_d(t_v,\, p_d) = f_{prob}$ for each problem as follows,
+We generated two challenging synthetic tests for interpolation. First, we propose the sum of two sine curves with different frequencies, as well as two Gaussian bumps in two different locations. We show how in such examples both our formulations result in latent spaces with a lower rank and better results than IRMAEs and LoRAEs for the hyperparameters chosen (again, training details can be found in Appendix \ref{apdx:train}). We define the columns of our input matrix $X_d(t_v,\, p_d) = f_{prob}$ for each problem as follows,
 \begin{equation}\nonumber
     \begin{cases}
         f_{freqs}(t_v,\, \textbf{p}_d) = \sin(p^1_d\pi t_v)+\sin(p^2_d\pi t_v), \qquad\qquad\quad                       & p^1_d \in [0.3, 0.5], \quad p^2_d \in [0.8, 1], \\[1.5ex]
         f_{gauss}(t_v,\, \textbf{p}_d) =  1.3e^{-\frac{(t_v-p^1_d)^2}{0.08}}+1.3e^{-\frac{(t_v-p^2_d)^2}{0.08}}, \qquad & p^1_d \in [1, 3], \quad p^2_d \in [4, 6],
     \end{cases}
 \end{equation}
-We distinguish between the \textbf{bold} notation for vectors and non-bold ones for scalars. In both expressions, our parametric space is of dimension $2$ and so $\textbf{p}_d = [p^1_d, \,p^2_d] \in \mathbb{R}^2$. For each example and each architecture, we present some interpolated predictions in Figure \ref{fig:sin_sin_gauss}, and the error over all the training/test sets in Table \ref{fig:table_sin_sin_gauss}.
+We distinguish between the \textbf{bold} notation for vectors and non-bold ones for scalars. In both expressions, our parametric space is of dimension $2$ and so $\textbf{p}_d = [p^1_d, \,p^2_d] \in \mathbb{R}^2$. For each example and each architecture, we present some interpolated predictions in Figure \ref{fig:sin_sin_gauss}, and the error over all the training/testing sets in Table \ref{fig:table_sin_sin_gauss} as well as the average training time for 100 batches.
 
 
 \begin{table}[h]
-    \caption{Relative error (in \%) for all architectures on both the train and test sets for the two examples with two parameters, $l$ for IRMAE means the number of linear layers.}
+    \caption{Relative error (in \%) for all architectures on both the train and test with a latent space of dimension 2800 for the two examples presented, as well as the average time (in s) for 100 batches.}
     \label{fig:table_sin_sin_gauss}
     \centering
-    \begin{tabular}{ccccc}
+    \begin{tabular}{cccccc}
         \toprule
-        {}            & \multicolumn{2}{c}{Mult. Frequencies} & \multicolumn{2}{c}{Mult. Gausses}                                                  \\
+        {}            & \multicolumn{2}{c}{Mult. Frequencies} & \multicolumn{2}{c}{Mult. Gausses}                                             \\
         \cmidrule(lr){2-5}                                                      \\
         \addlinespace[-0.2cm]
-        Model        & Train Error                       & Test error    & Train Error   & Test error     \\
+        Model        & Train Error                       & Test error    & Train Error   & Test error  &  Average time   \\
         \midrule
-        RRAE (strong)          & \textbf{6.33}                      & \textbf{12.83} & \textbf{4.46} & \textbf{8.75} \\
-        RRAE (weak)         & 10.33                             &     15.09     & 8.50         & 10.69          \\
-        IRMAE (l=2)        & 6.95                             &      17.35    & 4.68         & 13.93 \\
-        IRMAE (l=4)        &     N/A                         &     N/A     & 8.41         & 14.78 \\
-        LoRAE        &                             &          &          &  \\
+        RRAE (strong)          & 6.33                      & \textbf{12.83} & \textbf{4.46} & \textbf{8.75} & 1.61\\
+        RRAE (weak)         & 10.33                             &     15.09     & 8.50         & 10.69  & \textbf{0.52} \\
+        IRMAE (l=2)        & 6.95                             &      17.35    & 4.68         & 13.93 & 3.6\\
+        IRMAE (l=4)        &     N/A                         &     N/A     & 8.41         & 14.78 & 7.50\\
+        LoRAE        &    \textbf{5.40}                          &    13.83      &          &   & 420.4\\
         \bottomrule
     \end{tabular}
 \end{table}
-
-
-As can be seen in both the table and the figures, RRAEs with both formulations can interpolate much better than Vanilla AEs when linear/bilinear interpolation is used in the latent space.
-
 
 \begin{figure}[!t]
     \centering
@@ -449,36 +445,43 @@ As can be seen in both the table and the figures, RRAEs with both formulations c
     \label{fig:sin_vals_gauss}
 \end{figure}
 
-As can be seen in Table \ref{fig:table_sin_sin_gauss}, both our formulations are outperforming the IRMAE and LoRAE for a fixed choice of hyperparameters. Additionally, we note that increasing the parameter $l$ for the IRMAE leads to divergence of the gradient descent (hence the N/A). Note that we only used the parameters shared in both papers for IRMAE and LoRAE. A fine-tuning of the parameters could lead to better results for these architectures. Additionally, we draw a part of the normalized singular values in figure \ref{fig:sin_vals_gauss}. The singular values shown in the figure illustrate that adding the number of linear layers for the IRMAE (i.e. $l$) indeed reduces the rank of the latent space. However, both of our formulations can be asked to find latent spaces with lower ranks. From the log graph to the right, we can understand why the strong has the best results. As previously mentioned, the IRMAE, the LoRAE and even our weak formulation don't enforce the singular values to fall to zero. So even though many singular values are small, they still have a noise effect over the decoder, which reduces their efficiency in interpolation. On the other hand, the weak formulation does better than both the IRMAE and LoRAE since it enforces a lower rank.
+As can be seen in Table \ref{fig:table_sin_sin_gauss}, both our formulations are outperforming the IRMAE and LoRAE for a fixed choice of hyperparameters. Additionally, we note that increasing the parameter $l$ for the IRMAE leads to divergence of the gradient descent (hence the N/A). Note that we only used the parameters specified in both papers for IRMAE and LoRAE. A fine-tuning of the parameters could lead to better results for these architectures. On the other hand, the table shows how much faster our proposed formulations are. Our formulations are fast since we only add small matrices to the loss in the weak formulation, and we compute an SVD of an $L\times bs$ matrix, $bs$ being the batch size, in the Strong formulation. On the other hand, IRMAEs and LoRAEs find the gradient/the nuclear norm of an $L\times L$ matrix respectively, with $L$ relatively large. 
+
+Additionally, we draw parts of the normalized singular values of the latent space for the multiple gausses problem in figure \ref{fig:sin_vals_gauss}. The figure illustrates that adding the number of linear layers for the IRMAE (i.e. increasing $l$) indeed reduces the rank of the latent space. However, both of our formulations can be asked to find latent spaces with lower ranks. From the log graph to the right, we can understand why the strong formulation achieves the best results. As previously mentioned, the IRMAE, the LoRAE and our weak formulation don't enforce the singular values to fall to zero. So even though many singular values are small, they still have a noise effect over the decoder, which reduces their efficiency in interpolation. On the other hand, the weak formulation does better than both the IRMAE and LoRAE since it enforces a lower rank.
 
 \subsection{Testing on MNIST}\label{sec:extensions}
+In this section, we compare our architecture to the IRMAE and the LoRAE on the MNIST dataset. An example of linear interpolation of five steps between numbers $5$ and $0$ can be seen in figure \ref{fig:interp_mnist}. The singular values of the latent space for all formulations can be found in figure \ref{fig:sin_vals_mnist}.
 
+The interpolation in figure \ref{fig:interp_mnist} depicts that the Strong formulation is capable of performing better interpolation. While all techniques face problems with the second subplot from the left, the drawing for the strong formulation is the closest to a $5$, while the drawing for the weak formulation could be confused for a $6$, and the corresponding picture for the IRMAE doesn't look like a number.
 
-\begin{table}[h]
-    \caption{Relative error (in \%) when different ranks are enforced for the latent space to learn interpolation over the crystallization rates.}
-    \label{fig:table_avramis}
+On the other hand, the singular values drawn in figure \ref{fig:sin_vals_mnist} show that the weak formulation surprisingly converges to a very low rank. It is important to note that both the strong and the weak formulations were able to interpolate on the MNIST dataset with a rank that's strictly less than 6. This shows the ability of our formulations to perform feature extraction. Again, the noise caused by the nonzero singular values is the main reason behind the enhanced capabilities of the strong method to interpolate between numbers.
+\begin{figure}[!b]
     \centering
-    \begin{tabular}{ccccc}
-        \toprule
-        {}   & \multicolumn{2}{c}{Weak formulation} & \multicolumn{2}{c}{Srong formulation}                            \\
-        \cmidrule(lr){2-5}                                                                                             \\
-        \addlinespace[-0.2cm]
-        Rank & Train Error                          & Test error                            & Train Error & Test error \\
-        \midrule
-        2    & 0.65                                 & 3.38                                  & 0.36        & 1.81       \\
-        3    & 0.81                                 & 1.97                                  & 0.35        & 1.81       \\
-        5    & 0.59                                 & 1.85                                  & 0.41        & 1.84       \\
-        10   & 0.62                                 & 1.99                                  & 0.68        & 1.9        \\
-        \bottomrule
-    \end{tabular}
-\end{table}
+    \includegraphics[clip, scale=0.6, trim=0 0cm -1cm 1cm]{mnist_interp.pdf}
+    \caption{Three-step interpolation between a rotated number $5$ and a number $0$ on MNIST using RRAEs with both formulations, IRMAEs, and LoAREs.}
+    \label{fig:interp_mnist}
+\end{figure}
+
+\begin{figure}[!t]
+    \centering
+    \includegraphics[clip, scale=0.29, trim=1.6cm 1.3cm 0cm 2.6cm]{sing_vals_mnist.pdf}
+    \caption{Normalized singular values of the latent space $Y$ when trained over MNIST. The first 40 singular values are shown to the left, while many of the small singular values are shown on a log scale to the right.}
+    \label{fig:sin_vals_mnist}
+\end{figure}
+
+\section{Limitations}\label{sec:limitations}
+As has been shown in the paper's results, RRAEs with both formulations can interpolate well while using a latent space with a low rank. However, our proposed model has some limitations:
+\begin{enumerate}
+    \item Even though both of our formulations allow explicit control over the rank of the latent space, $k_{max}$ is an additional hyperparameter to be tuned. In practice, we found that starting with a small value of $k_{max}$ and increasing it until error convergence is a good strategy. In general, other techniques such as a PCA could be used to approximate the intrinsic dimension of the latent space.
+    \item The weak formulation adds regularisation constants to the loss, which can be hard to tune. However, we found that by monitoring the two terms in the loss while training, it is clear in the first few epochs which constant should be increased/decreased. Yet, training should be performed multiple times to tune the weights of each term in the loss.
+    \item For high dimensional problems where a very large latent space is needed, the strong formulation can be computationally expensive. Even though the SVD is only performed on a matrix of size $L\times bs$, $bs$ being the batch size and $L$ the length of the latent space, the cost of computing an SVD and backpropagating through it when $L$ is very large can be high.
+    \item As shown in Section \ref{sec:insights}, the effect of a long latent space is reduced when the solution is simple and separable. In such cases, an increased dimension of the latent space, hence RRAEs, might not be necessary.
+\end{enumerate}
 
 \section{Summary and Conclusions}\label{sec:conclusions}
 In this article, we presented Rank Reduction Autoencoders (RRAEs), Autoencoders with latent spaces that accept linear reduction. We proposed two formulations, a weak and a strong one to find the latent space while building its reduced basis. Even though the basis vectors in the strong formulation are orthogonal, and they need not be in the weak formulation, we showed that both formulations can interpolate well between curves. 
 
-Overall, the strong formulation was better than the weak one over all the examples tested. However, the weak method is much simpler to implement, since it only consists of adding a term to the loss. Our findings show that longer latent spaces with a reduced basis lead to more efficient Autoencoders. The enhancements brought by RRAEs are limited when interpolating between simple examples with one parameter. However, RRAEs are more performant interpolators between more complicated curves and parametric spaces. Further, they have the same computational cost as Vanilla AEs for interpolation. 
-
-Finally, we showed that, when combined with a POD, RRAEs with a strong formulation can filter noise while reducing the computational overhead. They can also approximate the intrinsic dimension of the parametric space if a larger one (but smaller than the original space's dimension), is specified as the maximum rank of the latent space.
+Overall, our results show that the Strong formulation has a superior capability of interpolation since it doesn't have any noise from small nonzero singular values in the latent space. We also showed that both the Strong and the Weak formulations can achieve much lower ranks in the latent space and hence can interpolate better than existing methodologies. Finally, both formulations are faster to train, with the weak formulation being the fastest. While the Strong formulation leads to better predictions, the Weak formulation is much simpler to implement since it only adds a penalty term to the loss.
 \newpage
 
 \bibliographystyle{plainnat}
@@ -510,26 +513,28 @@ In this paper, we choose the initial parameters of the stair function to be,
     \end{cases}
 \end{equation}
 \section{Training details}\label{apdx:train}
-\subsection{Hyperparameters}
-The main purpose of this section is to allow readers to reproduce the results, and share the parameters we used to train RRAEs. In general, the main parameters for RRAEs are the dimension of the latent space, $k_{max}$, the encoder/decoder architectures, learning rates, epochs, and batch sizes. For each problem, we fix the common parameters for RRAEs (weak and strong) as well as the Vanilla Autoencoders. We try to only change necessary parameters between different examples, to show that training RRAEs, especially with the strong formulation, doesn't require too much hyperparameters tuning. For all problems and all formulations, we use an encoder of depth $1$ and width $64$, and a decoder of depth $6$ and width $64$. Additionally, we use batches of size $20$, the \texttt{softplus} as activation function between all layers, and the \texttt{adabeleif} optimizer, for all problems and formulations. Furthermore, we use multiple learning rates, starting with $1\mathrm{e}{-3}$ and dividing by $10$ until reaching $1\mathrm{e}{-5}$ (3 steps). In each step, we train for 2000 epochs. however, we impose stagnation criteria which usually stop training earlier. Throughout the paper, the only two parameters that we vary are the length of the latent space $L$ and a coefficient $\kappa_w$ that changes the learning rates for the trainable matrices of the weak method. In practice, training the weak method is not easy. Since the encoder/decoder might need very small learning rates, applying the same learning rate to the trainable matrices $U$, and $A$, which are initialized to be small normalized values, it is very hard to converge to large coefficients. Accordingly, while we use the same learning rate strategy proposed before for the encoder/decoder, we propose to multiply the learning rate by a constant $\kappa_w$ before applying it to the trainable matrices $U$ and $A$. This facilitates convergence and simplifies the choice of other parameters. In Table \ref{fig:fixed_params}, we illustrate the latent space dimension $L$ and the constant $\kappa_w$ used for all the illustrated example in this work.
+\subsection{Hyperparameters for synthetic data}
+The main purpose of this section is to allow readers to reproduce the results, and share the parameters we used to train the models. In general, the main parameters for RRAEs are the dimension of the latent space, $k_{max}$, the encoder/decoder architectures, learning rates, epochs, and batch sizes. For each problem, we fix the common parameters between all architectures. We try to only change necessary parameters between different examples, to show that training RRAEs, especially with the strong formulation, doesn't require too much hyperparameters tuning. For all problems and all formulations, we use an encoder of depth $1$ and width $64$, and a decoder of depth $6$ and width $64$. Additionally, we use batches of size $20$, the \texttt{softplus} as activation function between all layers, and the \texttt{adabeleif} optimizer, for all problems and formulations. Furthermore, we use multiple learning rates, starting with $1\mathrm{e}{-3}$ and dividing by $10$ until reaching $1\mathrm{e}{-5}$ (3 steps). In each step, we train for 2000 batches. however, we impose stagnation criteria which usually stop training earlier. Throughout the paper, the only two parameters that we vary for RRAEs are the length of the latent space $L$ and a coefficient $\kappa_w$ that changes the learning rates for the trainable matrices of the weak method. In practice, training the weak method is not easy. Since the encoder/decoder might need very small learning rates, applying the same learning rate to the trainable matrices $U$, and $A$, which are initialized to be small normalized values, it is very hard to converge to large coefficients. Accordingly, while we use the same learning rate strategy proposed before for the encoder/decoder, we propose to multiply the learning rate by a constant $\kappa_w$ before applying it to the trainable matrices $U$ and $A$. By doing so, we find that there is no need to tune the loss parameters. We found that in practice, changing $\kappa_w$ instead of the weights in the loss can be easier. It is important to note that $U$ is normalized at every training step so $A$ captures the coefficients. In Table \ref{fig:fixed_params}, we illustrate the latent space dimension $L$ and the constant $\kappa_w$ used for all the illustrated examples in this work.
 
 
 \begin{table}[h]
     \caption{Different values of the latent space length $L$ and the constant $\kappa_w$ used for all the examples in this work.}
     \label{fig:fixed_params}
     \centering
-    \begin{tabular}{cccccccc}
+    \begin{tabular}{ccccc}
         \toprule
-        Param.     & Shifts & Stair-like & Acc. & Mult. Freqs. & Mult. Gauss. & Av. & Av.-noise \\
+        Param.     & Shifts & Stair-like & Mult. Freqs. & Mult. Gauss.  \\
         \midrule
-        $L$        & 240    & 1500       & 400  & 18852        & 4800         & 900 & 900       \\
-        $\kappa_w$ & 10     & 1          & 1    & 1000         & 1            & 50  & 100       \\
+        $L$        & 4500       & 400  & 18852        & 4800       \\
+        $\kappa_w$ & 10     & 1   & 1000         & 1      \\
         \bottomrule
     \end{tabular}
 \end{table}
 
 
-We observe that in some problems, $\kappa_w=1$, and hence an increase in the learning rate was not necessary. However, it is much harder to converge to the solution of the other problems without a factor that could reach up to $1000$. As a final note, for training using the weak formulation, we encourage the normalization of the basis vectors after every epoch. If the matrix $U$ is not normalized (by its columns), training becomes more challenging.
+We observe that in some problems, $\kappa_w=1$, and hence an increase in the learning rate was not necessary. However, it is much harder to converge to the solution of the other problems without a factor that could reach up to $1000$. Next, we detail how the choice of $k_{max}$ was made for each example.
+
+
 \subsection{Choice of parameters}
 Throughout the paper, we mentioned the range in which the values of $\textbf{p}_d$ were chosen for each example. In this subsection, we provide some details on the chosen values of $\textbf{p}_d$, mainly to show that the test covers most of the parametric space. Throughout the paper, we presented curves with parametric spaces of one and two. The following figures show the plot of the second parameter against the first one when the space is of dimension two (Figure \ref{fig:two_p}). On the other hand, when the curve is only characterized by one parameter, we plot the vector of the parameter against itself (Figure \ref{fig:one_p}). Hence, we plot dots on a diagonal line to show where the test values lie compared to the train values. Our test set was chosen randomly but using a \texttt{JAX} seed to ensure reproducibility. As can be seen in the figures, we carefully chose the seeds to have a test set that represents most of the parametric space.
 

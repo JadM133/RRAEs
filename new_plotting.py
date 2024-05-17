@@ -386,12 +386,18 @@ def plot_sing_vals():
     plt.show()
 
 def plot_MNIST():
-    def interpolate_MNIST_figs(all_trainors, k1, k2, points):
+    def interpolate_MNIST_figs(all_trainors, names, k1, k2, points):
         matplotlib.rc('xtick', labelsize=20) 
         matplotlib.rc('ytick', labelsize=20) 
-        fig, axes = plt.subplots(len(all_trainors), points+2, figsize=(1.5*points, 2*len(all_trainors)))
+        plt.tick_params(
+            axis='both',          # changes apply to the x-axis
+            which='both',      # both major and minor ticks are affected
+            bottom=False,      # ticks along the bottom edge are off
+            top=False,         # ticks along the top edge are off
+            labelbottom=False)
+        fig, axes = plt.subplots(len(all_trainors), points+2, figsize=(1.5*points+3, 2*len(all_trainors)))
         x_train = get_data("mnist_")[1]
-        for i, trainor in enumerate(all_trainors):
+        for i, (trainor, name) in enumerate(zip(all_trainors, names)):
             lat = trainor.model.latent(x_train)
             latent_1 = lat[..., k1]
             latent_2 = lat[..., k2]
@@ -405,13 +411,22 @@ def plot_MNIST():
             figs.append(sample_2)
             for j, ax in enumerate(axes[i]):
                 ax.imshow(figs[j], cmap="gray")
-                ax.axis("off")
-            plt.tight_layout()
-            plt.show()
+                if j == 0:
+                    if name == "IRMAE_2":
+                        name = "IRMAE (l=2)"
+                    elif name == "Strong_5":
+                        name = "Strong"
+                    ax.set_ylabel(name, fontsize=20)
+                ax.xaxis.set_tick_params(labelbottom=False, length=0)
+                ax.yaxis.set_tick_params(labelleft=False, length=0)
+                ax.set_xticklabels([])
+                ax.set_yticklabels([])
+                
+        plt.tight_layout()
         
-    names = ["Weak", "Strong_8", "IRMAE_2"]
+    methods = ["Strong_5", "Weak", "IRMAE_2"]
     all_trainors = []
-    for i, name in enumerate(names):
+    for i, name in enumerate(methods):
         method = name
         problem = "mnist_"
         folder = f"{problem}/{method}_{problem}/"
@@ -420,7 +435,63 @@ def plot_MNIST():
         trainor.load(os.path.join(folder, file))
         all_trainors.append(trainor)
     
-    interpolate_MNIST_figs(all_trainors, 1, 10, 7)
+    interpolate_MNIST_figs(all_trainors, methods, 25, 1, 3)
+    plt.savefig(os.path.join(folder_for_all, f"mnist_interp.pdf"))
+    plt.clf()
+
+def plot_sing_MNIST():
+    methods = ["Weak", "Strong_5", "IRMAE_2"]
+    matplotlib.rc('xtick', labelsize=20) 
+    matplotlib.rc('ytick', labelsize=20) 
+    fig1 = plt.figure(1)
+    fig1.set_size_inches(18.5, 10.5)
+    fig1 = fig1.add_subplot(1, 2, 1)
+    plt.subplots_adjust(hspace=0.5, wspace=0.25)
+    
+    def plot_problem(methods, colors, markers, problem, pre_folder, indices, ylabel, inc=0, sample=6):
+        
+        for j, (method,) in enumerate(zip(methods)):          
+            
+            folder = f"{problem}/{method}_{problem}/"
+            file = f"{method}_{problem}"
+            trainor = Trainor_class()
+            trainor.load(os.path.join(folder, file))
+            ts = trainor.ts
+            if ts is None and problem == "mult_gausses":
+                ts = jnp.arange(0, 6, 0.005)
+            elif ts is None and problem == "mult_freqs":
+                ts = jnp.arange(0, 5 * jnp.pi, 0.01)
+
+            ss, vv, dd = jnp.linalg.svd(trainor.model.latent(trainor.x_train), full_matrices=False)
+
+            plt.figure(1)
+            plt.subplot(1, 2, inc+1)
+            if method == "IRMAE_2":
+                method = "IRMAE (l=2)"
+            elif method == "IRMAE_4":
+                method = "IRMAE (l=4)"
+            elif method == "Strong_5":
+                method = "Strong"
+            if inc == 0:
+                plt.plot(vv[:40] / jnp.max(vv), label=method, marker="o")
+            if inc == 1:
+                plt.plot(jnp.arange(20, 80, 1), vv[20:80] / jnp.max(vv), label=method, marker="o")
+                plt.yscale("log")
+    
+            plt.xlabel(r'Index', fontsize=20)
+            plt.ylabel(ylabel, fontsize=20)
+            if inc == 0:
+                plt.title("Normalized singular values of the latent space", fontsize=15)
+            else:
+                plt.title("Normalized singular values of the latent space - log", fontsize=15)
+            plt.legend(fontsize=10)
+
+
+    plot_problem(methods, None, None, "mnist_", "", [44, 70], r"$\sigma$", inc=0, sample=24)
+    plot_problem(methods, None, None, "mnist_", "pre_folder", [98, 3], r"$\sigma$", inc=1, sample=24)
+
+    plt.savefig(os.path.join(folder_for_all, f"sing_vals_mnist.pdf"))
+    plt.show()
 
 if __name__ == "__main__":
     try:
@@ -440,5 +511,7 @@ if __name__ == "__main__":
             plot_sing_vals()
         case "MNIST":
             plot_MNIST()
+        case "sing_MNIST":
+            plot_sing_MNIST()
         case _:
             raise ValueError("Invalid problem")

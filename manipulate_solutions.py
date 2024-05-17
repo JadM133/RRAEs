@@ -2,6 +2,7 @@ import os
 import pdb
 from training_classes import Trainor_class
 import dill
+from utilities import get_data
 
 
 def find_vs(filename, method):
@@ -157,33 +158,34 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import jax.numpy as jnp
 
-    names = ["Strong_8"]
+    names = ["Weak"]
     all_trainors = []
     for i, name in enumerate(names):
         method = name
-        problem = "mnist_"
+        problem = "shift"
         folder = f"{problem}/{method}_{problem}/"
         file = f"{method}_{problem}"
         trainor = Trainor_class()
         trainor.load(os.path.join(folder, file))
         all_trainors.append(trainor)
         try:
-            print(f"Train error: {trainor.error_train}")
-            print(f"Test error: {trainor.error_test}")
-            print(f"Time spent: {trainor.t_all}")
+            # print(f"Train error: {trainor.error_train}")
+            # print(f"Test error: {trainor.error_test}")
+            # print(f"Time spent: {trainor.t_all}")
             plt.figure(2)
             plt.scatter(i, trainor.error_test, label=name)
         except:
             pass
+        x_train = get_data(problem)[1]
         ss, vv, dd = jnp.linalg.svd(
-            trainor.model.latent(trainor.x_train), full_matrices=False
+            trainor.model.latent(x_train), full_matrices=False
         )
         plt.figure(1)
-        plt.plot(vv[:80] / jnp.max(vv), label=name, marker="o")
-        plt.figure(3)
-        plt.scatter(i, trainor.t_all, label=name)
+        plt.plot(vv[0:40] / jnp.max(vv), label=name, marker="o")
+        # plt.figure(3)
+        # plt.scatter(i, trainor.t_all, label=name)
     plt.figure(1)
-    plt.ylim([0, 0.4])
+    plt.ylim([0, 1])
     plt.legend()
     plt.figure(2)
     plt.legend()

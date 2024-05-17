@@ -209,13 +209,16 @@ def save_eqx_nn(filename, hyperparams, models):
 
 def main_alpha(train_func, trainor, output, x_test, output_test, **kwargs):
     
+    x_train = get_data(problem)[1]
+
     mlp_model, hyperparams, pred_train, pred_test, acc_train, acc_test = train_func(
-        trainor.model.latent(trainor.x_train).T,
+        trainor.model.latent(x_train).T,
         output,
         trainor.model.latent(x_test).T,
         output_test,
         **kwargs,
     )
+    trainor.x_train = x_train
     trainor.x_test = x_test
     trainor.y_test = output_test
     trainor.y_train = output
@@ -229,21 +232,22 @@ def main_alpha(train_func, trainor, output, x_test, output_test, **kwargs):
 
 
 if __name__ == "__main__":
-    method = "Strong"
-    problem = "mnist_new"
-    folder = f"{problem}/{method}_{problem}/"
-    file = f"{method}_{problem}"
-    trainor = Trainor_class()
-    trainor.load(os.path.join(folder, file))
-    kwargs = {
-        "dropout": 0,
-        "step_st": [938],
-        "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
-        "width_size": 20,
-        "depth": 1,
-        "batch_size_st": [64],
-    }
-    output, x_test, output_test = get_data(problem, mlp=True)
-    trainor = main_alpha(train_alpha, trainor, output, x_test, output_test, **kwargs)
-    trainor.save(os.path.join(folder, file))
+    for method in ["Strong_8", "Strong_5", "Strong_12"]:
+        problem = "mnist_"
+        folder = f"{problem}/{method}_{problem}/"
+        file = f"{method}_{problem}"
+        trainor = Trainor_class()
+        trainor.load(os.path.join(folder, file))
+        kwargs = {
+            "dropout": 0,
+            "step_st": [938], #[938],
+            "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
+            "width_size": 64,
+            "depth": 1,
+            "batch_size_st": [64],
+        }
+        output, x_test, output_test = get_data(problem, mlp=True)
+        trainor = main_alpha(train_alpha, trainor, output, x_test, output_test, **kwargs)
+        pdb.set_trace()
+        trainor.save(os.path.join(folder, file))
     pdb.set_trace()

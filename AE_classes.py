@@ -7,6 +7,8 @@ from utilities import (
     v_vt_class,
     CNN,
     CNN_trans,
+    MNIST_CNN,
+    MNIST_CNN_trans,
     MNIST_patrick_CNN,
     MNIST_patrick_CNN_trans,
 )
@@ -351,8 +353,8 @@ class MNIST_CNN_Autoencoder(Autoencoder):
         **kwargs,
     ):
         keys = jrandom.split(key, 2)
-        _encode = MNIST_patrick_CNN(latent_size, key=keys[0], **kwargs_enc)
-        _decode = MNIST_patrick_CNN_trans(latent_size, key=keys[1], **kwargs_dec)
+        _encode = MNIST_CNN(latent_size, key=keys[0], **kwargs_enc)
+        _decode = MNIST_CNN_trans(latent_size, key=keys[1], **kwargs_dec)
         super().__init__(
             data,
             latent_size,
@@ -370,7 +372,7 @@ class Strong_RRAE_CNN(MNIST_CNN_Autoencoder):
     """Subclass of RRAEs with the strong formulation for inputs of
     dimension (data_size_1 x data_size_2 x batch_size).
     """
-
+    
     def __init__(self, data, latent_size, k_max, *, key, **kwargs):
 
         super().__init__(

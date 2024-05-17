@@ -595,7 +595,7 @@ class Trainor_class:
             self.model = self.model_cls(**self.all_kwargs)
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             self.interpolation = self.interpolation_cls(**self.all_kwargs)
-            # attributes = dill.load(f)
-            # for key in attributes:
-            #     setattr(self, key, attributes[key])
+            attributes = dill.load(f)
+            for key in attributes:
+                setattr(self, key, attributes[key])
             self.fitted = True

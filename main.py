@@ -18,13 +18,13 @@ import matplotlib.pyplot as plt
 import os
 
 if __name__ == "__main__":
-    for prob in ["mult_freqs"]:
+    for prob in ["mult_gausses"]:
         problem = prob
-        method = "IRMAE"
-        loss_func = "Strong"
+        method = "LoRAE"
+        loss_func = "nuc"
 
         latent_size = 2800
-        k_max = 14
+        k_max = 4
 
         (
             ts,
@@ -63,12 +63,12 @@ if __name__ == "__main__":
             k_max=k_max,
             folder=f"{problem}/{method}_{problem}/",
             file=f"{method}_{problem}",
-            linear_l=4,
+            # linear_l=2,
             post_proc_func=inv_func,
             key=jrandom.PRNGKey(0),
         )
         kwargs = {
-            "step_st": [2000, 2000, 4000],
+            "step_st": [1500, 1500, 1500],
             "batch_size_st": [20, 20, 20, 20],
             "lr_st": [1e-3, 1e-4, 1e-5],
             "print_every": 100,
@@ -88,6 +88,7 @@ if __name__ == "__main__":
         e0, e1, e2, e3 = trainor.post_process(
             y_test, y_test_o, None, p_train, p_test, modes="all"
         )
+        
         trainor.save(p_train=p_train, p_test=p_test)
         # trainor.plot_results(ts=jnp.arange(0, y_test.shape[0], 1), ts_o=ts)
     pdb.set_trace()
