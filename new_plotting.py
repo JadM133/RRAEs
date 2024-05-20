@@ -58,6 +58,8 @@ def plot_sin_escal():
         
             for i_, i in enumerate(indices):
                 plt.subplot(2, 2, i_+1+inc*2)
+                if method == "Vanilla":
+                    method = "DAE"
                 lab = f"{method}"
                 plt.scatter(ts[::sample], y_pred_test[::sample, i], s=24, edgecolors="none", label=lab, c=color, marker=mark)
                 
