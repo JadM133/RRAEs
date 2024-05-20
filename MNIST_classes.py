@@ -14,13 +14,13 @@ import pdb
 
 
 if __name__ == "__main__":
-    for i, method in enumerate(["Weak", "IRMAE"]):
-        problem = "mnist_new" # do not change
+    for i, method in enumerate(["Weak"]):
+        problem = "mnist_" # do not change
         # method = "Vanilla"
-        loss_func = "Strong" if i == 1 else "Weak"
+        loss_func = "Weak"
 
-        latent_size = 800
-        k_max = 10
+        latent_size = 128
+        k_max = 8
 
         folder=f"{problem}/{method}_{problem}/"
         file=f"{method}_{problem}"
@@ -62,30 +62,20 @@ if __name__ == "__main__":
             k_max=k_max,
             folder=folder,
             file=file,
-            linear_l=4,
+            # linear_l=4,
             post_proc_func=inv_func,
             key=jrandom.PRNGKey(0),
         )
-        if i == 1:
-            kwargs = {
-                "step_st": [150000,],
-                "batch_size_st": [20, 20, 20, 20],
-                "lr_st": [1e-4,],
-                "print_every": 100,
-                "loss_kwargs": {"lambda_nuc":0.001},
-                # "mul_lr":[100000, 10, 10, 1],
-                # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
-            }
-        else:
-            kwargs = {
-                "step_st": [150000,],
-                "batch_size_st": [20, 20, 20, 20],
-                "lr_st": [1e-4,],
-                "print_every": 100,
-                "loss_kwargs": {"lambda_nuc":0.001},
-                "mul_lr":[100000, 10, 10, 1],
-                "mul_lr_func": lambda tree: (tree.v_vt.vt,),
-            }
+
+        kwargs = {
+            "step_st": [100000,],
+            "batch_size_st": [20, 20, 20, 20],
+            "lr_st": [1e-4,],
+            "print_every": 100,
+            "loss_kwargs": {"lambda_nuc":0.001},
+            "mul_lr":[10, 1, 1, 1],
+            "mul_lr_func": lambda tree: (tree.v_vt.vt,),
+        }
         trainor.fit(
             x_train,
             y_train,

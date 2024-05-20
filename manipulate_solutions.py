@@ -158,11 +158,11 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import jax.numpy as jnp
 
-    names = ["Strong", "Weak", "IRMAE_2", "IRMAE_4", "LoRAE"]
+    names = ["Weak"]
     all_trainors = []
     for i, name in enumerate(names):
         method = name
-        problem = "mult_gausses"
+        problem = "mnist_"
         folder = f"{problem}/{method}_{problem}/"
         file = f"{method}_{problem}"
         trainor = Trainor_class()
