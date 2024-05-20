@@ -1,25 +1,25 @@
 # Fdb version 4
-["bibtex RRAEs-paper"] 1716239722.10277 "RRAEs-paper.aux" "RRAEs-paper.bbl" "RRAEs-paper" 1716241250.37524 0
-  "./sn-bibliography.bib" 1716234697 47080 5070f15d2b13bd861b0ced8e4960df8a ""
-  "RRAEs-paper.aux" 1716241248 14067 fffdfde01719d954b73ced165425bcf9 "pdflatex"
+["bibtex RRAEs-paper"] 1716243089.23474 "RRAEs-paper.aux" "RRAEs-paper.bbl" "RRAEs-paper" 1716243095.52016 0
+  "./sn-bibliography.bib" 1716243046 47080 5070f15d2b13bd861b0ced8e4960df8a ""
+  "RRAEs-paper.aux" 1716243093 14067 fffdfde01719d954b73ced165425bcf9 "pdflatex"
   "c:/texlive/2023/texmf-dist/bibtex/bst/natbib/plainnat.bst" 1709741095 26816 ffe5423d2019860bad9f54bc402fac15 ""
   (generated)
   "RRAEs-paper.bbl"
   "RRAEs-paper.blg"
   (rewritten before read)
-["pdflatex"] 1716241245.14512 "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_NeurIPS/RRAEs-paper.tex" "RRAEs-paper.pdf" "RRAEs-paper" 1716241250.37606 0
-  "../figures/mnist_interp.pdf" 1716233892 50302 6450d30c24d03c59e2ff4a3be8fedcc8 ""
-  "../figures/p_vals_1.pdf" 1715908131 20831 c555866d5c90957135d5c6cc8747de0c ""
-  "../figures/p_vals_2.pdf" 1715908131 51513 f1d602637008b37ea94c29584c912adb ""
-  "../figures/sin_shift_plot_latent.pdf" 1716084194 31592 5b34d40f04f9f27e86ea9ee3b5ede7de ""
-  "../figures/sin_shift_plot_test.pdf" 1716084194 30640 98acfdfa72d0c651015df57555dcd58e ""
-  "../figures/sin_sin_gauss_plot_test.pdf" 1715857665 41483 45f8725e22d2c982e13172892c20bc4d ""
-  "../figures/sing_vals_gauss.pdf" 1716234287 31859 1dcd7bab99ebd6811c1dd22b7dc35393 ""
-  "RRAEs-paper.aux" 1716241248 14067 fffdfde01719d954b73ced165425bcf9 "pdflatex"
-  "RRAEs-paper.bbl" 1716239723 10741 8a46fa3cf2c0d53dd27823f9806a5d71 "bibtex RRAEs-paper"
-  "RRAEs-paper.out" 1716241248 3147 966e6394e18634ecc455a130dab50968 "pdflatex"
-  "RRAEs-paper.tex" 1716241243 92730 4145a6860f3676b6b186a8a8e29bd3df ""
-  "c:/Users/jadmo/Desktop/RRAEs/RRAEs/tex_NeurIPS/RRAEs-paper.tex" 1716241243 92730 4145a6860f3676b6b186a8a8e29bd3df ""
+["pdflatex"] 1716243090.27566 "c:/Users/jadmo/Desktop/new/RRAEs/tex_NeurIPS/RRAEs-paper.tex" "RRAEs-paper.pdf" "RRAEs-paper" 1716243095.52117 0
+  "../figures/mnist_interp.pdf" 1716243046 50302 6450d30c24d03c59e2ff4a3be8fedcc8 ""
+  "../figures/p_vals_1.pdf" 1716243046 20831 c555866d5c90957135d5c6cc8747de0c ""
+  "../figures/p_vals_2.pdf" 1716243046 51513 f1d602637008b37ea94c29584c912adb ""
+  "../figures/sin_shift_plot_latent.pdf" 1716243046 31592 5b34d40f04f9f27e86ea9ee3b5ede7de ""
+  "../figures/sin_shift_plot_test.pdf" 1716243046 30640 98acfdfa72d0c651015df57555dcd58e ""
+  "../figures/sin_sin_gauss_plot_test.pdf" 1716243046 41483 45f8725e22d2c982e13172892c20bc4d ""
+  "../figures/sing_vals_gauss.pdf" 1716243046 31859 1dcd7bab99ebd6811c1dd22b7dc35393 ""
+  "RRAEs-paper.aux" 1716243093 14067 fffdfde01719d954b73ced165425bcf9 "pdflatex"
+  "RRAEs-paper.bbl" 1716243090 10741 8a46fa3cf2c0d53dd27823f9806a5d71 "bibtex RRAEs-paper"
+  "RRAEs-paper.out" 1716243093 3147 966e6394e18634ecc455a130dab50968 "pdflatex"
+  "RRAEs-paper.tex" 1716243046 92730 4145a6860f3676b6b186a8a8e29bd3df ""
+  "c:/Users/jadmo/Desktop/new/RRAEs/tex_NeurIPS/RRAEs-paper.tex" 1716243046 92730 4145a6860f3676b6b186a8a8e29bd3df ""
   "c:/texlive/2023/texmf-dist/fonts/enc/dvips/base/8r.enc" 1709739114 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "c:/texlive/2023/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc" 1709738612 2971 def0b6c1f0b107b3b936def894055589 ""
   "c:/texlive/2023/texmf-dist/fonts/map/fontname/texfonts.map" 1709739532 3524 cb3e574dea2d1052e39280babc910dc8 ""
@@ -218,7 +218,7 @@
   "c:/texlive/2023/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1709743293 5513072 c253eaa6343e824d2661325481d57b70 ""
   "c:/texlive/2023/texmf-var/web2c/pdftex/pdflatex.fmt" 1709743506 8221392 1a7f040ea3b99c66d693a7cdcbd20073 ""
   "c:/texlive/2023/texmf.cnf" 1709743268 713 e69b156964470283e0530f5060668171 ""
-  "neurips_2024.sty" 1715905310 12007 b5f853b54a7a098e9e5b837f826d5daa ""
+  "neurips_2024.sty" 1716243046 12007 b5f853b54a7a098e9e5b837f826d5daa ""
   (generated)
   "RRAEs-paper.aux"
   "RRAEs-paper.log"
