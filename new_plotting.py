@@ -99,6 +99,10 @@ def plot_sin_escal():
             plt.xlabel(r"$p_d$", fontsize=20)
             plt.ylabel(r"$\alpha$", fontsize=15)
             if inc == 0:
+                plt.title("Latent coefficients for shifted sine problem", fontsize=18)
+            else:
+                plt.title("Latent coefficients for stair-like problem", fontsize=18)
+            if inc == 0:
                 plt.ylim(-0.5, 1.5)
             plt.legend(fontsize=12)
 
