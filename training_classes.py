@@ -16,6 +16,7 @@ from utilities import (
     v_print,
     remove_keys_from_dict,
     merge_dicts,
+    MLP_dropout
 )
 import os
 import time
@@ -259,11 +260,17 @@ class Trainor_class:
                     norm_loss = norm_loss_
                 pred = model(input)
                 wv = jnp.array([1.0, lambda_nuc])
+                if "mlp" in model._encode.__dict__.keys():
+                    weight = model._encode.mlp.layers_l[0].weight
+                else:
+                    idx = [isinstance(val, MLP_dropout) for val in model._encode.layers]
+                    idx = idx.index(max(idx))
+                    weight = model._encode.layers[idx].layers_l[0].weight
                 return find_weighted_loss(
                     [
                         norm_loss(pred, out),
                         jnp.linalg.norm(
-                            model._encode.mlp.layers_l[0].weight, "nuc"
+                           weight, "nuc"
                         ),
                     ],
                     weight_vals=wv,
@@ -429,6 +436,7 @@ class Trainor_class:
         p_test=None,
         save=False,
         modes=None,
+        interp=None,
         **kwargs,
     ):
         """Performs post-processing to find the relative error of the RRAE model.
@@ -459,7 +467,9 @@ class Trainor_class:
         self.error_train = error_train
         self.p_train = p_train
         self.p_test = p_test
-
+        self.y_test_o = y_test_o
+        self.y_test = y_test
+        
         if self.y_train_o is not None:
             y_pred_train_o = self.model(self.x_train, train=False)
             error_train_o = (
@@ -473,8 +483,15 @@ class Trainor_class:
             error_train_o = None
 
         self.error_train_o = error_train_o
-        self.y_test = y_test
-
+        latent_train = self.model.latent(self.x_train)
+        u_vec, sing, vt = adaptive_TSVD(
+                latent_train, full_matrices=False, verbose=True, modes=modes, **kwargs
+            )
+        sv = jnp.expand_dims(sing, 0)
+        v = jnp.multiply(sv, u_vec)
+        self.v = v
+        self.vt_train = vt
+        
         if x_test is not None:
             y_pred_test = self.model(x_test)
             error_test = (
@@ -493,16 +510,10 @@ class Trainor_class:
             else:
                 error_test_o = None
 
-        elif (p_train is not None) and (p_test is not None):
-            latent_train = self.model.latent(self.x_train)
+        elif interp is not None:
+
             self.latent_train = latent_train
-            u_vec, sing, vt = adaptive_TSVD(
-                latent_train, full_matrices=False, verbose=True, modes=modes, **kwargs
-            )
-            sv = jnp.expand_dims(sing, 0)
-            v = jnp.multiply(sv, u_vec)
-            self.v = v
-            self.vt_train = vt
+            
             if modes == "all":
                 latent_test = self.interpolate(p_test, p_train, latent_train, save=save)
                 self.vt_test = None
@@ -521,7 +532,6 @@ class Trainor_class:
                 jnp.linalg.norm(y_pred_test - y_test) / jnp.linalg.norm(y_test) * 100
             )
             print("Test error: ", error_test)
-            self.y_test_o = y_test_o
             if self.y_test_o is not None:
                 y_pred_test_o = self.model.decode(latent_test, train=False)
                 self.y_pred_test_o = y_pred_test_o

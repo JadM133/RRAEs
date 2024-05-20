@@ -18,13 +18,13 @@ import matplotlib.pyplot as plt
 import os
 
 if __name__ == "__main__":
-    for prob in ["mult_gausses"]:
+    for prob in ["angelo_newest"]:
         problem = prob
-        method = "LoRAE"
-        loss_func = "nuc"
+        method = "Strong"
+        loss_func = "Strong"
 
         latent_size = 2800
-        k_max = 4
+        k_max = 5
 
         (
             ts,
@@ -39,7 +39,13 @@ if __name__ == "__main__":
             y_test,
         ) = get_data(problem)
 
-        print(f"Shape of data is {x_train.shape} and {x_test.shape}")
+        x_train = p_train.T
+        x_test = p_test.T
+        y_train_o = p_train.T
+        y_train = p_train.T
+        y_test = p_test.T
+        y_test_o = p_test.T
+        print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
         print(f"method is {method}")
 
         match method:
@@ -85,10 +91,12 @@ if __name__ == "__main__":
             training_key=jrandom.PRNGKey(50),
             **kwargs,
         )
-        e0, e1, e2, e3 = trainor.post_process(
-            y_test, y_test_o, None, p_train, p_test, modes="all"
-        )
-        
+        try:
+            e0, e1, e2, e3 = trainor.post_process(
+                y_test, y_test_o, None, p_train, p_test, modes="all"
+            )
+        except:
+            pdb.set_trace()
         trainor.save(p_train=p_train, p_test=p_test)
         # trainor.plot_results(ts=jnp.arange(0, y_test.shape[0], 1), ts_o=ts)
     pdb.set_trace()

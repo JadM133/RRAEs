@@ -381,15 +381,15 @@ def plot_sing_vals():
             if inc == 0:
                 plt.plot(vv[:40] / jnp.max(vv), label=method, marker="o")
             if inc == 1:
-                plt.plot(jnp.arange(20, 80, 1), vv[20:80] / jnp.max(vv), label=method, marker="o")
+                plt.plot(jnp.arange(0, 80, 1), vv[:80] / jnp.max(vv), label=method, marker="o")
                 plt.yscale("log")
     
             plt.xlabel(r'Index', fontsize=20)
             plt.ylabel(ylabel, fontsize=20)
             if inc == 0:
-                plt.title("Normalized singular values of the latent space", fontsize=15)
+                plt.title("Normalized latent singular values", fontsize=22)
             else:
-                plt.title("Normalized singular values of the latent space - log", fontsize=15)
+                plt.title("Normalized latent singular values - log", fontsize=22)
             plt.legend(fontsize=10)
 
 
@@ -402,14 +402,14 @@ def plot_sing_vals():
 def plot_MNIST():
     def interpolate_MNIST_figs(all_trainors, names, k1, k2, points):
         matplotlib.rc('xtick', labelsize=20) 
-        matplotlib.rc('ytick', labelsize=20) 
+        matplotlib.rc('ytick', labelsize=20)
         plt.tick_params(
             axis='both',          # changes apply to the x-axis
             which='both',      # both major and minor ticks are affected
             bottom=False,      # ticks along the bottom edge are off
             top=False,         # ticks along the top edge are off
             labelbottom=False)
-        fig, axes = plt.subplots(len(all_trainors), points+2, figsize=(1.5*points+3, 2*len(all_trainors)))
+        fig, axes = plt.subplots(len(all_trainors), points+2, figsize=(1.5*points+4, 2*len(all_trainors)+1))
         x_train = get_data("mnist_")[1]
         for i, (trainor, name) in enumerate(zip(all_trainors, names)):
             lat = trainor.model.latent(x_train)
@@ -427,18 +427,29 @@ def plot_MNIST():
                 ax.imshow(figs[j], cmap="gray")
                 if j == 0:
                     if name == "IRMAE_2":
-                        name = "IRMAE (l=2)"
+                        name = "IRMAE-2"
                     elif name == "Strong_5":
-                        name = "Strong"
-                    ax.set_ylabel(name, fontsize=20)
+                        name = "Strong-5"
+                    elif name == "Weak":
+                        name = "Weak-6"
+                    ax.set_ylabel(name, fontsize=14)
+                    if i == 0:
+                        ax.set_title("Original (7)", fontsize=14)
+                if i == 0:
+                    if j == points+1:
+                        ax.set_title("Original (3)", fontsize=14)
+                    else:
+                        if j != 0:
+                            ax.set_title(f"Interp-{j}", fontsize=14)
+
                 ax.xaxis.set_tick_params(labelbottom=False, length=0)
                 ax.yaxis.set_tick_params(labelleft=False, length=0)
                 ax.set_xticklabels([])
                 ax.set_yticklabels([])
                 
-        plt.tight_layout()
+        fig.subplots_adjust(hspace=-0.6, wspace=0.4)
         
-    methods = ["Strong_5", "Weak", "IRMAE_2"]
+    methods = ["Strong_5", "Weak", "IRMAE_2", "LoRAE"]
     all_trainors = []
     for i, name in enumerate(methods):
         method = name
@@ -449,12 +460,12 @@ def plot_MNIST():
         trainor.load(os.path.join(folder, file))
         all_trainors.append(trainor)
     
-    interpolate_MNIST_figs(all_trainors, methods, 25, 1, 3)
+    interpolate_MNIST_figs(all_trainors, methods, 58300, 12, 5)
     plt.savefig(os.path.join(folder_for_all, f"mnist_interp.pdf"))
-    plt.clf()
+    plt.show()
 
 def plot_sing_MNIST():
-    methods = ["Weak", "Strong_5", "IRMAE_2"]
+    methods = ["Weak", "Strong_8", "IRMAE_2", "LoRAE"]
     matplotlib.rc('xtick', labelsize=20) 
     matplotlib.rc('ytick', labelsize=20) 
     fig1 = plt.figure(1)
@@ -481,11 +492,13 @@ def plot_sing_MNIST():
             plt.figure(1)
             plt.subplot(1, 2, inc+1)
             if method == "IRMAE_2":
-                method = "IRMAE (l=2)"
+                method = "IRMAE-2"
             elif method == "IRMAE_4":
                 method = "IRMAE (l=4)"
-            elif method == "Strong_5":
-                method = "Strong"
+            elif method == "Strong_8":
+                method = "Strong-8"
+            elif method == "Weak":
+                method = "Weak-6"
             if inc == 0:
                 plt.plot(vv[:40] / jnp.max(vv), label=method, marker="o")
             if inc == 1:

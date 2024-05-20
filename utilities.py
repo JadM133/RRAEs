@@ -54,7 +54,7 @@ def norm_divide_return(
         return (x - jnp.mean(x)) / jnp.std(x)
 
     if norm_p and p_all is not None:
-        p_all = jnp.stack(my_vmap(lambda y: norm_vec(y))(p_all.T)).T
+        p_all = jnp.stack(my_vmap(lambda y: norm_vec(y))(p_all))
 
     if test_end == 0:
         if p_all is not None:
@@ -362,9 +362,31 @@ def get_data(problem, **kwargs):
             p_all = jnp.delete(p_all, idxs, 0)
             y_all = jnp.delete(y_all, idxs, 1)
             return norm_divide_return(ts, y_all, p_all, test_end=y_all_1.shape[-1])
+        
+        case "angelo_newest":
+            import os
+            import pandas as pd
+
+            filename = os.path.join(os.getcwd(), "data_ang_newest/doe_anova_boost/")
+
+            def f(n):
+                return os.path.join(filename, n)
+
+            def read_series(y):
+                return np.stack(
+                    y.apply(
+                        lambda x: np.array(x.strip("[]").split(), dtype=np.float32)
+                    ).to_numpy()
+                )
+            
+            y_all = pd.read_csv(f("db_s22_matrix.csv"), sep=' ').to_numpy()
+            p_all = pd.read_csv(f("inputs.csv"), sep=',').to_numpy()
+            ts = pd.read_csv(f("freq_red.csv"), sep=' ').to_numpy()
+
+            return norm_divide_return(ts, y_all, p_all, norm_p=True, norm_data=True)
 
         case "mult_gausses":
-
+    
             p_vals_0 = jnp.repeat(jnp.linspace(1, 3, 10), 10)
             p_vals_1 = jnp.tile(jnp.linspace(4, 6, 10), 10)
             p_vals = jnp.stack([p_vals_0, p_vals_1], axis=-1)
@@ -780,6 +802,7 @@ def find_weighted_loss(terms, weight_vals=None):
 
 def dataloader(arrays, batch_size, p_vals=None, *, key):
     dataset_size = arrays[0].shape[0]
+    arrays = [array if array is not None else [None]*dataset_size for array in arrays]
     # assert all(array.shape[0] == dataset_size for array in arrays)
     indices = jnp.arange(dataset_size)
     kk = 0
@@ -795,7 +818,7 @@ def dataloader(arrays, batch_size, p_vals=None, *, key):
                 itemgetter(*batch_perm)(array) for array in arrays
             )  # Works for lists and arrays
             if batch_size != 1:
-                yield [arr if None in arr else jnp.array(arr) for arr in arrs]
+                yield [None if None in arr  else jnp.array(arr) for arr in arrs]
             else:
                 yield [
                     [arr] if arr is None else jnp.expand_dims(jnp.array(arr), axis=0)
