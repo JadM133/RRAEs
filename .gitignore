@@ -166,6 +166,7 @@ data_angelo
 data-pimm
 !figures/*
 !tex_folder/papier-shifted-curve.pdf
+!tex_NeurIPS/RRAEs-paper.pdf
 *.fls
 *.aux
 *.bbl
