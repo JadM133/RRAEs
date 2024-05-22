@@ -15,6 +15,7 @@ def plot_sin_escal():
     colors = ["b", "g"]
     markers = ["p", "o"]
     pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" # 
+    matplotlib.rc('pdf', fonttype=42)
     matplotlib.rc('xtick', labelsize=20) 
     matplotlib.rc('ytick', labelsize=20) 
     fig1 = plt.figure(1)
@@ -99,9 +100,9 @@ def plot_sin_escal():
             plt.xlabel(r"$p_d$", fontsize=20)
             plt.ylabel(r"$\alpha$", fontsize=15)
             if inc == 0:
-                plt.title("Latent coefficients for shifted sine problem", fontsize=18)
+                plt.title("Latent coefficients for the shifted sine problem", fontsize=18)
             else:
-                plt.title("Latent coefficients for stair-like problem", fontsize=18)
+                plt.title("Latent coefficients for the stair-like problem", fontsize=18)
             if inc == 0:
                 plt.ylim(-0.5, 1.5)
             plt.legend(fontsize=12)
@@ -166,7 +167,7 @@ def plot_p_vals():
                 plt.ylabel(r"$p^2_d$", fontsize=15)
             else:
                 plt.scatter(p_vals, p_vals, s=24, edgecolors="none", label=f"Train-{problem}", c="blue")
-                plt.scatter(p_test, p_test, s=24, edgecolors="none", label=f"Train-{problem}", c="red")
+                plt.scatter(p_test, p_test, s=24, edgecolors="none", label=f"Test-{problem}", c="red")
 
                 plt.xlabel(r"$p^1_d$", fontsize=20)
                 plt.ylabel(r"$p^1_d$", fontsize=15)
@@ -188,6 +189,7 @@ def plot_sin_sin_gauss():
     pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" # 
     matplotlib.rc('xtick', labelsize=20) 
     matplotlib.rc('ytick', labelsize=20) 
+    matplotlib.rc('pdf', fonttype=42)
     fig1 = plt.figure(1)
     fig1.set_size_inches(18.5, 10.5)
     fig1 = fig1.add_subplot(2, 2, 1)
@@ -349,6 +351,7 @@ def plot_sing_vals():
     pre_folder = f"" # test_against_AE/shift-encoder-doesnt/" # 
     matplotlib.rc('xtick', labelsize=20) 
     matplotlib.rc('ytick', labelsize=20) 
+    matplotlib.rc('pdf', fonttype=42)
     fig1 = plt.figure(1)
     fig1.set_size_inches(18.5, 10.5)
     fig1 = fig1.add_subplot(1, 2, 1)
@@ -409,6 +412,7 @@ def plot_MNIST():
     def interpolate_MNIST_figs(all_trainors, names, k1, k2, points):
         matplotlib.rc('xtick', labelsize=20) 
         matplotlib.rc('ytick', labelsize=20)
+        matplotlib.rc('pdf', fonttype=42)
         plt.tick_params(
             axis='both',          # changes apply to the x-axis
             which='both',      # both major and minor ticks are affected
@@ -417,6 +421,7 @@ def plot_MNIST():
             labelbottom=False)
         fig, axes = plt.subplots(len(all_trainors), points+2, figsize=(1.5*points+4, 2*len(all_trainors)+1))
         x_train = get_data("mnist_")[1]
+        label_train = get_data("mnist_", mlp=True)[0]
         for i, (trainor, name) in enumerate(zip(all_trainors, names)):
             lat = trainor.model.latent(x_train)
             latent_1 = lat[..., k1]
@@ -430,7 +435,7 @@ def plot_MNIST():
             figs.insert(0, sample_1)
             figs.append(sample_2)
             for j, ax in enumerate(axes[i]):
-                ax.imshow(figs[j], cmap="gray")
+                ax.imshow(figs[j].T, cmap="gray")
                 if j == 0:
                     if name == "IRMAE_2":
                         name = "IRMAE-2"
@@ -440,10 +445,12 @@ def plot_MNIST():
                         name = "Weak-6"
                     ax.set_ylabel(name, fontsize=14)
                     if i == 0:
-                        ax.set_title("Original (7)", fontsize=14)
+                        label_1 = jnp.argmax(label_train[k1])
+                        ax.set_title(f"Original ({label_1})", fontsize=14)
                 if i == 0:
                     if j == points+1:
-                        ax.set_title("Original (3)", fontsize=14)
+                        label_2 = jnp.argmax(label_train[k2])
+                        ax.set_title(f"Original ({label_2})", fontsize=14)
                     else:
                         if j != 0:
                             ax.set_title(f"Interp-{j}", fontsize=14)
@@ -466,7 +473,8 @@ def plot_MNIST():
         trainor.load(os.path.join(folder, file))
         all_trainors.append(trainor)
     
-    interpolate_MNIST_figs(all_trainors, methods, 58300, 12, 5)
+    interpolate_MNIST_figs(all_trainors, methods, 52, 12, 5) # 58300
+
     plt.savefig(os.path.join(folder_for_all, f"mnist_interp.pdf"))
     plt.show()
 

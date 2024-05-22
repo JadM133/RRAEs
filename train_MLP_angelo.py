@@ -68,7 +68,7 @@ def train_alpha(
     step_st=[2000, 5000],
     lr_st=[1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
     width_size=128,
-    depth=1,
+    depth=6,
     print_every=20,
     stagn_every=100,
     batch_size_st=[32, 32, 32, 32],
@@ -89,6 +89,7 @@ def train_alpha(
     }
     model = MLP_dropout(
         key=jrandom.PRNGKey(0),
+        activation=jnn.softplus,
         **hyperparams,
     )
 
@@ -319,10 +320,10 @@ if __name__ == "__main__":
     kwargs = {
         "dropout": 0,
         "step_st": [5000],  # [938],
-        "lr_st": [1e-4, 1e-7, 1e-8, 1e-9],
-        "width_size": 64,
-        "depth": 1,
-        "batch_size_st": [20],
+        "lr_st": [1e-1, 1e-2, 1e-3, 1e-4, 1e-7, 1e-8, 1e-9],
+        "width_size": 128,
+        "depth": 6,
+        "batch_size_st": [64],
     }
 
     latent_train = al[0].model.latent(al[0].x_train)
@@ -334,20 +335,29 @@ if __name__ == "__main__":
     al[0].v = v
     al[0].vt_train = vt
 
+    latent_train = al[1].model.latent(al[1].x_train)
+    u_vec, sing, vt = adaptive_TSVD(
+            latent_train, full_matrices=False, verbose=True, modes=al[1].all_kwargs["k_max"], **kwargs
+        )
+    sv = jnp.expand_dims(sing, 0)
+    v = jnp.multiply(sv, u_vec)
+    al[1].v = v
+    al[1].vt_train = vt
+
     input_train = al[0].vt_train.T
     input_test = (al[0].v.T @ al[0].model.latent(al[0].y_test)).T
-    output_trainn = trainor.vt_train.T # trainor.model.latent(trainor.x_train).T # # 
+    output_trainn = al[1].vt_train.T # trainor.model.latent(trainor.x_train).T # # 
     output_train = (output_trainn - jnp.mean(output_trainn))/jnp.std(output_trainn)
 
     def acc_func(output_test, pred_test, ret=False):
         vt = pred_test*jnp.std(output_trainn) + jnp.mean(output_trainn)
         lat = jnp.sum(
             jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
-                trainor.v_train, vt.T
+                al[1].v, vt.T
             ),
             0,
         )
-        pred = trainor.model.decode(lat).T
+        pred = al[1].model.decode(lat).T
         # pred = trainor.model.decode(pred_test.T).T
         if ret:
             return pred.T
@@ -358,17 +368,17 @@ if __name__ == "__main__":
 
     trainor = main_alpha(
         train_alpha,
-        trainor,
+        al[1],
         input_train,
         output_train,
-        trainor.y_train.T,
+        al[1].y_train.T,
         None,
         acc_func,
         loss_func,
         input_val=None,
         output_val=None,
         input_test=input_test,
-        out_labels_test=trainor.y_test.T,
+        out_labels_test=al[1].y_test.T,
         **kwargs,
     )
     trainor.save(os.path.join(folder, file))
