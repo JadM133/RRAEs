@@ -361,7 +361,16 @@ def print_mean_std():
 
 if __name__ == "__main__":
     pdb.set_trace()
-    for i, method in enumerate(["Strong_5", "Strong_8", "Strong_12", "LoRAE", "IRMAE_2"]):
+    method = "Vanilla"
+    problem = "mnist_"
+    folder = f"{problem}/{method}_{problem}/"
+    file = f"{method}_{problem}"
+    vanilla_trainor = Trainor_class()
+    vanilla_trainor.load(os.path.join(folder, file))
+
+    for i, method in enumerate(
+        ["Strong_5", "Strong_8", "Strong_12", "LoRAE", "IRMAE_2"]
+    ):
         confi_err = []
         problem = "mnist_"
         folder = f"{problem}/{method}_{problem}/"
@@ -379,74 +388,78 @@ if __name__ == "__main__":
                 all_idxs[:, 0], all_idxs[:, 1], trainor.x_train, 5
             )
             res = jnp.reshape(res, (res.shape[0], res.shape[1], -1))
-            trainor.x_test_interp = res
+            eval = lambda x, model: jax.vmap(
+                lambda x_, model: model(jnp.expand_dims(x_, 0)), in_axes=[-1, None]
+            )(x, model)
+            aaa = eval(res, vanilla_trainor.mlp_unique)
+            res = -jnp.mean(jnp.sum(jnp.multiply(aaa, jnp.log(aaa)), 1))
 
-            kwargs = {
-                "dropout": 0,
-                "step_st": [1500] if i != 3 else [1000],  # [938],
-                "lr_st": [1e-4, 1e-7, 1e-8, 1e-9],
-                "width_size": 64,
-                "depth": 2,
-                "batch_size_st": [64],
-                "final_activation": jnn.softmax,
-            }
-            trainor.y_train = get_data(problem, mlp=True)[0]
-            input_train = trainor.model.latent(trainor.x_train).T
-            input_test = trainor.model.latent(trainor.x_test_interp).T
-            output_train = trainor.y_train
+            # kwargs = {
+            #     "dropout": 0,
+            #     "step_st": [1500] if i != 3 else [1000],  # [938],
+            #     "lr_st": [1e-4, 1e-7, 1e-8, 1e-9],
+            #     "width_size": 64,
+            #     "depth": 2,
+            #     "batch_size_st": [64],
+            #     "final_activation": jnn.softmax,
+            # }
+            # trainor.y_train = get_data(problem, mlp=True)[0]
+            # input_train = trainor.model.latent(trainor.x_train).T
+            # input_test = trainor.model.latent(trainor.x_test_interp).T
+            # output_train = trainor.y_train
 
-            # def acc_func(output_test, pred_test, ret=False):
-            # lat = jnp.sum(
-            #     jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
-            #         trainor.v_train, pred_test.T
-            #     ),
-            #     0,
+            # # def acc_func(output_test, pred_test, ret=False):
+            # # lat = jnp.sum(
+            # #     jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
+            # #         trainor.v_train, pred_test.T
+            # #     ),
+            # #     0,
+            # # )
+            # # pred = trainor.model.decode(lat).T
+            # # # pred = trainor.model.decode(pred_test.T).T
+            # # if ret:
+            # #     return pred.T
+            # # return (
+            # #     100
+            # #     - (jnp.linalg.norm(pred - output_test) / jnp.linalg.norm(output_test)) * 100
+            # # )
+
+            # def acc_func(out, pred, ret=False):
+            #     pd = jnp.argmax(pred, -1)
+            #     if ret:
+            #         return pd
+            #     return jnp.sum(pd == out) / pd.shape[0] * 100
+
+            # def my_log(x):
+            #     return jnp.log(jnp.clip(x, 1e-16, 1 - 1e-16))
+
+            # def loss_func(out, pred):
+            #     bce = lambda y1, y2: -1 * jnp.sum(
+            #         y1 * my_log(y2) + (1 - y1) * my_log(1 - y2)
+            #     )
+            #     return bce(out, pred)
+
+            # trainor = main_alpha(
+            #     train_alpha,
+            #     trainor,
+            #     input_train,
+            #     output_train,
+            #     jnp.argmax(trainor.y_train, -1),
+            #     None,
+            #     acc_func,
+            #     loss_func,
+            #     input_val=None,
+            #     output_val=None,
+            #     input_test=input_test,
+            #     out_labels_test=None,
+            #     only_predict=True,
+            #     **kwargs,
             # )
-            # pred = trainor.model.decode(lat).T
-            # # pred = trainor.model.decode(pred_test.T).T
-            # if ret:
-            #     return pred.T
-            # return (
-            #     100
-            #     - (jnp.linalg.norm(pred - output_test) / jnp.linalg.norm(output_test)) * 100
-            # )
-
-            def acc_func(out, pred, ret=False):
-                pd = jnp.argmax(pred, -1)
-                if ret:
-                    return pd
-                return jnp.sum(pd == out) / pd.shape[0] * 100
-
-            def my_log(x):
-                return jnp.log(jnp.clip(x, 1e-16, 1 - 1e-16))
-
-            def loss_func(out, pred):
-                bce = lambda y1, y2: -1 * jnp.sum(
-                    y1 * my_log(y2) + (1 - y1) * my_log(1 - y2)
-                )
-                return bce(out, pred)
-
-            trainor = main_alpha(
-                train_alpha,
-                trainor,
-                input_train,
-                output_train,
-                jnp.argmax(trainor.y_train, -1),
-                None,
-                acc_func,
-                loss_func,
-                input_val=None,
-                output_val=None,
-                input_test=input_test,
-                out_labels_test=None,
-                only_predict=True,
-                **kwargs,
-            )
-            # maxes = jnp.max(trainor.y_pred_mlp_test, 1)
-            # res = jnp.mean((maxes - jnp.ones(maxes.shape)) ** 2)
-            res = jnp.sum(jnp.multiply(trainor.y_pred_mlp_test, jnp.log(trainor.y_pred_mlp_test)), 1)
-            res = -1*jnp.mean(res)
-            print(res)
+            # # maxes = jnp.max(trainor.y_pred_mlp_test, 1)
+            # # res = jnp.mean((maxes - jnp.ones(maxes.shape)) ** 2)
+            # res = jnp.sum(jnp.multiply(trainor.y_pred_mlp_test, jnp.log(trainor.y_pred_mlp_test)), 1)
+            # res = -1*jnp.mean(res)
+            # print(res)
             confi_err.append(res)
         trainor.confi_entropy = confi_err
         trainor.save(os.path.join(folder, file))

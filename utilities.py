@@ -701,7 +701,6 @@ def get_data(problem, **kwargs):
                 if kwargs["mlp"]:
                     y_train = my_vmap(lambda x: x[1])(train_dataset)
                     y_test = my_vmap(lambda x: x[1])(test_dataset)
-
                     idx = np.arange(0, y_train.shape[0], 1)
                     y_now_tr = np.zeros((y_train.shape[0], jnp.max(y_train)+1))
                     all_idx = np.stack([idx, y_train])
@@ -1038,7 +1037,31 @@ class Func(eqx.Module):
             return self.post_proc_func(self.mlp(y, key=k))
         else:
             return self.mlp(y, key=k)
+class CNN_unique(eqx.Module):
+    layers: list
 
+    def __init__(self, key):
+        key1, key2, key3, key4 = jax.random.split(key, 4)
+        # Standard CNN setup: convolutional layer, followed by flattening,
+        # with a small MLP on top.
+        self.layers = [
+            eqx.nn.Conv2d(1, 3, kernel_size=4, key=key1),
+            eqx.nn.MaxPool2d(kernel_size=2),
+            jax.nn.relu,
+            jnp.ravel,
+            eqx.nn.Linear(1728, 512, key=key2),
+            jax.nn.sigmoid,
+            eqx.nn.Linear(512, 64, key=key3),
+            jax.nn.relu,
+            eqx.nn.Linear(64, 10, key=key4),
+            jax.nn.softmax,
+        ]
+
+    def __call__(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+    
 
 class CNN(eqx.Module):
     layers: list
