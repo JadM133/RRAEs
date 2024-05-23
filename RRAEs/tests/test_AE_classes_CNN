@@ -1,7 +1,17 @@
+import jax.random as jrandom
+import pytest
+from RRAEs.AE_classes import (
     Strong_RRAE_CNN,
     Weak_RRAE_CNN,
     Vanilla_AE_CNN,
+)
+import jax.numpy as jnp
 
+
+@pytest.mark.parametrize("dim_D", (10, 15, 50))
+@pytest.mark.parametrize("latent", (200, 400, 800))
+@pytest.mark.parametrize("num_modes", (1, 2, 6))
+class Test_AEs_shapes:  
     def test_Strong_CNN(self, latent, num_modes, dim_D):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, 500, dim_D))
         model = Strong_RRAE_CNN(x, latent, num_modes, key=jrandom.PRNGKey(0))
