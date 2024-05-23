@@ -1,9 +1,9 @@
 import jax.random as jr
 import pytest
-from RRAEs.RRAEs.training_classes.training_classes import Objects_Interpolator_nD
+from RRAEs.training_classes import Objects_Interpolator_nD
 import jax.numpy as jnp
 import numpy as np
-from RRAEs.RRAEs.utilities.utilities import my_vmap
+from RRAEs.utilities import my_vmap
 
 
 def test_nD_interp_on_1D():
