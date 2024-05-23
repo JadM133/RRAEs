@@ -16,7 +16,7 @@ import jax.numpy as jnp
 class Test_AEs_shapes:
     def test_Strong_MLP(self, latent, num_modes, dim_D):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, dim_D))
-        model = Strong_RRAE_MLPs(x, latent, num_modes, key=jrandom.PRNGKey(0))
+        model = Strong_RRAE_MLP(x, latent, num_modes, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
         y = model.perform_in_latent(y)
@@ -35,7 +35,7 @@ class Test_AEs_shapes:
 
     def test_Weak_MLP(self, latent, num_modes, dim_D):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, dim_D))
-        model = Weak_RRAE_MLPs(x, latent, num_modes, key=jrandom.PRNGKey(0))
+        model = Weak_RRAE_MLP(x, latent, num_modes, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
         x = model.decode(y)
@@ -68,7 +68,7 @@ class Test_width:
         x = jrandom.normal(jrandom.PRNGKey(0), (500, 15))
         true_width = width if isinstance(width, list) else [width] * depth
 
-        model = Strong_RRAE_MLPs(
+        model = Strong_RRAE_MLP(
             x, 200, 3, width_enc=width, depth_enc=depth, key=jrandom.PRNGKey(0)
         )
         try:
@@ -82,7 +82,7 @@ class Test_width:
             ]
         )
 
-        model = Weak_RRAE_MLPs(
+        model = Weak_RRAE_MLP(
             x, 200, 3, width_dec=width, depth_dec=depth, key=jrandom.PRNGKey(0)
         )
         model(x)
