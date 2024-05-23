@@ -1,4 +1,4 @@
-from RRAEs.RRAEs.AE_classes.AE_classes import (
+from RRAEs.AE_classes import (
     Strong_RRAE_MLPs,
     Strong_RRAE_CNN,
     Weak_RRAE_CNN,
@@ -8,12 +8,12 @@ from RRAEs.RRAEs.AE_classes.AE_classes import (
     IRMAE_MLP,
     LoRAE_MLP,
 )
-from RRAEs.RRAEs.training_classes.training_classes import Trainor_class, Objects_Interpolator_nD
+from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
 import jax.random as jrandom
 import pdb
 import equinox as eqx
 import jax.numpy as jnp
-from RRAEs.RRAEs.utilities.utilities import find_weighted_loss, get_data
+from RRAEs.utilities import find_weighted_loss, get_data
 import matplotlib.pyplot as plt
 import os
 
