@@ -190,7 +190,7 @@ def latent_func_strong_RRAE(y, k_max, *args, **kwargs):
     return y_approx
 
 
-class Strong_RRAE_MLPs(Autoencoder):
+class Strong_RRAE_MLP(Autoencoder):
     """Subclass of RRAEs with the strong formulation when the input
     is of dimension (data_size, batch_size).
 
@@ -246,7 +246,7 @@ class Vanilla_AE_MLP(Autoencoder):
         super().__init__(data, latent_size, -1, key=key, **kwargs)
 
 
-class Weak_RRAE_MLPs(Autoencoder):
+class Weak_RRAE_MLP(Autoencoder):
     v_vt: v_vt_class
 
     """Weak Rank Reduction Autoencoder. We define it as a
