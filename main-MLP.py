@@ -39,12 +39,6 @@ if __name__ == "__main__":
             y_test,
         ) = get_data(problem)
 
-        x_train = p_train.T
-        x_test = p_test.T
-        y_train_o = p_train.T
-        y_train = p_train.T
-        y_test = p_test.T
-        y_test_o = p_test.T
         print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
         print(f"method is {method}")
 
