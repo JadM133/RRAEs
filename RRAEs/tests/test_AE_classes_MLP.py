@@ -67,9 +67,9 @@ class Test_width:
     def test_MLP(self, width, depth):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, 15))
         true_width = width if isinstance(width, list) else [width] * depth
-
+        kwargs_enc={"width_size":width, "depth":depth}
         model = Strong_RRAE_MLP(
-            x, 200, 3, width_enc=width, depth_enc=depth, key=jrandom.PRNGKey(0)
+            x, 200, 3, key=jrandom.PRNGKey(0), kwargs_enc=kwargs_enc
         )
         try:
             model(x)
@@ -82,8 +82,9 @@ class Test_width:
             ]
         )
 
+        kwargs_dec={"width_size":width, "depth":depth}
         model = Weak_RRAE_MLP(
-            x, 200, 3, width_dec=width, depth_dec=depth, key=jrandom.PRNGKey(0)
+            x, 200, 3, key=jrandom.PRNGKey(0), kwargs_dec=kwargs_dec
         )
         model(x)
         assert all(

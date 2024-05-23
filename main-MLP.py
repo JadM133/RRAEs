@@ -18,10 +18,10 @@ import matplotlib.pyplot as plt
 import os
 
 if __name__ == "__main__":
-    for prob in ["angelo_newest"]:
+    for prob in ["shift"]:
         problem = prob
-        method = "Strong"
-        loss_func = "Strong"
+        method = "Weak"
+        loss_func = "Weak"
 
         latent_size = 2800
         k_max = 5
@@ -73,8 +73,8 @@ if __name__ == "__main__":
             "lr_st": [1e-3, 1e-4, 1e-5],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
-            # "mul_lr":[0.81, 0.81, 0.81, 1],
-            # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
+            "mul_lr":[0.81, 0.81, 0.81, 1],
+            "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }
 
         trainor.fit(

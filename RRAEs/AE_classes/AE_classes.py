@@ -63,31 +63,31 @@ class Autoencoder(eqx.Module):
         data,
         latent_size,
         k_max=-1,
-        width_enc=64,
-        depth_enc=1,
-        width_dec=64,
-        depth_dec=6,
         post_proc_func=_identity,
         _encode=None,
         _perform_in_latent=None,
         _decode=None,
         map_latent=True,
-        linear_l=0,
         *,
         key,
+        kwargs_enc={},
+        kwargs_dec={},
         **kwargs,
     ):
 
         key_e, key_d = jrandom.split(key)
 
         if _encode is None:
+            if "width_size" not in kwargs_enc.keys():
+                kwargs_enc["width_size"] = 64
+            if "depth" not in kwargs_enc.keys():
+                kwargs_enc["depth"] = 1
+
             self._encode = Func(
-                data.shape[0],
-                width_enc,
-                depth_enc,
+                data_size=data.shape[0],
                 out_size=latent_size,
-                linear_l=linear_l,
                 key=key_e,
+                **kwargs_enc,
             )
         else:
             self._encode = _encode
@@ -98,13 +98,16 @@ class Autoencoder(eqx.Module):
             self._perform_in_latent = _perform_in_latent
 
         if _decode is None:
+            if "width_size" not in kwargs_dec.keys():
+                kwargs_dec["width_size"] = 64
+            if "depth" not in kwargs_dec.keys():
+                kwargs_dec["depth"] = 6
             self._decode = Func(
-                latent_size,
-                width_dec,
-                depth_dec,
+                data_size=latent_size,
                 out_size=data.shape[0],
                 post_proc_func=post_proc_func,
                 key=key_d,
+                **kwargs_dec,
             )
         else:
             self._decode = _decode
@@ -115,12 +118,10 @@ class Autoencoder(eqx.Module):
             "post_proc_func": post_proc_func,
             "latent_size": latent_size,
             "k_max": k_max,
-            "width_enc": width_enc,
-            "depth_enc": depth_enc,
-            "width_dec": width_dec,
-            "depth_dec": depth_dec,
             "key": key,
             "map_latent": map_latent,
+            "kwargs_enc": kwargs_enc,
+            "kwargs_dec": kwargs_dec,
         }
 
     def encode(self, x, *argss, **kwargs):
@@ -206,7 +207,18 @@ class Strong_RRAE_MLP(Autoencoder):
         The maximum number of modes to keep in the latent space.
     """
 
-    def __init__(self, data, latent_size, k_max, post_proc_func=None, *, key, **kwargs):
+    def __init__(
+        self,
+        data,
+        latent_size,
+        k_max,
+        post_proc_func=None,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
 
         if "linear_l" in kwargs.keys():
             warnings.warn("linear_l can not be specified for Strong")
@@ -220,6 +232,8 @@ class Strong_RRAE_MLP(Autoencoder):
             map_latent=False,
             post_proc_func=post_proc_func,
             key=key,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
             **kwargs,
         )
 
@@ -231,7 +245,9 @@ class Vanilla_AE_MLP(Autoencoder):
     k_max = -1, hence returning all the modes with no truncation.
     """
 
-    def __init__(self, data, latent_size, *, key, **kwargs):
+    def __init__(
+        self, data, latent_size, *, key, kwargs_enc={}, kwargs_dec={}, **kwargs
+    ):
         if "k_max" in kwargs.keys():
             if kwargs["k_max"] != -1:
                 warnings.warn(
@@ -239,11 +255,15 @@ class Vanilla_AE_MLP(Autoencoder):
                 )
             kwargs.pop("k_max")
 
-        if "linear_l" in kwargs.keys():
-            warnings.warn("linear_l can not be specified for Vanilla")
-            kwargs.pop("linear_l")
-
-        super().__init__(data, latent_size, -1, key=key, **kwargs)
+        super().__init__(
+            data,
+            latent_size,
+            -1,
+            key=key,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
+            **kwargs,
+        )
 
 
 class Weak_RRAE_MLP(Autoencoder):
@@ -261,13 +281,19 @@ class Weak_RRAE_MLP(Autoencoder):
         formulation.
     """
 
-    def __init__(self, data, latent_size, k_max, *, key, **kwargs):
+    def __init__(
+        self, data, latent_size, k_max, *, key, kwargs_enc={}, kwargs_dec={}, **kwargs
+    ):
 
-        if "linear_l" in kwargs.keys():
-            warnings.warn("linear_l can not be specified for Weak")
-            kwargs.pop("linear_l")
-
-        super().__init__(data, latent_size, -1, key=key, **kwargs)
+        super().__init__(
+            data,
+            latent_size,
+            -1,
+            key=key,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
+            **kwargs,
+        )
 
         if k_max == -1:
             k_max = data.shape[-1]
@@ -276,7 +302,17 @@ class Weak_RRAE_MLP(Autoencoder):
 
 
 class IRMAE_MLP(Autoencoder):
-    def __init__(self, data, latent_size, linear_l=2, *, key, **kwargs):
+    def __init__(
+        self,
+        data,
+        latent_size,
+        linear_l=2,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
 
         if "k_max" in kwargs.keys():
             if kwargs["k_max"] != -1:
@@ -285,12 +321,35 @@ class IRMAE_MLP(Autoencoder):
                 )
             kwargs.pop("k_max")
 
-        super().__init__(data, latent_size, -1, linear_l=linear_l, key=key, **kwargs)
+        if "linear_l" in kwargs.keys():
+            raise ValueError("Specify linear_l in the constructor, not in kwargs")
+
+        kwargs_enc = {**kwargs_enc, "linear_l": linear_l}
+
+        super().__init__(
+            data,
+            latent_size,
+            -1,
+            key=key,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
+            **kwargs,
+        )
 
 
 class LoRAE_MLP(IRMAE_MLP):
-    def __init__(self, data, latent_size, *, key, **kwargs):
-        super().__init__(data, latent_size, linear_l=1, key=key, **kwargs)
+    def __init__(
+        self, data, latent_size, *, key, kwargs_enc={}, kwargs_dec={}, **kwargs
+    ):
+        super().__init__(
+            data,
+            latent_size,
+            linear_l=1,
+            key=key,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
+            **kwargs,
+        )
 
 
 class CNN_Autoencoder(Autoencoder):
@@ -372,7 +431,7 @@ class Strong_RRAE_CNN(MNIST_CNN_Autoencoder):
     """Subclass of RRAEs with the strong formulation for inputs of
     dimension (data_size_1 x data_size_2 x batch_size).
     """
-    
+
     def __init__(self, data, latent_size, k_max, *, key, **kwargs):
 
         super().__init__(

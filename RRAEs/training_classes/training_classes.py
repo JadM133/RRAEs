@@ -130,7 +130,13 @@ class Objects_Interpolator_nD(Interpolator):
 
 class Trainor_class:
     def __init__(
-        self, model_cls=None, interpolation_cls=None, folder=None, file=None, ts=None, **kwargs
+        self,
+        model_cls=None,
+        interpolation_cls=None,
+        folder=None,
+        file=None,
+        ts=None,
+        **kwargs,
     ):
         if model_cls is not None:
             self.model = model_cls(**kwargs)
@@ -213,9 +219,7 @@ class Trainor_class:
                 1,
             ] * len(lr_st)
 
-        norm_loss_ = (
-                lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
-            )
+        norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
 
         if (loss_func == "Strong") or (loss_func is None) or (loss_func == "Vanilla"):
 
@@ -268,9 +272,7 @@ class Trainor_class:
                 return find_weighted_loss(
                     [
                         norm_loss(pred, out),
-                        jnp.linalg.norm(
-                           weight, "nuc"
-                        ),
+                        jnp.linalg.norm(weight, "nuc"),
                     ],
                     weight_vals=wv,
                 ), (pred,)
@@ -309,7 +311,12 @@ class Trainor_class:
                 optim = optax.adabelief(lr)
 
             filtered_model = eqx.filter(model, eqx.is_inexact_array)
-            opt_state = optim.init(filtered_model)
+            try:
+                opt_state = optim.init(filtered_model)
+            except ValueError:
+                raise ValueError(
+                    "Optax has a bug! Send a message to Jad so he can fix it to you..."
+                )
 
             if (batch_size > input.shape[-1]) or batch_size == -1:
                 batch_size = input.shape[-1]
@@ -434,8 +441,9 @@ class Trainor_class:
         p_train=None,
         p_test=None,
         save=False,
-        modes=None,
+        modes="all",
         interp=None,
+        verbose=False,
         **kwargs,
     ):
         """Performs post-processing to find the relative error of the RRAE model.
@@ -468,7 +476,7 @@ class Trainor_class:
         self.p_test = p_test
         self.y_test_o = y_test_o
         self.y_test = y_test
-        
+
         if self.y_train_o is not None:
             y_pred_train_o = self.model(self.x_train, train=False)
             error_train_o = (
@@ -484,13 +492,13 @@ class Trainor_class:
         self.error_train_o = error_train_o
         latent_train = self.model.latent(self.x_train)
         u_vec, sing, vt = adaptive_TSVD(
-                latent_train, full_matrices=False, verbose=True, modes=modes, **kwargs
-            )
+            latent_train, full_matrices=False, verbose=verbose, modes=modes, **kwargs
+        )
         sv = jnp.expand_dims(sing, 0)
         v = jnp.multiply(sv, u_vec)
         self.v = v
         self.vt_train = vt
-        
+
         if x_test is not None:
             y_pred_test = self.model(x_test)
             error_test = (
@@ -512,7 +520,7 @@ class Trainor_class:
         elif interp is not None:
 
             self.latent_train = latent_train
-            
+
             if modes == "all":
                 latent_test = self.interpolate(p_test, p_train, latent_train, save=save)
                 self.vt_test = None
@@ -541,6 +549,7 @@ class Trainor_class:
                 )
                 print("Test error_o: ", error_test_o)
             else:
+                y_pred_test_o = None
                 error_test_o = None
         else:
             error_test = None
@@ -557,11 +566,11 @@ class Trainor_class:
 
     def sing_vals(self):
         svs = jnp.linalg.svd(self.model.latent(self.x_train), full_matrices=False)[1]
-        plt.plot(svs[:40]/svs[0], marker="o")
+        plt.plot(svs[:40] / svs[0], marker="o")
         plt.ylim(0, 0.4)
         plt.show()
         return svs
-    
+
     def interpolate(self, x_new, x_interp, y_interp, save=False):
         if self.fitted:
             return self.interpolation(x_new)
