@@ -164,9 +164,9 @@ cython_debug/
 *.pkl
 data_angelo
 data-pimm
+for_paper/MNIST
 !figures/*
-!tex_folder/papier-shifted-curve.pdf
-!tex_NeurIPS/RRAEs-paper.pdf
+!for_paper/tex_NeurIPS/RRAEs-paper.pdf
 *.fls
 *.aux
 *.bbl

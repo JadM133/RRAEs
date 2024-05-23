@@ -1,8 +1,8 @@
 import os
 import pdb
-from training_classes import Trainor_class
+from RRAEs.RRAEs.training_classes.training_classes import Trainor_class
 import dill
-from utilities import get_data
+from RRAEs.RRAEs.utilities.utilities import get_data
 
 
 def find_vs(filename, method):
@@ -169,9 +169,6 @@ if __name__ == "__main__":
         trainor.load(os.path.join(folder, file))
         all_trainors.append(trainor)
         try:
-            # print(f"Train error: {trainor.error_train}")
-            # print(f"Test error: {trainor.error_test}")
-            # print(f"Time spent: {trainor.t_all}")
             plt.figure(2)
             plt.scatter(i, trainor.error_test, label=name)
         except:
