@@ -1,22 +1,22 @@
 from abc import ABC, abstractmethod
 import numpy as np
 import jax
-from RRAEs.RRAEs.utilities.utilities import my_vmap
+from RRAEs.utilities import my_vmap
 import pdb
 import jax.random as jr
 import jax.numpy as jnp
-from RRAEs.RRAEs.utilities.utilities import _identity
 import equinox as eqx
 import jax.tree_util as jtu
 import optax
-from RRAEs.RRAEs.utilities.utilities import (
+from RRAEs.utilities import (
     dataloader,
     find_weighted_loss,
     adaptive_TSVD,
     v_print,
     remove_keys_from_dict,
     merge_dicts,
-    MLP_dropout
+    MLP_dropout,
+    _identity
 )
 import os
 import time
