@@ -44,9 +44,9 @@ if __name__ == "__main__":
 
         match method:
             case "Strong":
-                model_cls = Strong_RRAE_MLPs
+                model_cls = Strong_RRAE_MLP
             case "Weak":
-                model_cls = Weak_RRAE_MLPs
+                model_cls = Weak_RRAE_MLP
             case "Vanilla":
                 model_cls = Vanilla_AE_MLP
             case "IRMAE":
