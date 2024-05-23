@@ -16,7 +16,6 @@ from RRAEs.utilities import (
     remove_keys_from_dict,
     merge_dicts,
     MLP_dropout,
-    _identity
 )
 import os
 import time
