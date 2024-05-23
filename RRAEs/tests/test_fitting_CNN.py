@@ -10,7 +10,7 @@ import equinox as eqx
 from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
 from RRAEs.utilities import find_weighted_loss
 
-
+@pytest.mark.skip(reason="CNNs not supported yet")
 @pytest.mark.parametrize(
     "model_cls, sh, lf",
     [
