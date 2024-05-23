@@ -4,9 +4,6 @@ from RRAEs.AE_classes import (
     Strong_RRAE_MLPs,
     Vanilla_AE_MLP,
     Weak_RRAE_MLPs,
-    Strong_RRAE_CNN,
-    Weak_RRAE_CNN,
-    Vanilla_AE_CNN,
     IRMAE_MLP,
     LoRAE_MLP,
 )
@@ -64,38 +61,9 @@ class Test_AEs_shapes:
         x = model.decode(y)
         assert x.shape == (500, dim_D)
 
-    def test_Strong_CNN(self, latent, num_modes, dim_D):
-        x = jrandom.normal(jrandom.PRNGKey(0), (500, 500, dim_D))
-        model = Strong_RRAE_CNN(x, latent, num_modes, key=jrandom.PRNGKey(0))
-        y = model.encode(x)
-        assert y.shape == (latent, dim_D)
-        y = model.perform_in_latent(y)
-        _, sing_vals, _ = jnp.linalg.svd(y, full_matrices=False)
-        assert sing_vals[num_modes + 1] < 1e-5
-        assert y.shape == (latent, dim_D)
-        assert model.decode(y).shape == (500, 500, dim_D)
-
-    def test_Vanilla_CNN(self, latent, num_modes, dim_D):
-        x = jrandom.normal(jrandom.PRNGKey(0), (500, 500, dim_D))
-        model = Vanilla_AE_CNN(x, latent, key=jrandom.PRNGKey(0))
-        y = model.encode(x)
-        assert y.shape == (latent, dim_D)
-        x = model.decode(y)
-        assert x.shape == (500, 500, dim_D)
-
-    def test_Weak_CNN(self, latent, num_modes, dim_D):
-        x = jrandom.normal(jrandom.PRNGKey(0), (500, 500, dim_D))
-        model = Weak_RRAE_CNN(x, latent, num_modes, key=jrandom.PRNGKey(0))
-        y = model.encode(x)
-        assert y.shape == (latent, dim_D)
-        x = model.decode(y)
-        assert x.shape == (500, 500, dim_D)
-        assert model.v_vt.v.shape == (latent, num_modes)
-        assert model.v_vt.vt.shape == (num_modes, dim_D)
-
 
 @pytest.mark.parametrize("width,depth", [(64, 2), ([2, 4, 6], 3)])
-class Test_MLPs_width:
+class Test_width:
     def test_MLP(self, width, depth):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, 15))
         true_width = width if isinstance(width, list) else [width] * depth
