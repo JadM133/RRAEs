@@ -1,6 +1,6 @@
 import jax.random as jrandom
 import pytest
-from RRAEs.RRAEs.AE_classes.AE_classes import (
+from RRAEs.AE_classes import (
     Strong_RRAE_MLPs,
     Vanilla_AE_MLP,
     Weak_RRAE_MLPs,
