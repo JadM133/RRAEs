@@ -3,11 +3,11 @@ import jax.numpy as jnp
 import jax.nn as jnn
 import jax
 import jax.random as jrandom
-from RRAEs.RRAEs.utilities.utilities import MLP_dropout
-from RRAEs.RRAEs.AE_classes.AE_classes import Strong_RRAE_CNN, Weak_RRAE_CNN, Vanilla_AE_CNN, IRMAE_CNN, LoRAE_CNN
+from RRAEs.utilities import MLP_dropout
+from RRAEs.AE_classes import Strong_RRAE_CNN, Weak_RRAE_CNN, Vanilla_AE_CNN, IRMAE_CNN, LoRAE_CNN
 from equinox._doc_utils import doc_repr
-from RRAEs.RRAEs.utilities.utilities import get_data
-from RRAEs.RRAEs.training_classes.training_classes import Trainor_class, Objects_Interpolator_nD
+from RRAEs.utilities import get_data
+from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
 _identity = doc_repr(lambda x, **kwargs: x, "lambda x: x")
 import warnings
 import pdb
