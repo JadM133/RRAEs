@@ -1,9 +1,9 @@
 import jax.random as jrandom
 import pytest
 from RRAEs.AE_classes import (
-    Strong_RRAE_MLPs,
+    Strong_RRAE_MLP,
     Vanilla_AE_MLP,
-    Weak_RRAE_MLPs,
+    Weak_RRAE_MLP,
     Strong_RRAE_CNN,
     Weak_RRAE_CNN,
     Vanilla_AE_CNN,
