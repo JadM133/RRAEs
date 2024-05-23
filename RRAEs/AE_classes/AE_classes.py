@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from abc import abstractmethod
 import pdb
-from RRAEs.RRAEs.utilities.utilities import (
+from RRAEs.utilities import (
     Func,
     v_vt_class,
     CNN,
