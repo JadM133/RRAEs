@@ -20,10 +20,8 @@ import pdb
 from operator import itemgetter
 import numpy as np
 import warnings
-def _identity():
-    return doc_repr(lambda x: x, "lambda x: x")
-def _relu():
-    return doc_repr(jnn.relu, "<function relu>")
+_identity = doc_repr(lambda x: x, "lambda x: x")
+_relu = doc_repr(jnn.relu, "<function relu>")
 
 
 def remove_keys_from_dict(d, keys):
