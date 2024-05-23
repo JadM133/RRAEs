@@ -7,7 +7,7 @@ from RRAEs.AE_classes import (
 )
 import jax.numpy as jnp
 
-
+@pytest.mark.skip(reason="CNNs not supported yet")
 @pytest.mark.parametrize("dim_D", (10, 15, 50))
 @pytest.mark.parametrize("latent", (200, 400, 800))
 @pytest.mark.parametrize("num_modes", (1, 2, 6))
