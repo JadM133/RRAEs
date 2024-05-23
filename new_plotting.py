@@ -120,7 +120,8 @@ def plot_p_vals():
     markers = ["p", "o", "*"]
     pre_folder = f"ready_for_paper/" # test_against_AE/shift-encoder-doesnt/" # 
     matplotlib.rc('xtick', labelsize=20) 
-    matplotlib.rc('ytick', labelsize=20) 
+    matplotlib.rc('ytick', labelsize=20)
+    matplotlib.rc('pdf', fonttype=42) 
     fig1 = plt.figure(1)
     fig1.set_size_inches(18.5, 10.5)
     fig1 = fig1.add_subplot(1, 2, 1)
