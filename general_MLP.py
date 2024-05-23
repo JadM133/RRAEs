@@ -2,9 +2,9 @@ import pickle
 import equinox as eqx
 import jax.random as jr
 import jax.numpy as jnp
-from RRAEs.RRAEs.utilities.utilities import MLP_dropout, find_weighted_loss, dataloader, get_data
+from RRAEs.utilities import MLP_dropout, find_weighted_loss, dataloader, get_data, adaptive_TSVD
 import jax.random as jrandom
-from RRAEs.RRAEs.training_classes.training_classes import Trainor_class
+from RRAEs.training_classes import Trainor_class
 import optax
 import time
 import jax
@@ -14,7 +14,6 @@ import os
 import matplotlib.pyplot as plt
 import jax.nn as jnn
 import dill
-from RRAEs.RRAEs.utilities.utilities import adaptive_TSVD
 
 
 def show_data(
