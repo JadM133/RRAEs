@@ -4,9 +4,6 @@ from RRAEs.AE_classes import (
     Strong_RRAE_MLP,
     Vanilla_AE_MLP,
     Weak_RRAE_MLP,
-    Strong_RRAE_CNN,
-    Weak_RRAE_CNN,
-    Vanilla_AE_CNN,
     IRMAE_MLP,
     LoRAE_MLP,
 )
@@ -19,14 +16,11 @@ from RRAEs.utilities import find_weighted_loss
 @pytest.mark.parametrize(
     "model_cls, sh, lf",
     [
-        (Strong_RRAE_MLPs, (500, 10), None),
+        (Strong_RRAE_MLP, (500, 10), None),
         (Vanilla_AE_MLP, (500, 10), None),
-        (Weak_RRAE_MLPs, (500, 10), "Weak"),
+        (Weak_RRAE_MLP, (500, 10), "Weak"),
         (IRMAE_MLP, (500, 10), None),
         (LoRAE_MLP, (500, 10), "nuc"),
-        (Strong_RRAE_CNN, (500, 10, 10), None),
-        (Vanilla_AE_CNN, (500, 10, 10), None),
-        (Weak_RRAE_CNN, (500, 10, 10), "Weak"),
     ],
 )
 def test_fitting(model_cls, sh, lf):
