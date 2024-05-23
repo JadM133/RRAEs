@@ -1,6 +1,6 @@
 import jax.random as jrandom
 import pytest
-from RRAEs.RRAEs.AE_classes.AE_classes import (
+from RRAEs.AE_classes import (
     Strong_RRAE_MLPs,
     Vanilla_AE_MLP,
     Weak_RRAE_MLPs,
@@ -12,8 +12,8 @@ from RRAEs.RRAEs.AE_classes.AE_classes import (
 )
 import jax.numpy as jnp
 import equinox as eqx
-from RRAEs.RRAEs.training_classes.training_classes import Trainor_class, Objects_Interpolator_nD
-from RRAEs.RRAEs.utilities.utilities import find_weighted_loss
+from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
+from RRAEs.utilities import find_weighted_loss
 
 
 @pytest.mark.parametrize(
