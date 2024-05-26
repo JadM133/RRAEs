@@ -20,11 +20,11 @@ import os
 if __name__ == "__main__":
     for prob in ["shift"]:
         problem = prob
-        method = "Weak"
-        loss_func = "Weak"
+        method = "Strong"
+        loss_func = "Strong"
 
-        latent_size = 2800
-        k_max = 5
+        latent_size = 520
+        k_max = 1
 
         (
             ts,
@@ -73,8 +73,8 @@ if __name__ == "__main__":
             "lr_st": [1e-3, 1e-4, 1e-5],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
-            "mul_lr":[0.81, 0.81, 0.81, 1],
-            "mul_lr_func": lambda tree: (tree.v_vt.vt,),
+            # "mul_lr":[0.81, 0.81, 0.81, 1],
+            # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }
 
         trainor.fit(
