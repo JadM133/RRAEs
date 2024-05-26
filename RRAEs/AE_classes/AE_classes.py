@@ -156,7 +156,7 @@ class Autoencoder(eqx.Module):
         return self.perform_in_latent(self.encode(x, *args, **kwargs), *args, **kwargs)
 
 
-def latent_func_strong_RRAE(y, k_max, *args, **kwargs):
+def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
     """Performing the truncated SVD in the latent space.
 
     Parameters
@@ -188,6 +188,8 @@ def latent_func_strong_RRAE(y, k_max, *args, **kwargs):
         u_now = None
         v_now = None
         sigs = None
+    if ret:
+        return u_now, jnp.multiply(v_now, jnp.expand_dims(sigs, -1))
     return y_approx
 
 
