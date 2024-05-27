@@ -375,7 +375,7 @@ def get_data(problem, **kwargs):
             p_all = pd.read_csv(f("inputs.csv"), sep=',').to_numpy()
             ts = pd.read_csv(f("freq_red.csv"), sep=' ').to_numpy()
 
-            return norm_divide_return(ts, y_all, p_all, norm_p=True, norm_data=False)
+            return norm_divide_return(ts, y_all, p_all, norm_p="meanstd", norm_data=None)
 
         case "mult_gausses":
     
