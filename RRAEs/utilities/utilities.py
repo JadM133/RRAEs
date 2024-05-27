@@ -46,15 +46,27 @@ def norm_divide_return(
     test_end=0,
     eps=1,
     output=None,
-    norm_p=False,
-    norm_data=False,
+    norm_p=None,
+    norm_data=None,
     conv=False,
 ):
-    def norm_vec(x):
-        return (x - jnp.mean(x)) / jnp.std(x)
+    def norm_vec(x, y=None, norm=norm_p, inv=False):
+        if y is None:
+            y = x
+        match norm:
+            case "minmax":
+                if inv:
+                    return x * (jnp.max(y) - jnp.min(y)) + jnp.min(y)
+                return (x - jnp.min(y)) / (jnp.max(y) - jnp.min(y))
+            case "meanstd":
+                if inv:
+                    return x * jnp.std(y) + jnp.mean(y)
+                return (x - jnp.mean(y)) / jnp.std(y)
+            case _:
+                raise ValueError(f"Norm {norm} not recognized")
 
-    if norm_p and p_all is not None:
-        p_all = jnp.stack(my_vmap(lambda y: norm_vec(y))(p_all))
+    if norm_p is not None and p_all is not None:
+        p_all = jnp.stack(my_vmap(lambda y: norm_vec(y))(p_all.T)).T
 
     if test_end == 0:
         if p_all is not None:
@@ -81,29 +93,12 @@ def norm_divide_return(
         y_test_old = y_all[..., -test_end:]
         y_shift_old = y_all[..., : y_all.shape[-1] - test_end]
 
-    if norm_data:
-        y_shift = (y_shift_old - jnp.mean(y_shift_old)) / jnp.std(y_shift_old)
-        y_test = (y_test_old - jnp.mean(y_shift_old)) / jnp.std(y_shift_old)
+    if norm_data is not None:
+        y_shift = norm_vec(y_shift_old, norm=norm_data)
+        y_test = norm_vec(y_test_old, y_shift_old, norm_data)
     else:
         y_shift = y_shift_old
         y_test = y_test_old
-
-    # if conv == True:
-    #     if ts is not None:
-    #     X_vec = ts[0]
-    #     idx = np.argmax(jnp.diff(X_vec[:, 0]) < 0)
-    #     y_shift = jnp.expand_dims(
-    #         jax.vmap(lambda y: jnp.reshape(y, (idx + 1, idx + 1)), in_axes=[-1])(
-    #             y_shift
-    #         ),
-    #         1,
-    #     )[:, :, 1:-1, 1:-1]
-    #     y_test = jnp.expand_dims(
-    #         jax.vmap(lambda y: jnp.reshape(y, (idx + 1, idx + 1)), in_axes=[-1])(
-    #             y_test
-    #         ),
-    #         1,
-    #     )[:, :, 1:-1, 1:-1]
 
     if output is None:
         output_shift = y_shift
@@ -112,13 +107,10 @@ def norm_divide_return(
         output_test = output[idx_test]
         output_shift = jnp.delete(output, idx_test, 0)
 
-    if norm_data:
-
+    if norm_data is not None:
         def inv_func(xx):
-            return xx * jnp.std(y_shift_old) + jnp.mean(y_shift_old)
-
+            return norm_vec(xx, y_shift_old, norm=norm_data, inv=True)
     else:
-
         def inv_func(xx):
             return xx
 
@@ -383,7 +375,7 @@ def get_data(problem, **kwargs):
             p_all = pd.read_csv(f("inputs.csv"), sep=',').to_numpy()
             ts = pd.read_csv(f("freq_red.csv"), sep=' ').to_numpy()
 
-            return norm_divide_return(ts, y_all, p_all, norm_p=True, norm_data=True)
+            return norm_divide_return(ts, y_all, p_all, norm_p=True, norm_data=False)
 
         case "mult_gausses":
     
