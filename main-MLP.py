@@ -13,18 +13,26 @@ import jax.random as jrandom
 import pdb
 import equinox as eqx
 import jax.numpy as jnp
-from RRAEs.utilities import find_weighted_loss, get_data
+from RRAEs.utilities import find_weighted_loss, get_data, plot_welding
 import matplotlib.pyplot as plt
 import os
 
 if __name__ == "__main__":
-    for prob in ["shift"]:
+    trainor = Trainor_class()
+    method = "Strong"
+    problem = "welding"
+    folder=f"{problem}/{method}_{problem}/"
+    file=f"{method}_{problem}"
+    trainor.load(os.path.join(folder, file))
+    plot_welding(trainor, 25)
+    pdb.set_trace()
+    for prob in ["welding"]:
         problem = prob
         method = "Strong"
         loss_func = "Strong"
 
-        latent_size = 520
-        k_max = 1
+        latent_size = 2000
+        k_max = 5
 
         (
             ts,
@@ -68,15 +76,15 @@ if __name__ == "__main__":
             key=jrandom.PRNGKey(0),
         )
         kwargs = {
-            "step_st": [1500, 1500, 1500],
+            "step_st": [5500, 5500, 5500, 5500],
             "batch_size_st": [20, 20, 20, 20],
-            "lr_st": [1e-3, 1e-4, 1e-5],
+            "lr_st": [1e-3, 1e-4, 1e-5, 1e-6],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
             # "mul_lr":[0.81, 0.81, 0.81, 1],
             # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }
-
+        pdb.set_trace()
         trainor.fit(
             x_train,
             y_train,
@@ -87,7 +95,7 @@ if __name__ == "__main__":
         )
         try:
             e0, e1, e2, e3 = trainor.post_process(
-                y_test, y_test_o, None, p_train, p_test, modes="all"
+                y_test, y_test_o, None, p_train, p_test, modes=k_max, interp=True
             )
         except:
             pdb.set_trace()

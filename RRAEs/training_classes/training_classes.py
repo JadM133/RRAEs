@@ -517,7 +517,7 @@ class Trainor_class:
             else:
                 error_test_o = None
 
-        elif interp is not None:
+        elif interp:
 
             self.latent_train = latent_train
 

@@ -20,6 +20,7 @@ import pdb
 from operator import itemgetter
 import numpy as np
 import warnings
+
 _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
 
@@ -77,6 +78,8 @@ def norm_divide_return(
             cbt_idx = idx[jnp.sum(res, 1) == res.shape[1]]  # could be test
             permut_idx = jrandom.permutation(jrandom.PRNGKey(200), cbt_idx.shape[0])
             idx_test = cbt_idx[permut_idx][: int(res.shape[0] * (1 - prop_train))]
+            if cbt_idx.shape[0] < res.shape[0] * (1 - prop_train):
+                raise ValueError("Not enough data to got an interpolable test")
         else:
             idx_test = jrandom.permutation(jrandom.PRNGKey(200), y_all.shape[-1])[
                 : int(y_all.shape[-1] * (1 - prop_train))
@@ -108,9 +111,12 @@ def norm_divide_return(
         output_shift = jnp.delete(output, idx_test, 0)
 
     if norm_data is not None:
+
         def inv_func(xx):
             return norm_vec(xx, y_shift_old, norm=norm_data, inv=True)
+
     else:
+
         def inv_func(xx):
             return xx
 
@@ -354,7 +360,7 @@ def get_data(problem, **kwargs):
             p_all = jnp.delete(p_all, idxs, 0)
             y_all = jnp.delete(y_all, idxs, 1)
             return norm_divide_return(ts, y_all, p_all, test_end=y_all_1.shape[-1])
-        
+
         case "angelo_newest":
             import os
             import pandas as pd
@@ -370,15 +376,17 @@ def get_data(problem, **kwargs):
                         lambda x: np.array(x.strip("[]").split(), dtype=np.float32)
                     ).to_numpy()
                 )
-            
-            y_all = pd.read_csv(f("db_s22_matrix.csv"), sep=' ').to_numpy()
-            p_all = pd.read_csv(f("inputs.csv"), sep=',').to_numpy()
-            ts = pd.read_csv(f("freq_red.csv"), sep=' ').to_numpy()
 
-            return norm_divide_return(ts, y_all, p_all, norm_p="meanstd", norm_data=None)
+            y_all = pd.read_csv(f("db_s22_matrix.csv"), sep=" ").to_numpy()
+            p_all = pd.read_csv(f("inputs.csv"), sep=",").to_numpy()
+            ts = pd.read_csv(f("freq_red.csv"), sep=" ").to_numpy()
+
+            return norm_divide_return(
+                ts, y_all, p_all, norm_p="meanstd", norm_data=None
+            )
 
         case "mult_gausses":
-    
+
             p_vals_0 = jnp.repeat(jnp.linspace(1, 3, 10), 10)
             p_vals_1 = jnp.tile(jnp.linspace(4, 6, 10), 10)
             p_vals = jnp.stack([p_vals_0, p_vals_1], axis=-1)
@@ -562,22 +570,22 @@ def get_data(problem, **kwargs):
                 | (p_all_test <= jnp.min(p_all_train, 0)),
                 1,
             )
-            p_all_test = jnp.delete(p_all_test, to_remove, 0)
-            y_all_test = jnp.delete(y_all_test, to_remove, 1)
-            y_all_test = jnp.delete(
-                y_all_test,
-                np.bitwise_or.reduce(
-                    (p_all_test >= jnp.max(p_all_train, 0))
-                    | (p_all_test <= jnp.min(p_all_train, 0)),
-                    1,
-                ),
-                1,
-            )
+            # p_all_test = jnp.delete(p_all_test, to_remove, 0)
+            # y_all_test = jnp.delete(y_all_test, to_remove, 1)
+            # y_all_test = jnp.delete(
+            #     y_all_test,
+            #     np.bitwise_or.reduce(
+            #         (p_all_test >= jnp.max(p_all_train, 0))
+            #         | (p_all_test <= jnp.min(p_all_train, 0)),
+            #         1,
+            #     ),
+            #     1,
+            # )
 
             p_all = jnp.concatenate([p_all_train, p_all_test], 0)
             y_all = jnp.concatenate([y_all_train, y_all_test], -1)
             return norm_divide_return(
-                (X, Y), y_all, p_all, test_end=p_all_test.shape[0]
+                (X, Y), y_all, p_all, norm_data="meanstd", test_end=p_all_test.shape[0]
             )
 
         case "multiple_steps":
@@ -694,17 +702,21 @@ def get_data(problem, **kwargs):
                     y_train = my_vmap(lambda x: x[1])(train_dataset)
                     y_test = my_vmap(lambda x: x[1])(test_dataset)
                     idx = np.arange(0, y_train.shape[0], 1)
-                    y_now_tr = np.zeros((y_train.shape[0], jnp.max(y_train)+1))
+                    y_now_tr = np.zeros((y_train.shape[0], jnp.max(y_train) + 1))
                     all_idx = np.stack([idx, y_train])
                     y_now_tr[all_idx[0, :], all_idx[1, :]] = 1
 
                     idx = np.arange(0, y_test.shape[0], 1)
-                    y_now_t = np.zeros((y_test.shape[0], jnp.max(y_test)+1))
+                    y_now_t = np.zeros((y_test.shape[0], jnp.max(y_test) + 1))
                     all_idx = np.stack([idx, y_test])
                     y_now_t[all_idx[0, :], all_idx[1, :]] = 1
 
-                    return jnp.array(y_now_tr), jnp.squeeze(x_test), jnp.array(y_now_t) # [45000:]
-            x_all = x_all # [..., 45000:]
+                    return (
+                        jnp.array(y_now_tr),
+                        jnp.squeeze(x_test),
+                        jnp.array(y_now_t),
+                    )  # [45000:]
+            x_all = x_all  # [..., 45000:]
 
             return norm_divide_return(
                 None, x_all, None, test_end=x_test.shape[-1], norm_data=False
@@ -793,7 +805,7 @@ def find_weighted_loss(terms, weight_vals=None):
 
 def dataloader(arrays, batch_size, p_vals=None, *, key):
     dataset_size = arrays[0].shape[0]
-    arrays = [array if array is not None else [None]*dataset_size for array in arrays]
+    arrays = [array if array is not None else [None] * dataset_size for array in arrays]
     # assert all(array.shape[0] == dataset_size for array in arrays)
     indices = jnp.arange(dataset_size)
     kk = 0
@@ -809,7 +821,7 @@ def dataloader(arrays, batch_size, p_vals=None, *, key):
                 itemgetter(*batch_perm)(array) for array in arrays
             )  # Works for lists and arrays
             if batch_size != 1:
-                yield [None if None in arr  else jnp.array(arr) for arr in arrs]
+                yield [None if None in arr else jnp.array(arr) for arr in arrs]
             else:
                 yield [
                     [arr] if arr is None else jnp.expand_dims(jnp.array(arr), axis=0)
@@ -1029,31 +1041,177 @@ class Func(eqx.Module):
             return self.post_proc_func(self.mlp(y, key=k))
         else:
             return self.mlp(y, key=k)
-class CNN_unique(eqx.Module):
+
+
+def next_D(D, pad, ker, st, num, all_Ds=[]):
+    if num == 0:
+        return all_Ds
+    all_Ds.append(int(D))
+    return next_D((D + 2 * pad - ker) / st + 1, pad, ker, st, num - 1)
+
+def plot_welding(trainor, idx):
+    x = trainor.ts[0]
+    dim = jnp.argmax(jnp.diff(x, axis=0) < 0)+1
+    y = trainor.ts[1]
+    X, Y = jnp.meshgrid(x[:dim, 0], jnp.reshape(y, (dim, -1))[:, 0])
+    m1 = trainor.y_test_o[:, idx:idx+1]
+    m2 = trainor.y_pred_mlp_test_o[:, idx:idx+1]
+    m3 = trainor.y_pred_mlp_test_o[:, idx:idx+1]
+
+    M1 = m1.reshape(X.shape[0], X.shape[0])
+    M2 = m2.reshape(X.shape[0], X.shape[0])
+    M3 = m3.reshape(X.shape[0], X.shape[0])
+
+    fig = plt.figure()
+    # Plot for M1
+    ax1 = fig.add_subplot(231, projection='3d')
+    ax1.plot_surface(X, Y, M1, cmap='viridis')
+    ax1.set_ylabel('Y')
+    ax1.set_zlabel('true')
+
+    # Plot for M2
+    ax2 = fig.add_subplot(232, projection='3d')
+    ax2.plot_surface(X, Y, M2, cmap='viridis')
+    ax2.set_ylabel('Y')
+    ax2.set_zlabel('pred')
+
+    ax3 = fig.add_subplot(233, projection='3d')
+    ax3.plot_surface(X, Y, M3, cmap='viridis')
+    ax3.set_ylabel('Y')
+    ax3.set_zlabel('pred-mlp')
+
+    # Set the same color scale for both subplots
+    vmin = min(M1.min(), M2.min())
+    vmax = max(M1.max(), M2.max())
+    ax1.set_zlim(vmin, vmax)
+    ax2.set_zlim(vmin, vmax)
+    ax3.set_zlim(vmin, vmax)
+    ax1.view_init(elev=0, azim=0)
+    ax2.view_init(elev=0, azim=0)
+    ax3.view_init(elev=0, azim=0)
+    ax1.set_xticks([])
+    ax2.set_xticks([])
+    ax1.set_zticks([])
+    ax2.set_zticks([])
+    ax3.set_xticks([])
+    ax3.set_zticks([])
+
+    ax1 = fig.add_subplot(234, projection='3d')
+    ax1.plot_surface(X, Y, M1, cmap='viridis')
+    ax1.set_xlabel('X')
+    ax1.set_ylabel('Y')
+
+    # Plot for M2
+    ax2 = fig.add_subplot(235, projection='3d')
+    ax2.plot_surface(X, Y, M2, cmap='viridis')
+    ax2.set_xlabel('X')
+    ax2.set_ylabel('Y')
+
+    ax3 = fig.add_subplot(236, projection='3d')
+    ax3.plot_surface(X, Y, M3, cmap='viridis')
+    ax3.set_xlabel('X')
+    ax3.set_ylabel('Y')
+
+    # Set the same color scale for both subplots
+    vmin = min(M1.min(), M2.min())
+    vmax = max(M1.max(), M2.max())
+    ax1.set_zlim(vmin, vmax)
+    ax2.set_zlim(vmin, vmax)
+    ax3.set_zlim(vmin, vmax)
+    ax1.view_init(elev=90, azim=0)
+    ax2.view_init(elev=90, azim=0)
+    ax3.view_init(elev=90, azim=0)
+    ax1.set_zticks([])
+    ax2.set_zticks([])
+    ax1.set_xticks([])
+    ax2.set_xticks([])
+    ax3.set_zticks([])
+    ax3.set_xticks([])
+    plt.show()
+    
+class CNNs_with_MLP(eqx.Module):
+    """Class mainly for creating encoders with CNNs.
+    The encoder is composed of multiple CNNs followed by an MLP.
+    """
+
     layers: list
 
-    def __init__(self, key):
-        key1, key2, key3, key4 = jax.random.split(key, 4)
-        # Standard CNN setup: convolutional layer, followed by flattening,
-        # with a small MLP on top.
-        self.layers = [
-            eqx.nn.Conv2d(1, 3, kernel_size=4, key=key1),
-            eqx.nn.MaxPool2d(kernel_size=2),
-            jax.nn.relu,
-            jnp.ravel,
-            eqx.nn.Linear(1728, 512, key=key2),
-            jax.nn.sigmoid,
-            eqx.nn.Linear(512, 64, key=key3),
-            jax.nn.relu,
-            eqx.nn.Linear(64, 10, key=key4),
-            jax.nn.softmax,
+    def __init__(
+        self,
+        data_dim0,
+        data_dim1,
+        out,
+        CNNs_num=0,
+        width=64,
+        depth=3,
+        kernel_conv=3,
+        stride=1,
+        padding=2,
+        out_conv=3,
+        dropout=0,
+        *,
+        key,
+        **kwargs,
+    ):
+
+        all_Ds = next_D(data_dim0, padding, kernel_conv, stride, CNNs_num)
+        all_Ds_b = [1] + all_Ds[:-1]
+        pdb.set_trace()
+        key1, key2 = jax.random.split(key, 2)
+        CNN_keys = jax.random.split(key1, CNNs_num)
+        CNN_activations = (
+            [CNN_activations] * CNNs_num
+            if CNN_activations is callable
+            else CNN_activations
+        )
+        CNN_layers = [
+            lambda x: act(
+                eqx.nn.Conv2d(
+                    Db,
+                    Da,
+                    stride=stride,
+                    padding=padding,
+                    kernel_size=kernel_conv,
+                    key=key,
+                )(x)
+            )
+            for Da, Db, key, act in zip(all_Ds, all_Ds_b, CNN_keys, CNN_activations)
+        ]
+        self.layers = CNN_layers + [
+            eqx.nn.Conv2d(
+                1,
+                out_conv,
+                stride=stride,
+                padding=padding,
+                kernel_size=kernel_conv,
+                key=key1,
+            ),
+            jnn.softplus,
+            lambda x: jnp.expand_dims(jnp.ravel(x), -1),
+            lambda x: MLP_dropout(
+                int(
+                    out_conv
+                    * ()
+                    * ((data_dim1 + 2 * padding - kernel_conv) / stride + 1)
+                ),
+                out,
+                width,
+                depth,
+                eqx.nn.Dropout(dropout),
+                key=key2,
+            )(jnp.squeeze(x)),
         ]
 
-    def __call__(self, x):
+    def __call__(self, x, *args, **kwargs):
+        x = jnp.expand_dims(x, 0)
         for layer in self.layers:
             x = layer(x)
         return x
-    
+
+
+if __name__ == "__main__":
+    CNNs_with_MLP(28, 28, 500, 8, key=jrandom.PRNGKey(0))
+
 
 class CNN(eqx.Module):
     layers: list
@@ -1089,11 +1247,11 @@ class CNN(eqx.Module):
             jnn.softplus,
             lambda x: jnp.expand_dims(jnp.ravel(x), -1),
             lambda x: MLP_dropout(
-                int(out_conv
-                * ((data_dim0 + 2 * padding - kernel_conv)
-                / stride +1)
-                * ((data_dim1 + 2 * padding - kernel_conv)
-                / stride +1)),
+                int(
+                    out_conv
+                    * ((data_dim0 + 2 * padding - kernel_conv) / stride + 1)
+                    * ((data_dim1 + 2 * padding - kernel_conv) / stride + 1)
+                ),
                 out,
                 width,
                 depth,
@@ -1136,11 +1294,11 @@ class CNN_trans(eqx.Module):
             lambda x: jnp.expand_dims(jnp.ravel(x), -1),
             lambda x: MLP_dropout(
                 out,
-                int(out_conv
-                * ((data_dim0 + 2 * padding - kernel_conv)
-                / stride +1)
-                * ((data_dim1 + 2 * padding - kernel_conv)
-                / stride +1)),
+                int(
+                    out_conv
+                    * ((data_dim0 + 2 * padding - kernel_conv) / stride + 1)
+                    * ((data_dim1 + 2 * padding - kernel_conv) / stride + 1)
+                ),
                 width,
                 depth,
                 eqx.nn.Dropout(dropout),
@@ -1164,6 +1322,7 @@ class CNN_trans(eqx.Module):
         for layer in self.layers:
             x = layer(x)
         return jnp.squeeze(x)
+
 
 class MNIST_patrick_CNN(eqx.Module):
     layers: list
@@ -1215,6 +1374,7 @@ class MNIST_patrick_CNN(eqx.Module):
         for layer in self.layers:
             x = layer(x)
         return x
+
 
 class MNIST_patrick_CNN_trans(eqx.Module):
     layers: list
@@ -1269,7 +1429,8 @@ class MNIST_patrick_CNN_trans(eqx.Module):
         for layer in self.layers:
             x = layer(x)
         return jnp.squeeze(x)
-    
+
+
 class MNIST_CNN(eqx.Module):
     layers: list
 
@@ -1331,7 +1492,7 @@ class MNIST_CNN(eqx.Module):
         for layer in self.layers:
             x = layer(x)
         return x
-    
+
 
 class MNIST_CNN_trans(eqx.Module):
     layers: list
