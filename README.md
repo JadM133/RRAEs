@@ -21,7 +21,10 @@ Since most of the lab doesn't use Python, we provide this section to clarify how
   -  On a Mac or Linux: ``source .venv/bin/activate``.
   -  On Windows: ``.venv/Scripts/activate``.
 4. Now when you ``pip install`` something, it is installed in your ``.venv`` folder. You can install the library by doing ``pip install git+https://github.com/JadM133/RRAEs.git`` (note: you have to have access to the library since it is private).
-5. To make sure everything went well, run the tests! To do so, start by installing pytest as follows ''pip install -U pytest''. Then execute the following: ''pytest .\.venv\Lib\site-packages\RRAEs\tests\''. If all the tests pass, you're good to go!
+5. To make sure everything went well, run the tests! To do so, start by installing pytest as follows ''pip install -U pytest''. Then execute the following:
+  -  On a Mac: ``pytest ./.venv/lib/3.XX/site-packages/RRAEs/tests/``. where XX is your python version.
+  -  On Windows: ``pytest .\.venv\Lib\site-packages\RRAEs\tests\``.
+If all the tests pass, you're good to go!
 6. Give it a try, the best place to start is the [jupyter notebook](tutorial.ipyb).
 
 
