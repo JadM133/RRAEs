@@ -5,18 +5,15 @@ import pdb
 from RRAEs.utilities import (
     Func,
     v_vt_class,
-    CNN,
-    CNN_trans,
-    MNIST_CNN,
-    MNIST_CNN_trans,
-    MNIST_patrick_CNN,
-    MNIST_patrick_CNN_trans,
+    CNNs_with_MLP,
+    MLP_with_CNNs_trans,
 )
 import equinox as eqx
 import jax.random as jrandom
 import jax.nn as jnn
 from equinox._doc_utils import doc_repr
 import warnings
+import numpy as np
 
 _identity = doc_repr(lambda x, **kwargs: x, "lambda x: x")
 
@@ -63,6 +60,7 @@ class Autoencoder(eqx.Module):
         data,
         latent_size,
         k_max=-1,
+        latent_size_after=None,
         post_proc_func=_identity,
         _encode=None,
         _perform_in_latent=None,
@@ -76,6 +74,9 @@ class Autoencoder(eqx.Module):
     ):
 
         key_e, key_d = jrandom.split(key)
+
+        if latent_size_after is None:
+            latent_size_after = latent_size
 
         if _encode is None:
             if "width_size" not in kwargs_enc.keys():
@@ -103,7 +104,7 @@ class Autoencoder(eqx.Module):
             if "depth" not in kwargs_dec.keys():
                 kwargs_dec["depth"] = 6
             self._decode = Func(
-                data_size=latent_size,
+                data_size=latent_size_after,
                 out_size=data.shape[0],
                 post_proc_func=post_proc_func,
                 key=key_d,
@@ -156,6 +157,33 @@ class Autoencoder(eqx.Module):
         return self.perform_in_latent(self.encode(x, *args, **kwargs), *args, **kwargs)
 
 
+def latent_func_strong_VAE(y, k_max, ret=False, eps_rand=0.1, *args, **kwargs):
+    if k_max == -1 and (y.shape[0] % 2) != 0:
+        raise ValueError("k_max can not be -1 for Variational Strong RRAEs")
+    elif k_max == -1:
+        means = y[:int(y.shape[0]/2)]
+        stds = y[int(y.shape[0]/2):]
+        return eps_rand * jnp.exp(stds * .5) + means
+                                                              
+    u, s, v = jnp.linalg.svd(y, full_matrices=False)
+    sigs = s[:k_max]
+    v_now = v[:k_max, :]
+    u_now = u[:, :k_max]
+    v_now = jnp.multiply(v_now, jnp.expand_dims(sigs, -1))
+
+    eps = jrandom.uniform(jrandom.PRNGKey(0), (v_now.shape[0], v_now.shape[-1],))
+    new_v_now = jax.vmap(lambda x, ep: x+0.1*ep)(v_now, eps)
+
+    y_approx = jnp.sum(
+        jax.vmap(
+            lambda u, v: jnp.outer(u, v), in_axes=[-1, 0], out_axes=-1
+        )(u_now, new_v_now),
+        axis=-1,
+    )
+    if ret:
+        return u_now, new_v_now
+    return y_approx
+
 def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
     """Performing the truncated SVD in the latent space.
 
@@ -177,12 +205,20 @@ def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
         sigs = s[:k_max]
         v_now = v[:k_max, :]
         u_now = u[:, :k_max]
+
+        v_now = jnp.multiply(v_now, jnp.expand_dims(sigs, -1))
         y_approx = jnp.sum(
             jax.vmap(
-                lambda u, s, v: s * jnp.outer(u, v), in_axes=[-1, 0, 0], out_axes=-1
-            )(u_now, sigs, v_now),
+                lambda u, v: jnp.outer(u, v), in_axes=[-1, 0], out_axes=-1
+            )(u_now, v_now),
             axis=-1,
         )
+        # y_approx = jnp.sum(
+        #     jax.vmap(
+        #         lambda u, s, v: s * jnp.outer(u, v), in_axes=[-1, 0, 0], out_axes=-1
+        #     )(u_now, sigs, v_now),
+        #     axis=-1,
+        # )
     else:
         y_approx = y
         u_now = None
@@ -215,6 +251,7 @@ class Strong_RRAE_MLP(Autoencoder):
         latent_size,
         k_max,
         post_proc_func=None,
+        variational=False,
         *,
         key,
         kwargs_enc={},
@@ -226,11 +263,19 @@ class Strong_RRAE_MLP(Autoencoder):
             warnings.warn("linear_l can not be specified for Strong")
             kwargs.pop("linear_l")
 
+        if variational:
+            k_max = k_max # * 2
+
+        if variational:
+            latent_func = latent_func_strong_VAE
+        else:
+            latent_func = latent_func_strong_RRAE
+
         super().__init__(
             data,
             latent_size,
             k_max,
-            _perform_in_latent=latent_func_strong_RRAE,
+            _perform_in_latent=latent_func,
             map_latent=False,
             post_proc_func=post_proc_func,
             key=key,
@@ -248,7 +293,7 @@ class Vanilla_AE_MLP(Autoencoder):
     """
 
     def __init__(
-        self, data, latent_size, *, key, kwargs_enc={}, kwargs_dec={}, **kwargs
+        self, data, latent_size, variational=False, *, key, kwargs_enc={}, kwargs_dec={}, **kwargs
     ):
         if "k_max" in kwargs.keys():
             if kwargs["k_max"] != -1:
@@ -257,13 +302,23 @@ class Vanilla_AE_MLP(Autoencoder):
                 )
             kwargs.pop("k_max")
 
+        if variational:
+            latent_func = latent_func_strong_VAE
+            latent_size_after = int(latent_size/2)
+        else:
+            latent_func = None
+            latent_size_after = latent_size
+
         super().__init__(
             data,
             latent_size,
             -1,
+            latent_size_after,
             key=key,
             kwargs_enc=kwargs_enc,
             kwargs_dec=kwargs_dec,
+            _perform_in_latent=latent_func,
+            map_latent=False,
             **kwargs,
         )
 
@@ -360,31 +415,45 @@ class CNN_Autoencoder(Autoencoder):
         data,
         latent_size,
         k_max=-1,
-        width_enc=64,
-        depth_enc=1,
-        width_dec=64,
-        depth_dec=6,
+        width_mlp_enc=64,
+        depth_mlp_enc=1,
+        width_cnn_enc=64,
+        depth_cnn_enc=1,
+        width_mlp_dec=64,
+        depth_mlp_dec=6,
+        width_cnn_dec=64,
+        depth_cnn_dec=1,
         _perform_in_latent=_identity,
         *,
         key,
+        kwargs_mlp_enc={},
+        kwargs_cnn_enc={},
+        kwargs_mlp_dec={},
+        kwargs_cnn_dec={},
         **kwargs,
     ):
-        _encode = CNN(
+        _encode = CNNs_with_MLP(
             data_dim0=data.shape[0],
-            data_dim1=data.shape[1],
-            width=width_enc,
-            depth=depth_enc,
+            width_mlp=width_mlp_enc,
+            depth_mlp=depth_mlp_enc,
             out=latent_size,
+            CNNs_num=depth_cnn_enc,
+            CNN_widths=width_cnn_enc,
             key=key,
+            kwargs_mlp=kwargs_mlp_enc,
+            kwargs_cnn=kwargs_cnn_enc,
             **kwargs,
         )
-        _decode = CNN_trans(
+        _decode = MLP_with_CNNs_trans(
             data_dim0=data.shape[0],
-            data_dim1=data.shape[1],
-            width=width_dec,
-            depth=depth_dec,
+            width_mlp=width_mlp_dec,
+            depth_mlp=depth_mlp_dec,
+            CNNs_num=depth_cnn_dec,
+            CNN_widths=width_cnn_dec,
             out=latent_size,
             key=key,
+            kwargs_mlp=kwargs_mlp_dec,
+            kwargs_cnn=kwargs_cnn_dec,
             **kwargs,
         )
         super().__init__(
@@ -400,36 +469,7 @@ class CNN_Autoencoder(Autoencoder):
         )
 
 
-class MNIST_CNN_Autoencoder(Autoencoder):
-    def __init__(
-        self,
-        data,
-        latent_size,
-        k_max=-1,
-        _perform_in_latent=_identity,
-        *,
-        key=None,
-        kwargs_enc={},
-        kwargs_dec={},
-        **kwargs,
-    ):
-        keys = jrandom.split(key, 2)
-        _encode = MNIST_CNN(latent_size, key=keys[0], **kwargs_enc)
-        _decode = MNIST_CNN_trans(latent_size, key=keys[1], **kwargs_dec)
-        super().__init__(
-            data,
-            latent_size,
-            k_max=k_max,
-            _encode=_encode,
-            _perform_in_latent=_perform_in_latent,
-            map_latent=False,
-            _decode=_decode,
-            key=key,
-            **kwargs,
-        )
-
-
-class Strong_RRAE_CNN(MNIST_CNN_Autoencoder):
+class Strong_RRAE_CNN(CNN_Autoencoder):
     """Subclass of RRAEs with the strong formulation for inputs of
     dimension (data_size_1 x data_size_2 x batch_size).
     """
@@ -445,8 +485,7 @@ class Strong_RRAE_CNN(MNIST_CNN_Autoencoder):
             **kwargs,
         )
 
-
-class Vanilla_AE_CNN(MNIST_CNN_Autoencoder):
+class Vanilla_AE_CNN(CNN_Autoencoder):
     """Vanilla Autoencoder.
 
     Subclass for the Vanilla AE, basically the strong RRAE with
@@ -468,7 +507,7 @@ class Vanilla_AE_CNN(MNIST_CNN_Autoencoder):
         super().__init__(data, latent_size, key=key, **kwargs)
 
 
-class Weak_RRAE_CNN(MNIST_CNN_Autoencoder):
+class Weak_RRAE_CNN(CNN_Autoencoder):
     v_vt: v_vt_class
 
     """Weak Rank Reduction Autoencoder. We define it as a
@@ -495,7 +534,7 @@ class Weak_RRAE_CNN(MNIST_CNN_Autoencoder):
         self.v_vt = v_vt_class(latent_size, data.shape[-1], k_max, key=key)
 
 
-class IRMAE_CNN(MNIST_CNN_Autoencoder):
+class IRMAE_CNN(CNN_Autoencoder):
     def __init__(self, data, latent_size, linear_l=2, *, key, **kwargs):
 
         if "k_max" in kwargs.keys():
@@ -505,8 +544,16 @@ class IRMAE_CNN(MNIST_CNN_Autoencoder):
                 )
             kwargs.pop("k_max")
 
+        warnings.warn(
+            "IRMAEs and LoRAEs are not tested for CNNs, be careful when using them..."
+        )
         super().__init__(
-            data, latent_size, -1, kwargs_enc={"linear_l": linear_l}, key=key, **kwargs
+            data,
+            latent_size,
+            -1,
+            kwargs_mlp_enc={"linear_l": linear_l},
+            key=key,
+            **kwargs,
         )
 
 

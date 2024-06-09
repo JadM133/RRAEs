@@ -128,11 +128,13 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
+*.xpost
+*.exo
+*.sh
 # Spyder project settings
 .spyderproject
 .spyproject
-
+data-NVH
 # Rope project settings
 .ropeproject
 

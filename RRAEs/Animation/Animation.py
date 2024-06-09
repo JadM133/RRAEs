@@ -12,15 +12,19 @@ import jax.random as jr
 import equinox as eqx
 from RRAEs.training_classes import Trainor_class
 
-def find_lim(mn, mx, typ='max'):
+
+def find_lim(mn, mx, typ="max"):
     dif = jnp.abs(mx - mn)
-    if typ == 'max':
-        return mx + dif/10
+    if typ == "max":
+        return mx + dif / 10
     else:
-        return mn - dif/10
+        return mn - dif / 10
+
 
 class MplCanvas(FigureCanvasQTAgg):
-    def __init__(self, parent=None, width=5, height=4, dpi=100, xlabel=None, ylabel=None):
+    def __init__(
+        self, parent=None, width=5, height=4, dpi=100, xlabel=None, ylabel=None
+    ):
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
         if xlabel is not None:
@@ -29,6 +33,7 @@ class MplCanvas(FigureCanvasQTAgg):
             self.axes.set_ylabel(ylabel)
         super(MplCanvas, self).__init__(fig)
         self.setParent(parent)
+
 
 class Ui_MainWindow(QtWidgets.QMainWindow):
     def __init__(self, trainor_path):
@@ -42,7 +47,8 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         trainor.load(self.path)
         self.train = trainor.y_train
         self.test = trainor.y_test
-        self.y_train = trainor.y_train
+        self.train_o = trainor.y_train_o
+        self.y_plot = self.train
         self.idx1 = QtWidgets.QSpinBox(self.centralwidget)
         self.idx1.setGeometry(QtCore.QRect(1090, 105, 181, 51))
         font = QtGui.QFont()
@@ -52,7 +58,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.idx1_val = 0
         self.idx1.setObjectName("spinBox")
         self.idx1.setMinimum(0)
-        self.idx1.setMaximum(self.y_train.shape[-1]-1)
+        self.idx1.setMaximum(self.y_plot.shape[-1] - 1)
         self.idx1.valueChanged.connect(self.change_idx1)
 
         self.idx1_lab = QtWidgets.QLabel(self.centralwidget)
@@ -61,7 +67,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         font.setPointSize(13)
         self.idx1_lab.setFont(font)
         self.idx1_lab.setObjectName("label")
-        
+
         self.idx2_lab = QtWidgets.QLabel(self.centralwidget)
         self.idx2_lab.setGeometry(QtCore.QRect(1100, 185, 181, 51))
         font = QtGui.QFont()
@@ -78,7 +84,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.idx2_val = 0
         self.idx2.setObjectName("spinBox_2")
         self.idx2.setMinimum(0)
-        self.idx2.setMaximum(self.y_train.shape[-1]-1)
+        self.idx2.setMaximum(self.y_plot.shape[-1] - 1)
         self.idx2.valueChanged.connect(self.change_idx2)
 
         self.ip_lab = QtWidgets.QLabel(self.centralwidget)
@@ -100,8 +106,22 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.ip.setMaximum(500)
         self.ip.valueChanged.connect(self.change_idx2)
 
+        self.reg = QtWidgets.QComboBox(self.centralwidget)
+        self.reg.setGeometry(QtCore.QRect(1090, 581, 181, 51)) # reg
+        self.reg.addItem("Normalized")
+        self.reg.addItem("Original")
+        self.reg_val = True
+        self.reg.currentIndexChanged.connect(self.change_reg)
+
+        self.zm = QtWidgets.QComboBox(self.centralwidget)
+        self.zm.setGeometry(QtCore.QRect(1090, 666, 181, 51)) # reg
+        self.zm.addItem("No zoom")
+        self.zm.addItem("Zoom")
+        self.zm_val = False
+        self.zm.currentIndexChanged.connect(self.change_zm)
+
         self.run_simul = QtWidgets.QPushButton(self.centralwidget)
-        self.run_simul.setGeometry(QtCore.QRect(1090, 620, 181, 91))
+        self.run_simul.setGeometry(QtCore.QRect(1090, 760, 181, 91))
         self.run_simul.setObjectName("run_simul")
         font = QtGui.QFont()
         font.setBold(True)
@@ -110,9 +130,9 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.run_simul.setFont(font)
         self.run_simul.setStyleSheet("background-color : lightpink")
         self.run_simul.clicked.connect(self.run)
-    
+
         self.run_simul_2 = QtWidgets.QPushButton(self.centralwidget)
-        self.run_simul_2.setGeometry(QtCore.QRect(1090, 740, 181, 91))
+        self.run_simul_2.setGeometry(QtCore.QRect(1090, 880, 181, 91))
         self.run_simul_2.setAutoFillBackground(True)
         self.run_simul_2.setObjectName("run_simul_2")
         font.setBold(True)
@@ -123,20 +143,20 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.run_simul_2.clicked.connect(self.interpolate)
 
         self.type_sim = QtWidgets.QComboBox(self.centralwidget)
-        self.type_sim.setGeometry(QtCore.QRect(1090, 500, 181, 51))
+        self.type_sim.setGeometry(QtCore.QRect(1090, 481, 181, 51)) # training
         self.type_sim.addItem("Train set")
         self.type_sim.addItem("Test set")
         self.type_sim_val = "Train set"
         self.type_sim.currentIndexChanged.connect(self.change_type)
 
-
         self.plot_above = MplCanvas(self, width=5, height=4, dpi=100, xlabel="Position")
         self.plot_above.axes.plot([], [])
         self.plot_above.setGeometry(QtCore.QRect(0, 0, 1000, 500))
-        self.plot_above.mpl_connect("button_press_event", self.onclick)
         self.plot_above.axes.set_ylabel("Prediction")
 
-        self.plot_below = MplCanvas(self, width=5, height=4, dpi=100, xlabel="Position", ylabel="Shadow")
+        self.plot_below = MplCanvas(
+            self, width=5, height=4, dpi=100, xlabel="Position", ylabel="Shadow"
+        )
         self.plot_below.axes.plot([], [])
         self.plot_below.setGeometry(QtCore.QRect(0, 500, 1000, 500))
         self.plot_below.axes.set_ylabel("True")
@@ -154,13 +174,19 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.computed = False
         QtCore.QMetaObject.connectSlotsByName(self)
 
-    def onclick(self, event):
-        self.sp_eval = event.xdata
-        if self.sp_eval > jnp.max(self.spx):
-            self.sp_eval = jnp.max(self.spx)
-        if self.sp_eval < jnp.min(self.spx):
-            self.sp_eval = jnp.min(self.spx)
-        self.time_val.setValue(self.sp_eval)
+    def change_zm(self):
+        val = self.zm.currentText()
+        if val == "Zoom":
+            self.zm_val = True
+        else:
+            self.zm_val = False
+
+    def change_reg(self):
+        text = self.reg.currentText()
+        if text == "Normalized":
+            self.reg_val = True
+        else:
+            self.reg_val = False
 
     def change_idx1(self):
         self.idx1_val = self.idx1.value()
@@ -182,69 +208,128 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
     def change_type(self):
         self.type_sim_val = self.type_sim.currentText()
         if self.type_sim_val == "Train set":
-            self.y_train = self.train
-        else:
-            self.y_train = self.test
-        self.idx2.setMaximum(self.y_train.shape[-1]-1)
+            self.y_plot = self.train
+        elif self.type_sim_val == "Test set":
+            self.y_plot = self.test
+        self.idx2.setMaximum(self.y_plot.shape[-1] - 1)
         self.computed = False
-    
+
     def update_graph(self):
         self.count += 1
         i = self.count
         self.plot_above.axes.cla()
         self.plot_above.axes.plot([], [])
         self.line.set_ydata(self.interp_res[:, i])
-        self.plot_above.axes.plot(self.line.get_ydata(), linewidth=3)
+        self.plot_above.axes.plot(jnp.linspace(0, 1, self.line.get_ydata().shape[0]), self.line.get_ydata(), linewidth=3)
         self.plot_above.axes.set_ylim([self.min_v, self.max_v])
         self.plot_below.axes.set_ylim(self.min_v, self.max_v)
-        self.plot_above.axes.plot(self.interp_res[:, 0], color="blue", linewidth=3)
-        self.plot_above.axes.plot(self.interp_res[:, -1], color="red", linewidth=3)
+        if self.zm_val:
+            self.plot_below.axes.set_ylim(0.2, 0.6)
+            self.plot_above.axes.set_ylim(0.2, 0.6)
+            self.plot_below.axes.set_xlim(0.2, 0.6)
+            self.plot_above.axes.set_xlim(0.2, 0.6)
+
+        self.plot_above.axes.plot(jnp.linspace(0, 1, self.interp_res[:, 0].shape[0]), self.interp_res[:, 0], color="blue", linewidth=3)
+        self.plot_above.axes.plot(jnp.linspace(0, 1, self.interp_res[:, -1].shape[0]), self.interp_res[:, -1], color="red", linewidth=3)
         self.plot_above.axes.set_ylabel("Prediction")
-        self.plot_below.draw()
         self.plot_above.draw()
         return self.line
-    
-    def init_graph(self, curves):
-        self.plot_below.axes.set_ylim(self.min_v, self.max_v)
-        self.plot_above.axes.plot(curves[:, 0], color="blue", linewidth=3)
-        self.plot_above.axes.plot(curves[:, -1], color="red", linewidth=3)
 
     def run(self):
         self.plot_below.axes.cla()
         self.plot_below.draw()
         self.run_simul.repaint()
-        trainor = Trainor_class()
-        trainor.load(self.path)
-        curves = jnp.concatenate((self.y_train[:, self.idx1_val], self.y_train[:, self.idx2_val]))
-        self.plot_below.axes.plot(self.y_train[:, self.idx1_val], color="blue", linewidth=3)
-        self.plot_below.axes.plot(self.y_train[:, self.idx2_val], color="red", linewidth=3)
+        if self.reg_val:
+            curves = jnp.concatenate(
+                (self.y_plot[:, self.idx1_val], self.y_plot[:, self.idx2_val])
+            )
+            self.plot_below.axes.plot(
+                jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]), self.y_plot[:, self.idx1_val], color="blue", linewidth=3
+            )
+            self.plot_below.axes.plot(
+                jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]), self.y_plot[:, self.idx2_val], color="red", linewidth=3
+            )
+        else:
+            trainor = Trainor_class()
+            trainor.load(self.path)
+            curves = jnp.concatenate(
+                (
+                    trainor.inv_func(self.y_plot[:, self.idx1_val]),
+                    trainor.inv_func(self.y_plot[:, self.idx2_val]),
+                )
+            )
+            self.plot_below.axes.plot(
+                jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]),
+                trainor.inv_func(self.y_plot[:, self.idx1_val]),
+                color="blue",
+                linewidth=3,
+            )
+            self.plot_below.axes.plot(
+                jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]),
+                trainor.inv_func(self.y_plot[:, self.idx2_val]),
+                color="red",
+                linewidth=3,
+            )
+
         max_v = jnp.max(curves)
         min_v = jnp.min(curves)
-        self.max_v = find_lim(min_v, max_v, "max")
-        self.min_v =find_lim(min_v, max_v, "min")
+        if not self.zm_val:
+            self.max_v = find_lim(min_v, max_v, "max")
+            self.min_v = find_lim(min_v, max_v, "min")
+        else:
+            self.max_v = 0.6
+            self.min_v = 0.2
+
         self.plot_below.axes.set_ylim(self.min_v, self.max_v)
         self.plot_above.axes.set_ylim(self.min_v, self.max_v)
+        if self.zm_val:
+            self.plot_below.axes.set_ylim(0.2, 0.6)
+            self.plot_above.axes.set_ylim(0.2, 0.6)
+            self.plot_below.axes.set_xlim(0.2, 0.6)
+            self.plot_above.axes.set_xlim(0.2, 0.6)
+
         self.plot_below.axes.set_ylabel("True")
         self.plot_below.draw()
         self.plot_above.draw()
         self.run_simul.setChecked(False)
 
-
-    def _interpolate(self):
+    def interpolate(self):
+        self.plot_above.axes.cla()
         self.plot_above.draw()
-        self.run_simul.repaint()
-        if not self.computed:
-            trainor = Trainor_class()
-            trainor.load(self.path)
-            lat_1 = trainor.model.latent(self.y_train[:, self.idx1_val:self.idx1_val+1])
-            lat_2 = trainor.model.latent(self.y_train[:, self.idx2_val:self.idx2_val+1])
-            points = self.ip_val
-            prop_left = jnp.linspace(0, 1, points+2)[1:-1]
-            latents = (jnp.squeeze(lat_1) + (prop_left[:, None] * jnp.squeeze(lat_2 - lat_1))).T
+        self.plot_above.axes.set_ylim(self.min_v, self.max_v)
+        if self.zm_val:
+            self.plot_below.axes.set_ylim(0.2, 0.6)
+            self.plot_above.axes.set_ylim(0.2, 0.6)
+            self.plot_below.axes.set_xlim(0.2, 0.6)
+            self.plot_above.axes.set_xlim(0.2, 0.6)
+            
+        trainor = Trainor_class()
+        trainor.load(self.path)
+        lat_1 = trainor.model.latent(
+            self.y_plot[:, self.idx1_val : self.idx1_val + 1]
+        )
+        lat_2 = trainor.model.latent(
+            self.y_plot[:, self.idx2_val : self.idx2_val + 1]
+        )
+        points = self.ip_val
+        prop_left = jnp.linspace(0, 1, points + 2)[1:-1]
+        latents = (
+            jnp.squeeze(lat_1) + (prop_left[:, None] * jnp.squeeze(lat_2 - lat_1))
+        ).T
+        if self.reg_val:
             self.interp_res = trainor.model.decode(latents)
-            self.computed = True
+        else:
+            self.interp_res = trainor.inv_func(trainor.model.decode(latents))
 
-        self.init_graph(self.interp_res)
+        self.plot_below.axes.set_ylim(self.min_v, self.max_v)
+        if self.zm_val:
+            self.plot_below.axes.set_ylim(0.2, 0.6)
+            self.plot_above.axes.set_ylim(0.2, 0.6)
+            self.plot_below.axes.set_xlim(0.2, 0.6)
+            self.plot_above.axes.set_xlim(0.2, 0.6)
+
+        self.plot_above.axes.plot(jnp.linspace(0, 1, self.interp_res[:, 0].shape[0]), self.interp_res[:, 0], color="blue", linewidth=3)
+        self.plot_above.axes.plot(jnp.linspace(0, 1, self.interp_res[:, 0].shape[0]), self.interp_res[:, -1], color="red", linewidth=3)
         self.plot_above.draw()
         self.line = Line2D(self.interp_res[:, 0:1], self.interp_res[:, 0:1], color="black", linewidth=3)
         self.plot_above.axes.plot([], [])
@@ -254,24 +339,33 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.timer.timeout.connect(self.update_graph)
         self.timer.start()
         self.run_simul_2.show()
+        self.run_simul_2.setChecked(False)
         self.run_simul.setChecked(False)
         self.run_simul.setStyleSheet("background-color : red")
+        
 
-    def interpolate(self):
-        self._interpolate()
+    # def interpolate(self):
+    #     self._interpolate()
+
 
 def run_animation(trainor_path):
     import sys
     import os
+    import pdb
+
     path = os.path.join(os.getcwd(), trainor_path)
     app = QtWidgets.QApplication(sys.argv)
     window = Ui_MainWindow(path)
     window.showNormal()
     app.exec()
 
+
 if __name__ == "__main__":
     method = "Strong"
     problem = "shift"
-    folder=f"{problem}/{method}_{problem}/"
-    file=f"{method}_{problem}"
+    folder = f"{problem}/{method}_{problem}/"
+    file = f"{method}_{problem}"
+    import pdb
+
+    pdb.set_trace()
     run_animation(os.path.join(folder, file))

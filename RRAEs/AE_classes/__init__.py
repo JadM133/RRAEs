@@ -7,5 +7,8 @@ from .AE_classes import (
     Vanilla_AE_CNN,
     IRMAE_MLP,
     LoRAE_MLP,
-    Autoencoder
+    Autoencoder,
+    IRMAE_CNN,
+    LoRAE_CNN,
+    CNN_Autoencoder,
 )

@@ -8,6 +8,7 @@ from RRAEs.AE_classes import (
     IRMAE_MLP,
     LoRAE_MLP,
 )
+import jax.nn as jnn
 from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
 import jax.random as jrandom
 import pdb
@@ -18,21 +19,13 @@ import matplotlib.pyplot as plt
 import os
 
 if __name__ == "__main__":
-    trainor = Trainor_class()
-    method = "Strong"
-    problem = "welding"
-    folder=f"{problem}/{method}_{problem}/"
-    file=f"{method}_{problem}"
-    trainor.load(os.path.join(folder, file))
-    plot_welding(trainor, 25)
-    pdb.set_trace()
-    for prob in ["welding"]:
+    for prob in ["antenne"]:
         problem = prob
         method = "Strong"
         loss_func = "Strong"
 
-        latent_size = 2000
-        k_max = 5
+        latent_size = 4000
+        k_max = 2
 
         (
             ts,
@@ -69,36 +62,33 @@ if __name__ == "__main__":
             data=x_train,
             latent_size=latent_size,  # 4600
             k_max=k_max,
-            folder=f"{problem}/{method}_{problem}/",
+            folder=f"{problem}_var/{method}_{problem}/",
             file=f"{method}_{problem}",
+            variational=False,
             # linear_l=2,
-            post_proc_func=inv_func,
             key=jrandom.PRNGKey(0),
         )
         kwargs = {
-            "step_st": [5500, 5500, 5500, 5500],
-            "batch_size_st": [20, 20, 20, 20],
-            "lr_st": [1e-3, 1e-4, 1e-5, 1e-6],
+            "step_st": [2000, 2000, 2000],
+            "batch_size_st": [20, 20, 20],
+            "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
+            "kwargs_dec": {"final_activation": jnn.tanh},
+            "kwargs_enc": {"depth": 4},
             # "mul_lr":[0.81, 0.81, 0.81, 1],
             # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }
-        pdb.set_trace()
         trainor.fit(
             x_train,
             y_train,
-            y_train_o,
             loss_func=loss_func,
             training_key=jrandom.PRNGKey(50),
             **kwargs,
         )
-        try:
-            e0, e1, e2, e3 = trainor.post_process(
-                y_test, y_test_o, None, p_train, p_test, modes=k_max, interp=True
-            )
-        except:
-            pdb.set_trace()
+        e0, e1, e2, e3 = trainor.post_process(
+            y_train_o, y_test, y_test_o, None, p_train, p_test, inv_func, modes=k_max
+        )
         trainor.save(p_train=p_train, p_test=p_test)
         # trainor.plot_results(ts=jnp.arange(0, y_test.shape[0], 1), ts_o=ts)
     pdb.set_trace()

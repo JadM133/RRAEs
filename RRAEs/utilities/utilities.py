@@ -20,6 +20,8 @@ import pdb
 from operator import itemgetter
 import numpy as np
 import warnings
+from itertools import cycle
+import dill
 
 _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
@@ -37,6 +39,9 @@ def v_print(s, v):
     if v:
         print(s)
 
+def countList(lst1, lst2):
+    return [sub[item] for item in range(len(lst2))
+                      for sub in [lst1, lst2]]
 
 def norm_divide_return(
     ts,
@@ -80,13 +85,14 @@ def norm_divide_return(
             idx_test = cbt_idx[permut_idx][: int(res.shape[0] * (1 - prop_train))]
             if cbt_idx.shape[0] < res.shape[0] * (1 - prop_train):
                 raise ValueError("Not enough data to got an interpolable test")
+            p_test = p_all[idx_test]
+            p_vals = jnp.delete(p_all, idx_test, 0)
+
         else:
             idx_test = jrandom.permutation(jrandom.PRNGKey(200), y_all.shape[-1])[
                 : int(y_all.shape[-1] * (1 - prop_train))
             ]
 
-        p_test = p_all[idx_test]
-        p_vals = jnp.delete(p_all, idx_test, 0)
         y_test_old = y_all[:, idx_test]
         y_shift_old = jnp.delete(y_all, idx_test, 1)
     else:
@@ -182,6 +188,44 @@ def get_data(problem, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
+        case "NVH":
+            import pandas as pd
+            from scipy.interpolate import interp1d
+            import os
+
+            curves_folder = "data-NVH/NVH_CSVs/"
+            file_name = os.path.join(curves_folder, "DoE_new_mod.csv")
+            mat = pd.read_csv(file_name,header=None)
+            p_all = jnp.array(mat[3:], dtype=float)
+
+            outputs_raw_y = []
+            N_samples = 98
+            N = 9991
+
+            for simidx in range(N_samples):
+                df_curve = np.genfromtxt(curves_folder+'Sim_'+str(simidx+3)+'_mean_all_points.csv', delimiter=',', skip_header=1, skip_footer=0)
+
+            f_min = df_curve[0, 0].T 
+            f_max = df_curve[-1, 0].T 
+
+            # re-discretize in less number of points
+            N_max = 1000
+            outputs_raw_y=np.zeros((N_samples, int(N_max)))
+            
+            for simidx in range(N_samples):
+                df_curve = np.genfromtxt(curves_folder+'Sim_'+str(simidx+3)+'_mean_all_points.csv', delimiter=',', skip_header=1, skip_footer=0)
+
+                f_aux = np.linspace(f_min, f_max, N_max)
+                outputs_raw_y[simidx]  = interp1d(df_curve[:, 0].T, np.log10(df_curve[:, 1].T))(f_aux)
+
+            y_all = outputs_raw_y
+            return norm_divide_return(None, y_all.T[:400], p_all, prop_train=0.9, norm_data="minmax", norm_p="meanstd")
+
+        case "antenne":
+            with open("antenne_data/data_rect.pkl", "rb") as f:
+                y_all, _ = dill.load(f)
+            y_all = y_all[:, 200:300, 200:300]
+            return norm_divide_return(None, jnp.reshape(y_all, (y_all.shape[0], -1)).T, None, 1)
         case "accelerate":
             ts = jnp.linspace(0, 2 * jnp.pi, 200)
 
@@ -1042,14 +1086,8 @@ class Func(eqx.Module):
         else:
             return self.mlp(y, key=k)
 
-
-def next_D(D, pad, ker, st, num, all_Ds=[]):
-    if num == 0:
-        return all_Ds
-    all_Ds.append(int(D))
-    return next_D((D + 2 * pad - ker) / st + 1, pad, ker, st, num - 1)
-
 def plot_welding(trainor, idx):
+    import matplotlib.pyplot as plt
     x = trainor.ts[0]
     dim = jnp.argmax(jnp.diff(x, axis=0) < 0)+1
     y = trainor.ts[1]
@@ -1128,7 +1166,13 @@ def plot_welding(trainor, idx):
     ax3.set_zticks([])
     ax3.set_xticks([])
     plt.show()
-    
+
+def next_D_CNN(D, pad, ker, st, num, all_Ds=[]):
+    if num == 0:
+        return all_Ds
+    all_Ds.append(int(D))
+    return next_D_CNN((D + 2 * pad - ker) / st + 1, pad, ker, st, num - 1)
+
 class CNNs_with_MLP(eqx.Module):
     """Class mainly for creating encoders with CNNs.
     The encoder is composed of multiple CNNs followed by an MLP.
@@ -1139,66 +1183,55 @@ class CNNs_with_MLP(eqx.Module):
     def __init__(
         self,
         data_dim0,
-        data_dim1,
         out,
         CNNs_num=0,
-        width=64,
-        depth=3,
+        CNN_activations=jnn.relu,
+        CNN_widths=64,
+        width_mlp=64,
+        depth_mlp=3,
         kernel_conv=3,
         stride=1,
         padding=2,
-        out_conv=3,
         dropout=0,
         *,
         key,
+        kwargs_mlp={},
+        kwargs_cnn={},
         **kwargs,
     ):
 
-        all_Ds = next_D(data_dim0, padding, kernel_conv, stride, CNNs_num)
-        all_Ds_b = [1] + all_Ds[:-1]
-        pdb.set_trace()
+        final_D = next_D_CNN(data_dim0, padding, kernel_conv, stride, CNNs_num+1, all_Ds=[])[-1]
         key1, key2 = jax.random.split(key, 2)
         CNN_keys = jax.random.split(key1, CNNs_num)
         CNN_activations = (
             [CNN_activations] * CNNs_num
-            if CNN_activations is callable
+            if not isinstance(CNN_activations, list)
             else CNN_activations
         )
+        CNN_widths = [CNN_widths] * CNNs_num if not isinstance(CNN_widths, list) else CNN_widths
+        CNN_widths_b = [1] + CNN_widths[:-1]
         CNN_layers = [
-            lambda x: act(
-                eqx.nn.Conv2d(
+                lambda x, act=act, Db=Db, Da=Da, key=key: act(eqx.nn.Conv2d(
                     Db,
                     Da,
                     stride=stride,
                     padding=padding,
                     kernel_size=kernel_conv,
                     key=key,
-                )(x)
-            )
-            for Da, Db, key, act in zip(all_Ds, all_Ds_b, CNN_keys, CNN_activations)
+                    **kwargs_cnn
+                )(x))
+            for Da, Db, key, act in zip(CNN_widths, CNN_widths_b, CNN_keys, CNN_activations)
         ]
         self.layers = CNN_layers + [
-            eqx.nn.Conv2d(
-                1,
-                out_conv,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=key1,
-            ),
-            jnn.softplus,
             lambda x: jnp.expand_dims(jnp.ravel(x), -1),
             lambda x: MLP_dropout(
-                int(
-                    out_conv
-                    * ()
-                    * ((data_dim1 + 2 * padding - kernel_conv) / stride + 1)
-                ),
+                (final_D)**2*CNN_widths[-1],
                 out,
-                width,
-                depth,
+                width_mlp,
+                depth_mlp,
                 eqx.nn.Dropout(dropout),
                 key=key2,
+                **kwargs_mlp
             )(jnp.squeeze(x)),
         ]
 
@@ -1208,335 +1241,82 @@ class CNNs_with_MLP(eqx.Module):
             x = layer(x)
         return x
 
+def prev_D_CNN_trans(D, pad, ker, st, num, all_Ds=[]):
+    if num == 0:
+        return all_Ds
+    all_Ds.append(int(D))
+    return prev_D_CNN_trans((D+2*pad-ker)/st+1, pad, ker, st, num - 1)
 
-if __name__ == "__main__":
-    CNNs_with_MLP(28, 28, 500, 8, key=jrandom.PRNGKey(0))
+class MLP_with_CNNs_trans(eqx.Module):
+    """Class mainly for creating encoders with CNNs.
+    The encoder is composed of multiple CNNs followed by an MLP.
+    """
 
-
-class CNN(eqx.Module):
     layers: list
 
     def __init__(
         self,
         data_dim0,
-        data_dim1,
         out,
-        width=64,
-        depth=3,
+        CNNs_num=0,
+        CNN_activations=jnn.relu,
+        width_CNNs=64,
+        width_mlp=64,
+        depth_mlp=3,
         kernel_conv=3,
         stride=1,
         padding=2,
-        out_conv=3,
         dropout=0,
+        start_dim=None,
         *,
         key,
+        kwargs_mlp={},
+        kwargs_cnn={},
         **kwargs,
     ):
 
+        all_Ds = prev_D_CNN_trans(data_dim0, padding, kernel_conv, stride, CNNs_num+1, all_Ds=[])
         key1, key2 = jax.random.split(key, 2)
-
-        self.layers = [
-            eqx.nn.Conv2d(
-                1,
-                out_conv,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=key1,
-            ),
-            jnn.softplus,
-            lambda x: jnp.expand_dims(jnp.ravel(x), -1),
-            lambda x: MLP_dropout(
-                int(
-                    out_conv
-                    * ((data_dim0 + 2 * padding - kernel_conv) / stride + 1)
-                    * ((data_dim1 + 2 * padding - kernel_conv) / stride + 1)
-                ),
-                out,
-                width,
-                depth,
-                eqx.nn.Dropout(dropout),
-                key=key2,
-            )(jnp.squeeze(x)),
+        CNN_keys = jax.random.split(key1, CNNs_num)
+        width_CNNs = [width_CNNs] * (CNNs_num-1) + [1] if not isinstance(width_CNNs, list) else width_CNNs
+        start_dim = out if start_dim is None else start_dim
+        width_CNNs_b = [start_dim] + width_CNNs[:-1]
+        CNN_activations = (
+            [CNN_activations] * CNNs_num
+            if not isinstance(CNN_activations, list)
+            else CNN_activations
+        )
+        CNN_layers = [
+            lambda x, act=act, Db=Db, Da=Da, key=key: act(
+                eqx.nn.ConvTranspose2d(
+                    Db,
+                    Da,
+                    stride=stride,
+                    padding=padding,
+                    kernel_size=kernel_conv,
+                    key=key,
+                    **kwargs_cnn
+                )(x)
+            )
+            for Da, Db, key, act in zip(width_CNNs, width_CNNs_b, CNN_keys, CNN_activations)
         ]
-
-    def __call__(self, x, *args, **kwargs):
-        x = jnp.expand_dims(x, 0)
-        for layer in self.layers:
-            x = layer(x)
-        return x
-
-
-class CNN_trans(eqx.Module):
-    layers: list
-
-    def __init__(
-        self,
-        data_dim0,
-        data_dim1,
-        out,
-        width=64,
-        depth=3,
-        kernel_conv=3,
-        stride=1,
-        padding=2,
-        out_conv=3,
-        dropout=0,
-        *,
-        key,
-        **kwargs,
-    ):
-        key1, key2 = jax.random.split(key, 2)
-
-        width = jnp.flip(jnp.array(width)).tolist()
-
         self.layers = [
-            lambda x: jnp.expand_dims(jnp.ravel(x), -1),
             lambda x: MLP_dropout(
                 out,
-                int(
-                    out_conv
-                    * ((data_dim0 + 2 * padding - kernel_conv) / stride + 1)
-                    * ((data_dim1 + 2 * padding - kernel_conv) / stride + 1)
-                ),
-                width,
-                depth,
+                start_dim*all_Ds[-1]**2,
+                width_mlp,
+                depth_mlp,
                 eqx.nn.Dropout(dropout),
                 key=key2,
+                **kwargs_mlp
             )(jnp.squeeze(x)),
             lambda x: jnp.reshape(
-                x, (out_conv, data_dim0 + padding, data_dim1 + padding)
+                x, (start_dim, all_Ds[-1], all_Ds[-1])
             ),
-            jnn.softplus,
-            eqx.nn.ConvTranspose2d(
-                out_conv,
-                1,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=key1,
-            ),
-        ]
-
+        ]+ CNN_layers
     def __call__(self, x, *args, **kwargs):
+        x = jnp.expand_dims(x, 1)
         for layer in self.layers:
             x = layer(x)
-        return jnp.squeeze(x)
-
-
-class MNIST_patrick_CNN(eqx.Module):
-    layers: list
-
-    def __init__(
-        self,
-        latent_size,
-        kernel_conv=4,
-        stride=2,
-        padding=1,
-        *,
-        key,
-        **kwargs,
-    ):
-        keys = jrandom.split(key, 5)
-
-        self.layers = [
-            eqx.nn.Conv2d(
-                1,
-                32,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[0],
-            ),
-            jnn.relu,
-            eqx.nn.Conv2d(
-                32,
-                64,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[1],
-            ),
-            jnn.relu,
-            eqx.nn.Conv2d(
-                64,
-                128,
-                kernel_size=7,
-                key=keys[2],
-            ),
-            jnn.relu,
-            jnp.ravel,
-            MLP_dropout(128, latent_size, 64, 2, key=keys[4], **kwargs),
-        ]
-
-    def __call__(self, x, *args, **kwargs):
-        x = jnp.expand_dims(x, 0)
-        for layer in self.layers:
-            x = layer(x)
-        return x
-
-
-class MNIST_patrick_CNN_trans(eqx.Module):
-    layers: list
-
-    def __init__(
-        self,
-        latent_size,
-        kernel_conv=4,
-        stride=2,
-        padding=1,
-        *,
-        key,
-        **kwargs,
-    ):
-        keys = jax.random.split(key, 4)
-        if latent_size < 128:
-            warnings.warn(
-                "Latent size is smaller than 128, which is the size of the last layer of the encoder."
-            )
-
-        self.layers = [
-            MLP_dropout(latent_size, 128, 64, 2, key=keys[0], **kwargs),
-            lambda x: jnp.reshape(x, (128, 1, 1)),
-            eqx.nn.ConvTranspose2d(
-                128,
-                64,
-                kernel_size=7,
-                key=keys[1],
-            ),
-            jnn.relu,
-            eqx.nn.ConvTranspose2d(
-                64,
-                32,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[2],
-            ),
-            jnn.relu,
-            eqx.nn.ConvTranspose2d(
-                32,
-                1,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[2],
-            ),
-            jnn.tanh,
-        ]
-
-    def __call__(self, x, *args, **kwargs):
-        for layer in self.layers:
-            x = layer(x)
-        return jnp.squeeze(x)
-
-
-class MNIST_CNN(eqx.Module):
-    layers: list
-
-    def __init__(
-        self,
-        latent_size,
-        kernel_conv=4,
-        stride=2,
-        padding=1,
-        *,
-        key,
-        **kwargs,
-    ):
-        keys = jrandom.split(key, 5)
-
-        self.layers = [
-            eqx.nn.Conv2d(
-                1,
-                32,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[0],
-            ),
-            jnn.relu,
-            eqx.nn.Conv2d(
-                32,
-                64,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[1],
-            ),
-            jnn.relu,
-            eqx.nn.Conv2d(
-                64,
-                128,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[2],
-            ),
-            jnn.relu,
-            eqx.nn.Conv2d(
-                128,
-                256,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[3],
-            ),
-            jnn.relu,
-            lambda x: jnp.ravel(x),
-            MLP_dropout(256, latent_size, 64, 2, key=keys[4], **kwargs),
-        ]
-
-    def __call__(self, x, *args, **kwargs):
-        x = jnp.expand_dims(x, 0)
-        for layer in self.layers:
-            x = layer(x)
-        return x
-
-
-class MNIST_CNN_trans(eqx.Module):
-    layers: list
-
-    def __init__(
-        self,
-        latent_size,
-        kernel_conv=4,
-        stride=2,
-        padding=1,
-        *,
-        key,
-        **kwargs,
-    ):
-        keys = jax.random.split(key, 4)
-        if latent_size < 1568:
-            warnings.warn(
-                "Latent size is smaller than 1568, which is the size of the last layer of the encoder."
-            )
-
-        self.layers = [
-            MLP_dropout(latent_size, 1568, 64, 2, key=keys[0], **kwargs),
-            lambda x: jnp.reshape(x, (32, 7, 7)),
-            eqx.nn.ConvTranspose2d(
-                32,
-                8,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[1],
-            ),
-            jnn.relu,
-            eqx.nn.ConvTranspose2d(
-                8,
-                1,
-                stride=stride,
-                padding=padding,
-                kernel_size=kernel_conv,
-                key=keys[2],
-            ),
-            jnn.tanh,
-        ]
-
-    def __call__(self, x, *args, **kwargs):
-        for layer in self.layers:
-            x = layer(x)
-        return jnp.squeeze(x)
+        return x[0]
+    

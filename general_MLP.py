@@ -360,10 +360,10 @@ def print_mean_std():
     plt.show()
 
 def find_originals(trainor):
-    trainor.y_pred_mlp_train_o = trainor.all_kwargs["post_proc_func"](trainor.y_pred_mlp_train)
+    trainor.y_pred_mlp_train_o = trainor.inv_func(trainor.y_pred_mlp_train)
     trainor.error_train_o = (jnp.linalg.norm(trainor.y_pred_mlp_train_o - trainor.y_train_o) / jnp.linalg.norm(trainor.y_train_o)) * 100
     print(f"Error on original train set is {trainor.error_train_o}")
-    trainor.y_pred_mlp_test_o = trainor.all_kwargs["post_proc_func"](trainor.y_pred_mlp_test)
+    trainor.y_pred_mlp_test_o = trainor.inv_func(trainor.y_pred_mlp_test)
     trainor.error_test_o = (jnp.linalg.norm(trainor.y_pred_mlp_test_o - trainor.y_test_o) / jnp.linalg.norm(trainor.y_test_o)) * 100
     print(f"Error on original test set is {trainor.error_test_o}")
     return trainor
@@ -373,7 +373,7 @@ if __name__ == "__main__":
         ["Strong"]
     ):
         confi_err = []
-        problem="welding"
+        problem="NVH"
         folder = f"{problem}/{method}_{problem}/"
         file = f"{method}_{problem}"
         trainor = Trainor_class()
@@ -391,12 +391,14 @@ if __name__ == "__main__":
             y_test,
         ) = get_data(problem)
 
+        trainor.p_train = p_train
+        trainor.p_test = p_test
         kwargs = {
             "dropout": 0,
-            "step_st": [4000,],
-            "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
-            "width_size": 128,
-            "depth": 8,
+            "step_st": [2000,],
+            "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
+            "width_size": 64,
+            "depth": 1,
             # "inside_activation":jnn.relu,
             "batch_size_st": [64, 64, 64],
         }
@@ -404,6 +406,7 @@ if __name__ == "__main__":
         input_train = trainor.p_train # trainor.model.latent(trainor.x_train).T
         input_test = trainor.p_test # trainor.model.latent(trainor.x_test_interp).T
         output_train =  trainor.vt_train.T
+        pdb.set_trace()
         def acc_func(output_test, pred_test, ret=False):
             lat = jnp.sum(
                 jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(

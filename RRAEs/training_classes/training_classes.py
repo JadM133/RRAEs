@@ -3,7 +3,7 @@ import numpy as np
 import jax
 from RRAEs.utilities import my_vmap
 import pdb
-import jax.random as jr
+import jax.random as jrandom
 import jax.numpy as jnp
 import equinox as eqx
 import jax.tree_util as jtu
@@ -168,7 +168,6 @@ class Trainor_class:
         self,
         input,
         output,
-        output_o=None,
         loss_func=None,
         step_st=[3000, 3000],  # 000, 8000],
         lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
@@ -205,12 +204,11 @@ class Trainor_class:
             "verbose": verbose,
             "loss_kwargs": loss_kwargs,
             "training_key": training_key,
-            "kwargs": kwargs,
+            "kwargs": kwargs
         }
         self.all_kwargs = {**self.all_kwargs, **training_params, **kwargs}
         self.x_train = input
         self.y_train = output
-        self.y_train_o = output_o
 
         model = self.model
 
@@ -224,7 +222,7 @@ class Trainor_class:
         if (loss_func == "Strong") or (loss_func is None) or (loss_func == "Vanilla"):
 
             @eqx.filter_value_and_grad(has_aux=True)
-            def loss_func(model, input, out, idx, **kwargs):
+            def loss_fun(model, input, out, idx, **kwargs):
                 pred = model(input)
                 wv = jnp.array([1.0])
                 return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (
@@ -234,7 +232,7 @@ class Trainor_class:
         elif loss_func == "Weak":
 
             @eqx.filter_value_and_grad(has_aux=True)
-            def loss_func(model, input, out, idx, norm_loss=None, **kwargs):
+            def loss_fun(model, input, out, idx, norm_loss=None, **kwargs):
                 if norm_loss is None:
                     norm_loss = norm_loss_
                 pred = model(input)
@@ -258,7 +256,7 @@ class Trainor_class:
         elif loss_func == "nuc":
 
             @eqx.filter_value_and_grad(has_aux=True)
-            def loss_func(model, input, out, idx, lambda_nuc, norm_loss=None, **kwargs):
+            def loss_fun(model, input, out, idx, lambda_nuc, norm_loss=None, **kwargs):
                 if norm_loss is None:
                     norm_loss = norm_loss_
                 pred = model(input)
@@ -276,10 +274,25 @@ class Trainor_class:
                     ],
                     weight_vals=wv,
                 ), (pred,)
+            
+        elif loss_func == "var":
+            
+            @eqx.filter_value_and_grad(has_aux=True)
+            def loss_fun(model, input, out, idx, rd, **kwargs):
+                pred = model(input, eps_rand=rd)
+                y = model.encode(input)
+                means = y[:int(y.shape[0]/2)]
+                stds = y[int(y.shape[0]/2):]
+                wv = jnp.array([1.0, 0.01])
+                kl_loss = -0.5 * (1 + stds - jnp.square(means) - jnp.exp(stds))
+                kl_loss = jnp.mean(jnp.sum(kl_loss, axis=1))
+                return find_weighted_loss([norm_loss_(pred, out), kl_loss], weight_vals=wv), (
+                    norm_loss_(pred, out), kl_loss
+                )
 
         @eqx.filter_jit
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
-            (loss, aux), grads = loss_func(model, input, out, idx, **loss_kwargs)
+            (loss, aux), grads = loss_fun(model, input, out, idx, **loss_kwargs)
             updates, opt_state = optim.update(grads, opt_state)
             model = eqx.apply_updates(model, updates)
             return loss, model, opt_state, aux
@@ -321,6 +334,13 @@ class Trainor_class:
             if (batch_size > input.shape[-1]) or batch_size == -1:
                 batch_size = input.shape[-1]
 
+            if loss_func == "var":
+                all_rds = jrandom.normal(
+                    jrandom.PRNGKey(1253), shape=(steps, int(model.latent(input).shape[0]), input.shape[-1])
+                )
+            else:
+                all_rds = [None]*steps
+
             for step, (input_b, out, idx) in zip(
                 range(steps),
                 dataloader(
@@ -330,11 +350,13 @@ class Trainor_class:
                 ),
             ):
                 start = time.time()
+                loss_kwargs["rd"] = all_rds[step]
                 loss, model, opt_state, aux = make_step(
                     model, input_b.T, out.T, opt_state, idx, **loss_kwargs
                 )
                 end = time.time()
                 t_t += end - start
+
                 if stagn_every is not None:
                     if (step % stagn_every) == 0:
                         if jnp.abs(loss_old - loss) / jnp.abs(loss_old) * 100 < 1:
@@ -353,6 +375,10 @@ class Trainor_class:
                             verbose,
                         )
                     else:
+                        to_acc = (aux[0] > 0)*2-1
+                        accuracy = jnp.sum(to_acc == out.T)/to_acc.size*100
+                        print("Accuracy: ", accuracy)
+
                         if len(aux) == 2:
                             v_print(
                                 f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
@@ -435,11 +461,13 @@ class Trainor_class:
 
     def post_process(
         self,
+        y_train_o=None,
         y_test=None,
         y_test_o=None,
         x_test=None,
         p_train=None,
         p_test=None,
+        inv_func=None,
         save=False,
         modes="all",
         interp=None,
@@ -470,15 +498,18 @@ class Trainor_class:
             * 100
         )
         print("Train error: ", error_train)
+
         self.y_pred_train = y_pred_train
         self.error_train = error_train
         self.p_train = p_train
         self.p_test = p_test
+        self.y_train_o = y_train_o
         self.y_test_o = y_test_o
         self.y_test = y_test
 
-        if self.y_train_o is not None:
-            y_pred_train_o = self.model(self.x_train, train=False)
+        if (y_train_o is not None) and (inv_func is not None):
+            y_pred_train_o = inv_func(y_pred_train)
+            self.inv_func = inv_func
             error_train_o = (
                 jnp.linalg.norm(y_pred_train_o - self.y_train_o)
                 / jnp.linalg.norm(self.y_train_o)
@@ -487,6 +518,7 @@ class Trainor_class:
             self.y_pred_train_o = y_pred_train_o
             print("Train error_o: ", error_train_o)
         else:
+            self.inv_func = lambda x: x
             error_train_o = None
 
         self.error_train_o = error_train_o
@@ -498,7 +530,8 @@ class Trainor_class:
         v = jnp.multiply(sv, u_vec)
         self.v = v
         self.vt_train = vt
-
+        # plt.scatter(p_train, vt)
+        # plt.show()
         if x_test is not None:
             y_pred_test = self.model(x_test)
             error_test = (
