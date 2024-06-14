@@ -10,7 +10,7 @@ RRAEs or Rank reduction autoencoders are autoencoders with a long latent space t
 ![Drag Racing](RRAEs/readme_figs/fig.png)
 As can be seen in the figure, the Strong formulation performs a truncated SVD in the latent space, while the weak formulation adds a penalty to the loss. For more details about RRAEs, the presenting paper can be found [here](for_paper/tex_NeurIPS/RRAEs-paper.pdf).
 
-This library presents all the required classes for creating customized RRAEs and training them (other architectures such as IRMAE and LoRAE are also available). For a tutorial on how to use all the available classes, refer to this [jupyter notebook](tutorial.ipyb).
+This library presents all the required classes for creating customized RRAEs and training them (other architectures such as IRMAE and LoRAE are also available). For a tutorial on how to use all the available classes, refer to this [jupyter notebook](tutorial.ipynb).
 
 # Help in installation
 
@@ -25,7 +25,7 @@ Since most of the lab doesn't use Python, we provide this section to clarify how
   -  On a Mac: ``pytest ./.venv/lib/3.XX/site-packages/RRAEs/tests/``. where XX is your python version.
   -  On Windows: ``pytest .\.venv\Lib\site-packages\RRAEs\tests\``.
 If all the tests pass, you're good to go!
-6. Give it a try, the best place to start is the [jupyter notebook](tutorial.ipyb).
+6. Give it a try, the best place to start is the [jupyter notebook](tutorial.ipynb).
 
 
 
