@@ -1289,7 +1289,6 @@ class MLCNN(Module, strict=True):
         **kwargs,
     ):
 
-        
         CNN_widths = (
             [CNN_widths] * (CNNs_num - 1) + [out_dim]
             if not isinstance(CNN_widths, list)
@@ -1346,7 +1345,7 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         self,
         data_dim0,
         out,
-        CNNs_num=0,
+        CNNs_num=1,
         CNN_widths=64,
         width_mlp=64,
         depth_mlp=1,
@@ -1365,9 +1364,15 @@ class CNNs_with_MLP(eqx.Module, strict=True):
             data_dim0, padding, kernel_conv, stride, CNNs_num + 1, all_Ds=[]
         )[-1]
         key1, key2 = jax.random.split(key, 2)
+
+        try:
+            last_width = CNN_widths[-1]
+        except:
+            last_width = CNN_widths
+
         mlcnn = MLCNN(
             1,
-            CNN_widths[-1],
+            last_width,
             stride,
             padding,
             kernel_conv,
@@ -1377,7 +1382,7 @@ class CNNs_with_MLP(eqx.Module, strict=True):
             **kwargs_cnn,
         )
         mlp = MLP_dropout(
-            (final_D) ** 2 * CNN_widths[-1],
+            (final_D) ** 2 * last_width,
             out,
             width_mlp,
             depth_mlp,
@@ -1417,7 +1422,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         self,
         data_dim0,
         out,
-        CNNs_num=0,
+        CNNs_num=1,
         width_CNNs=64,
         width_mlp=64,
         depth_mlp=1, #6
