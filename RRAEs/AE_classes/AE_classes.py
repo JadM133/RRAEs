@@ -144,13 +144,40 @@ class Autoencoder(eqx.Module):
         new_decode = lambda x: self._decode(x, *args, **kwargs)
         return jax.vmap(new_decode, in_axes=[-1], out_axes=-1)(y)
 
-    def __call__(self, x, *args, **kwargs):
-        kwargs = {**kwargs, **self.params}
-        return self.decode(
-            self.perform_in_latent(self.encode(x, *args, **kwargs), *args, **kwargs),
-            *args,
-            **kwargs,
-        )
+    def __call__(self, x, batch=None, *args, **kwargs):
+        if batch is None:
+            kwargs = {**kwargs, **self.params}
+            return self.decode(
+                self.perform_in_latent(self.encode(x, *args, **kwargs), *args, **kwargs),
+                *args,
+                **kwargs,
+            )
+        else:
+            kwargs = {**kwargs, **self.params}
+            idx = jnp.arange(x.shape[-1])
+            idx = jrandom.permutation(jrandom.PRNGKey(5230), idx)
+            ii = 0
+            sols = []
+            endit = False
+            while True:
+                if (ii+1)*batch > x.shape[-1]:
+                    if ii*batch == x.shape[-1]:
+                        break
+                    btch = idx[ii*batch:]
+                    endit = True
+                btch = idx[ii*batch:(ii+1)*batch]
+                sol = self.decode(
+                self.perform_in_latent(self.encode(x[..., btch], *args, **kwargs), *args, **kwargs),
+                *args,
+                **kwargs,
+                )
+                sols.append(sol)
+                ii += 1
+                if endit:
+                    break
+            res = np.concatenate(sols, axis=-1)
+            res = res[..., idx]
+            return res
 
     def latent(self, x, *args, **kwargs):
         kwargs = {**kwargs, **self.params}
@@ -271,6 +298,7 @@ class Strong_RRAE_MLP(Autoencoder):
         else:
             latent_func = latent_func_strong_RRAE
 
+        
         super().__init__(
             data,
             latent_size,
@@ -415,46 +443,25 @@ class CNN_Autoencoder(Autoencoder):
         data,
         latent_size,
         k_max=-1,
-        width_mlp_enc=64,
-        depth_mlp_enc=1,
-        width_cnn_enc=64,
-        depth_cnn_enc=1,
-        width_mlp_dec=64,
-        depth_mlp_dec=6,
-        width_cnn_dec=64,
-        depth_cnn_dec=1,
         _perform_in_latent=_identity,
         *,
         key,
-        kwargs_mlp_enc={},
-        kwargs_cnn_enc={},
-        kwargs_mlp_dec={},
-        kwargs_cnn_dec={},
+        kwargs_enc={},
+        kwargs_dec={},
         **kwargs,
     ):
+        key1, key2, key3 = jrandom.split(key, 3)
         _encode = CNNs_with_MLP(
             data_dim0=data.shape[0],
-            width_mlp=width_mlp_enc,
-            depth_mlp=depth_mlp_enc,
             out=latent_size,
-            CNNs_num=depth_cnn_enc,
-            CNN_widths=width_cnn_enc,
-            key=key,
-            kwargs_mlp=kwargs_mlp_enc,
-            kwargs_cnn=kwargs_cnn_enc,
-            **kwargs,
+            key=key1,
+            **kwargs_enc,
         )
         _decode = MLP_with_CNNs_trans(
             data_dim0=data.shape[0],
-            width_mlp=width_mlp_dec,
-            depth_mlp=depth_mlp_dec,
-            CNNs_num=depth_cnn_dec,
-            CNN_widths=width_cnn_dec,
             out=latent_size,
-            key=key,
-            kwargs_mlp=kwargs_mlp_dec,
-            kwargs_cnn=kwargs_cnn_dec,
-            **kwargs,
+            key=key2,
+            **kwargs_dec,
         )
         super().__init__(
             data,
@@ -464,7 +471,7 @@ class CNN_Autoencoder(Autoencoder):
             _perform_in_latent=_perform_in_latent,
             map_latent=False,
             _decode=_decode,
-            key=key,
+            key=key3,
             **kwargs,
         )
 

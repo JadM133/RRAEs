@@ -5,6 +5,7 @@ from typing import (
     Union,
 )
 from equinox.nn._linear import Linear
+from equinox.nn import Conv2d, ConvTranspose2d
 from equinox._module import field, Module
 import equinox as eqx
 import jax.random as jrandom
@@ -27,6 +28,17 @@ _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
 
 
+def out_to_pic(out):
+    return jnp.reshape(
+        out,
+        (
+            int(jnp.sqrt(out.shape[0])),
+            int(jnp.sqrt(out.shape[0])),
+            out.shape[-1],
+        ),
+    ).T
+
+
 def remove_keys_from_dict(d, keys):
     return {k: v for k, v in d.items() if k not in keys}
 
@@ -39,9 +51,10 @@ def v_print(s, v):
     if v:
         print(s)
 
+
 def countList(lst1, lst2):
-    return [sub[item] for item in range(len(lst2))
-                      for sub in [lst1, lst2]]
+    return [sub[item] for item in range(len(lst2)) for sub in [lst1, lst2]]
+
 
 def norm_divide_return(
     ts,
@@ -55,7 +68,10 @@ def norm_divide_return(
     norm_p=None,
     norm_data=None,
     conv=False,
+    args=(),
 ):
+    """p_all of shape (P x N) and y_all of shape (T x N)"""
+
     def norm_vec(x, y=None, norm=norm_p, inv=False):
         if y is None:
             y = x
@@ -93,8 +109,8 @@ def norm_divide_return(
                 : int(y_all.shape[-1] * (1 - prop_train))
             ]
 
-        y_test_old = y_all[:, idx_test]
-        y_shift_old = jnp.delete(y_all, idx_test, 1)
+        y_test_old = y_all[..., idx_test]
+        y_shift_old = jnp.delete(y_all, idx_test, -1)
     else:
         if p_all is not None:
             p_test = p_all[-test_end:]
@@ -145,6 +161,7 @@ def norm_divide_return(
             y_test_old,
             output_shift,
             output_test,
+            *args
         )
 
     u_now, _, _ = adaptive_TSVD(y_shift, eps=eps, verbose=True)
@@ -181,13 +198,46 @@ def norm_divide_return(
         y_test,
         output_shift,
         output_test,
-    )
+    ) + args
 
 
 def get_data(problem, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
+        case "supersonic":
+            import meshio
+            import os
+
+            folder = "supersonic/Hypersonic_snapshots/"
+
+            mashes = []
+            datas = []
+            i = 0
+            for name in os.listdir(folder):
+                try:
+                    integ = int(name[-3])
+                    dec = int(name[-1])
+                    try:
+                        ten = int(name[-4])
+                    except ValueError:
+                        ten = 0
+                    if i != 0:
+                        mashes.append(ten*10 + integ + dec/10)
+                except ValueError:
+                    print(f"Name {name} skipped.")
+                    continue
+                mesh = meshio.read(f"{folder}{name}/solution.exo")
+                if i == 0:
+                    data_ref = mesh.point_data["Density"]
+                else:
+                    datas.append(mesh.point_data["Density"] - data_ref) # Temperature, "Pressure", "Density"
+                i += 1
+
+            p_all = np.expand_dims(np.array(mashes), -1)
+            y_all = np.stack(datas, -1)
+            return norm_divide_return(None, y_all, p_all, 0.8, norm_data="minmax", args=(data_ref,))
+        
         case "NVH":
             import pandas as pd
             from scipy.interpolate import interp1d
@@ -195,7 +245,7 @@ def get_data(problem, **kwargs):
 
             curves_folder = "data-NVH/NVH_CSVs/"
             file_name = os.path.join(curves_folder, "DoE_new_mod.csv")
-            mat = pd.read_csv(file_name,header=None)
+            mat = pd.read_csv(file_name, header=None)
             p_all = jnp.array(mat[3:], dtype=float)
 
             outputs_raw_y = []
@@ -203,29 +253,68 @@ def get_data(problem, **kwargs):
             N = 9991
 
             for simidx in range(N_samples):
-                df_curve = np.genfromtxt(curves_folder+'Sim_'+str(simidx+3)+'_mean_all_points.csv', delimiter=',', skip_header=1, skip_footer=0)
+                df_curve = np.genfromtxt(
+                    curves_folder + "Sim_" + str(simidx + 3) + "_mean_all_points.csv",
+                    delimiter=",",
+                    skip_header=1,
+                    skip_footer=0,
+                )
 
-            f_min = df_curve[0, 0].T 
-            f_max = df_curve[-1, 0].T 
+            f_min = df_curve[0, 0].T
+            f_max = df_curve[-1, 0].T
 
             # re-discretize in less number of points
             N_max = 1000
-            outputs_raw_y=np.zeros((N_samples, int(N_max)))
-            
+            outputs_raw_y = np.zeros((N_samples, int(N_max)))
+
             for simidx in range(N_samples):
-                df_curve = np.genfromtxt(curves_folder+'Sim_'+str(simidx+3)+'_mean_all_points.csv', delimiter=',', skip_header=1, skip_footer=0)
+                df_curve = np.genfromtxt(
+                    curves_folder + "Sim_" + str(simidx + 3) + "_mean_all_points.csv",
+                    delimiter=",",
+                    skip_header=1,
+                    skip_footer=0,
+                )
 
                 f_aux = np.linspace(f_min, f_max, N_max)
-                outputs_raw_y[simidx]  = interp1d(df_curve[:, 0].T, np.log10(df_curve[:, 1].T))(f_aux)
+                outputs_raw_y[simidx] = interp1d(
+                    df_curve[:, 0].T, np.log10(df_curve[:, 1].T)
+                )(f_aux)
 
             y_all = outputs_raw_y
-            return norm_divide_return(None, y_all.T[:400], p_all, prop_train=0.9, norm_data="minmax", norm_p="meanstd")
+            return norm_divide_return(
+                None,
+                y_all.T[:400],
+                p_all,
+                prop_train=0.9,
+                norm_data="minmax",
+                norm_p="meanstd",
+            )
 
         case "antenne":
-            with open("antenne_data/data_rect.pkl", "rb") as f:
+            with open("antenne_data/second_data_all.pkl", "rb") as f:
                 y_all, _ = dill.load(f)
-            y_all = y_all[:, 200:300, 200:300]
-            return norm_divide_return(None, jnp.reshape(y_all, (y_all.shape[0], -1)).T, None, 1)
+            # y_all = jnp.reshape(y_all, (1600, 100, 100)) # only for border
+            y_all = y_all[
+                :, 200:300, 200:300
+            ]  #only for not border
+            y_all = jnp.concatenate((y_all[0:1600], y_all[1800:-1]))
+            y_all = jnp.concatenate((y_all[0:400], y_all[600:800], y_all[1000:1600], y_all[1800:2200]))
+            y_all = (y_all+1)/2
+            pdb.set_trace()
+            return norm_divide_return(None, y_all.T, None, 1)
+
+            # with open("antenne_data/data_border.pkl", "rb") as f:
+            #     y_all, _ = dill.load(f)
+
+            # y_all = jnp.reshape(
+            #     y_all,
+            #     (int(y_all.shape[0] / y_all.shape[1]), y_all.shape[1], y_all.shape[1]),
+            # )
+
+            # return norm_divide_return(
+            #     None, jnp.reshape(y_all, (y_all.shape[0], -1)).T, None, 1
+            # )
+
         case "accelerate":
             ts = jnp.linspace(0, 2 * jnp.pi, 200)
 
@@ -1009,7 +1098,7 @@ class MLP_dropout(Module, strict=True):
         self.use_final_bias = use_final_bias
 
     @jax.named_scope("eqx.nn.MLP")
-    def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
+    def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None, **kwargs) -> Array:
         if self.depth != 0:
             for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation)):
                 x = layer(x)
@@ -1054,7 +1143,7 @@ class Func(eqx.Module):
         use_bias=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__()
 
         if out_size is None:
             out_size = data_size
@@ -1086,15 +1175,17 @@ class Func(eqx.Module):
         else:
             return self.mlp(y, key=k)
 
+
 def plot_welding(trainor, idx):
     import matplotlib.pyplot as plt
+
     x = trainor.ts[0]
-    dim = jnp.argmax(jnp.diff(x, axis=0) < 0)+1
+    dim = jnp.argmax(jnp.diff(x, axis=0) < 0) + 1
     y = trainor.ts[1]
     X, Y = jnp.meshgrid(x[:dim, 0], jnp.reshape(y, (dim, -1))[:, 0])
-    m1 = trainor.y_test_o[:, idx:idx+1]
-    m2 = trainor.y_pred_mlp_test_o[:, idx:idx+1]
-    m3 = trainor.y_pred_mlp_test_o[:, idx:idx+1]
+    m1 = trainor.y_test_o[:, idx : idx + 1]
+    m2 = trainor.y_pred_mlp_test_o[:, idx : idx + 1]
+    m3 = trainor.y_pred_mlp_test_o[:, idx : idx + 1]
 
     M1 = m1.reshape(X.shape[0], X.shape[0])
     M2 = m2.reshape(X.shape[0], X.shape[0])
@@ -1102,21 +1193,21 @@ def plot_welding(trainor, idx):
 
     fig = plt.figure()
     # Plot for M1
-    ax1 = fig.add_subplot(231, projection='3d')
-    ax1.plot_surface(X, Y, M1, cmap='viridis')
-    ax1.set_ylabel('Y')
-    ax1.set_zlabel('true')
+    ax1 = fig.add_subplot(231, projection="3d")
+    ax1.plot_surface(X, Y, M1, cmap="viridis")
+    ax1.set_ylabel("Y")
+    ax1.set_zlabel("true")
 
     # Plot for M2
-    ax2 = fig.add_subplot(232, projection='3d')
-    ax2.plot_surface(X, Y, M2, cmap='viridis')
-    ax2.set_ylabel('Y')
-    ax2.set_zlabel('pred')
+    ax2 = fig.add_subplot(232, projection="3d")
+    ax2.plot_surface(X, Y, M2, cmap="viridis")
+    ax2.set_ylabel("Y")
+    ax2.set_zlabel("pred")
 
-    ax3 = fig.add_subplot(233, projection='3d')
-    ax3.plot_surface(X, Y, M3, cmap='viridis')
-    ax3.set_ylabel('Y')
-    ax3.set_zlabel('pred-mlp')
+    ax3 = fig.add_subplot(233, projection="3d")
+    ax3.plot_surface(X, Y, M3, cmap="viridis")
+    ax3.set_ylabel("Y")
+    ax3.set_zlabel("pred-mlp")
 
     # Set the same color scale for both subplots
     vmin = min(M1.min(), M2.min())
@@ -1134,21 +1225,21 @@ def plot_welding(trainor, idx):
     ax3.set_xticks([])
     ax3.set_zticks([])
 
-    ax1 = fig.add_subplot(234, projection='3d')
-    ax1.plot_surface(X, Y, M1, cmap='viridis')
-    ax1.set_xlabel('X')
-    ax1.set_ylabel('Y')
+    ax1 = fig.add_subplot(234, projection="3d")
+    ax1.plot_surface(X, Y, M1, cmap="viridis")
+    ax1.set_xlabel("X")
+    ax1.set_ylabel("Y")
 
     # Plot for M2
-    ax2 = fig.add_subplot(235, projection='3d')
-    ax2.plot_surface(X, Y, M2, cmap='viridis')
-    ax2.set_xlabel('X')
-    ax2.set_ylabel('Y')
+    ax2 = fig.add_subplot(235, projection="3d")
+    ax2.plot_surface(X, Y, M2, cmap="viridis")
+    ax2.set_xlabel("X")
+    ax2.set_ylabel("Y")
 
-    ax3 = fig.add_subplot(236, projection='3d')
-    ax3.plot_surface(X, Y, M3, cmap='viridis')
-    ax3.set_xlabel('X')
-    ax3.set_ylabel('Y')
+    ax3 = fig.add_subplot(236, projection="3d")
+    ax3.plot_surface(X, Y, M3, cmap="viridis")
+    ax3.set_xlabel("X")
+    ax3.set_ylabel("Y")
 
     # Set the same color scale for both subplots
     vmin = min(M1.min(), M2.min())
@@ -1167,28 +1258,98 @@ def plot_welding(trainor, idx):
     ax3.set_xticks([])
     plt.show()
 
+
 def next_D_CNN(D, pad, ker, st, num, all_Ds=[]):
     if num == 0:
         return all_Ds
     all_Ds.append(int(D))
     return next_D_CNN((D + 2 * pad - ker) / st + 1, pad, ker, st, num - 1)
 
-class CNNs_with_MLP(eqx.Module):
+
+class MLCNN(Module, strict=True):
+    layers: tuple[eqx.nn.Conv, ...]
+    activation: Callable
+    final_activation: Callable
+
+    def __init__(
+        self,
+        start_dim,
+        out_dim,
+        stride,
+        padding,
+        kernel_conv,
+        CNN_widths,
+        CNNs_num,
+        activation=_relu,
+        final_activation=_identity,
+        transpose=False,
+        *,
+        key,
+        kwargs_cnn={},
+        **kwargs,
+    ):
+
+        
+        CNN_widths = (
+            [CNN_widths] * (CNNs_num - 1) + [out_dim]
+            if not isinstance(CNN_widths, list)
+            else CNN_widths
+        )
+
+        CNN_widths_b = [start_dim] + CNN_widths[:-1]
+        CNN_keys = jrandom.split(key, CNNs_num)
+        layers = []
+        fn = Conv2d if not transpose else ConvTranspose2d
+        for i in range(len(CNN_widths)):
+            layers.append(
+                fn(
+                    CNN_widths_b[i],
+                    CNN_widths[i],
+                    kernel_size=kernel_conv,
+                    stride=stride,
+                    padding=padding,
+                    key=CNN_keys[i],
+                    **kwargs_cnn,
+                )
+            )
+
+        self.layers = tuple(layers)
+
+        self.activation = [
+            filter_vmap(
+                filter_vmap(lambda: activation, axis_size=w), axis_size=CNNs_num
+            )()
+            for w in CNN_widths
+        ]
+
+        self.final_activation = final_activation
+
+    @jax.named_scope("eqx.nn.MLCNN")
+    def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
+        for i, (layer, act) in enumerate(zip(self.layers, self.activation)):
+            x = layer(x)
+            layer_activation = jtu.tree_map(lambda x: x[i] if is_array(x) else x, act)
+            x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
+
+        x = self.final_activation(x)
+        return x
+
+
+class CNNs_with_MLP(eqx.Module, strict=True):
     """Class mainly for creating encoders with CNNs.
     The encoder is composed of multiple CNNs followed by an MLP.
     """
 
-    layers: list
+    layers: tuple[MLCNN, MLP_dropout]
 
     def __init__(
         self,
         data_dim0,
         out,
         CNNs_num=0,
-        CNN_activations=jnn.relu,
         CNN_widths=64,
         width_mlp=64,
-        depth_mlp=3,
+        depth_mlp=1,
         kernel_conv=3,
         stride=1,
         padding=2,
@@ -1199,124 +1360,108 @@ class CNNs_with_MLP(eqx.Module):
         kwargs_cnn={},
         **kwargs,
     ):
-
-        final_D = next_D_CNN(data_dim0, padding, kernel_conv, stride, CNNs_num+1, all_Ds=[])[-1]
+        super().__init__()
+        final_D = next_D_CNN(
+            data_dim0, padding, kernel_conv, stride, CNNs_num + 1, all_Ds=[]
+        )[-1]
         key1, key2 = jax.random.split(key, 2)
-        CNN_keys = jax.random.split(key1, CNNs_num)
-        CNN_activations = (
-            [CNN_activations] * CNNs_num
-            if not isinstance(CNN_activations, list)
-            else CNN_activations
+        mlcnn = MLCNN(
+            1,
+            CNN_widths[-1],
+            stride,
+            padding,
+            kernel_conv,
+            CNN_widths,
+            CNNs_num,
+            key=key1,
+            **kwargs_cnn,
         )
-        CNN_widths = [CNN_widths] * CNNs_num if not isinstance(CNN_widths, list) else CNN_widths
-        CNN_widths_b = [1] + CNN_widths[:-1]
-        CNN_layers = [
-                lambda x, act=act, Db=Db, Da=Da, key=key: act(eqx.nn.Conv2d(
-                    Db,
-                    Da,
-                    stride=stride,
-                    padding=padding,
-                    kernel_size=kernel_conv,
-                    key=key,
-                    **kwargs_cnn
-                )(x))
-            for Da, Db, key, act in zip(CNN_widths, CNN_widths_b, CNN_keys, CNN_activations)
-        ]
-        self.layers = CNN_layers + [
-            lambda x: jnp.expand_dims(jnp.ravel(x), -1),
-            lambda x: MLP_dropout(
-                (final_D)**2*CNN_widths[-1],
-                out,
-                width_mlp,
-                depth_mlp,
-                eqx.nn.Dropout(dropout),
-                key=key2,
-                **kwargs_mlp
-            )(jnp.squeeze(x)),
-        ]
+        mlp = MLP_dropout(
+            (final_D) ** 2 * CNN_widths[-1],
+            out,
+            width_mlp,
+            depth_mlp,
+            eqx.nn.Dropout(dropout),
+            key=key2,
+            **kwargs_mlp,
+        )
+        self.layers = tuple([mlcnn, mlp])
 
     def __call__(self, x, *args, **kwargs):
         x = jnp.expand_dims(x, 0)
-        for layer in self.layers:
-            x = layer(x)
+        x = self.layers[0](x)
+        x = jnp.expand_dims(jnp.ravel(x), -1)
+        x = self.layers[1](jnp.squeeze(x))
         return x
+
 
 def prev_D_CNN_trans(D, pad, ker, st, num, all_Ds=[]):
     if num == 0:
         return all_Ds
     all_Ds.append(int(D))
-    return prev_D_CNN_trans((D+2*pad-ker)/st+1, pad, ker, st, num - 1)
+    return prev_D_CNN_trans((D + 2 * pad - ker) / st + 1, pad, ker, st, num - 1)
 
-class MLP_with_CNNs_trans(eqx.Module):
+
+class MLP_with_CNNs_trans(eqx.Module, strict=True):
     """Class mainly for creating encoders with CNNs.
     The encoder is composed of multiple CNNs followed by an MLP.
     """
 
-    layers: list
+    layers_: tuple[MLCNN, MLP_dropout]
+    start_dim: int
+    last_D: int
+    # CNN_activations: list[Callable]
+    # CNN_layers: tuple[eqx.nn.Conv, ...]
 
     def __init__(
         self,
         data_dim0,
         out,
         CNNs_num=0,
-        CNN_activations=jnn.relu,
         width_CNNs=64,
         width_mlp=64,
-        depth_mlp=3,
+        depth_mlp=1, #6
         kernel_conv=3,
         stride=1,
         padding=2,
         dropout=0,
-        start_dim=None,
         *,
         key,
         kwargs_mlp={},
         kwargs_cnn={},
         **kwargs,
     ):
-
-        all_Ds = prev_D_CNN_trans(data_dim0, padding, kernel_conv, stride, CNNs_num+1, all_Ds=[])
+        super().__init__()
+        final_D = prev_D_CNN_trans(
+            data_dim0, padding, kernel_conv, stride, CNNs_num + 1, all_Ds=[]
+        )[-1]
         key1, key2 = jax.random.split(key, 2)
-        CNN_keys = jax.random.split(key1, CNNs_num)
-        width_CNNs = [width_CNNs] * (CNNs_num-1) + [1] if not isinstance(width_CNNs, list) else width_CNNs
-        start_dim = out if start_dim is None else start_dim
-        width_CNNs_b = [start_dim] + width_CNNs[:-1]
-        CNN_activations = (
-            [CNN_activations] * CNNs_num
-            if not isinstance(CNN_activations, list)
-            else CNN_activations
+        mlcnn_ = MLCNN(out, 1, stride, padding, kernel_conv, width_CNNs, CNNs_num, transpose=True, key=key1, **kwargs_cnn)
+        mlp_ = MLP_dropout(
+            out,
+            out * final_D ** 2,
+            width_mlp,
+            depth_mlp,
+            eqx.nn.Dropout(dropout),
+            key=key2,
+            **kwargs_mlp,
         )
-        CNN_layers = [
-            lambda x, act=act, Db=Db, Da=Da, key=key: act(
-                eqx.nn.ConvTranspose2d(
-                    Db,
-                    Da,
-                    stride=stride,
-                    padding=padding,
-                    kernel_size=kernel_conv,
-                    key=key,
-                    **kwargs_cnn
-                )(x)
-            )
-            for Da, Db, key, act in zip(width_CNNs, width_CNNs_b, CNN_keys, CNN_activations)
-        ]
-        self.layers = [
-            lambda x: MLP_dropout(
-                out,
-                start_dim*all_Ds[-1]**2,
-                width_mlp,
-                depth_mlp,
-                eqx.nn.Dropout(dropout),
-                key=key2,
-                **kwargs_mlp
-            )(jnp.squeeze(x)),
-            lambda x: jnp.reshape(
-                x, (start_dim, all_Ds[-1], all_Ds[-1])
-            ),
-        ]+ CNN_layers
+        self.start_dim = out
+        self.last_D = final_D
+        self.layers_ = tuple([mlcnn_, mlp_])
+
     def __call__(self, x, *args, **kwargs):
-        x = jnp.expand_dims(x, 1)
-        for layer in self.layers:
-            x = layer(x)
+        x = jnp.squeeze(jnp.expand_dims(x, 1))
+        x = self.layers_[1](x)
+        x = jnp.squeeze(x)
+        x = jnp.reshape(x, (self.start_dim, self.last_D, self.last_D))
+        x = self.layers_[0](x)
+        # for i, (layer, activation) in enumerate(
+        #     zip(self.CNN_layers, self.CNN_activations)
+        # ):
+        #     x = layer(x)
+        #     layer_activation = jtu.tree_map(
+        #         lambda x: x[i] if is_array(x) else x, activation
+        #     )
+        #     x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
         return x[0]
-    
