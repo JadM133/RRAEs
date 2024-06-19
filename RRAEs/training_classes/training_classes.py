@@ -394,9 +394,9 @@ class Trainor_class:
                                 verbose,
                             )
                         else:
-                            to_acc =  (aux[0] > 0.5)*1 # (aux[0] > 0.5) * 2 - 1  # 
-                            accuracy = jnp.sum(to_acc == out.T) / to_acc.size * 100
-                            print("Accuracy: ", accuracy)
+                            # to_acc =  (aux[0] > 0.5)*1 # (aux[0] > 0.5) * 2 - 1  # 
+                            # accuracy = jnp.sum(to_acc == out.T) / to_acc.size * 100
+                            # print("Accuracy: ", accuracy)
 
                             if len(aux) == 2:
                                 v_print(

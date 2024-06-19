@@ -104,10 +104,12 @@ if __name__ == "__main__":
             y_test_o,
             y_train,
             y_test,
-            args
+            norm_func,
+            args,
         ) = get_data(problem)
 
         pdb.set_trace()
+        
         print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
         print(f"method is {method}")
 

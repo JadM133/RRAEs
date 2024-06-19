@@ -161,6 +161,7 @@ def norm_divide_return(
             y_test_old,
             output_shift,
             output_test,
+            lambda xx: norm_vec(xx, y_shift_old, norm=norm_data),
             *args
         )
 
@@ -198,6 +199,7 @@ def norm_divide_return(
         y_test,
         output_shift,
         output_test,
+        lambda xx: norm_vec(xx, y_shift_old, norm=norm_data),
     ) + args
 
 
@@ -229,9 +231,9 @@ def get_data(problem, **kwargs):
                     continue
                 mesh = meshio.read(f"{folder}{name}/solution.exo")
                 if i == 0:
-                    data_ref = mesh.point_data["Density"]
+                    data_ref = mesh.point_data["Temperature"]
                 else:
-                    datas.append(mesh.point_data["Density"] - data_ref) # Temperature, "Pressure", "Density"
+                    datas.append(mesh.point_data["Temperature"]) # Temperature, "Pressure", "Density"
                 i += 1
 
             p_all = np.expand_dims(np.array(mashes), -1)
