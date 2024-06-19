@@ -419,7 +419,7 @@ class Trainor_class:
 
         self.y_pred_train = self.model(input, batch=batch_size_st[0])
         final_acc = jnp.sum((self.y_pred_train > 0.5)*1 == output) / self.y_pred_train.size * 100
-        print(f"Final accuracy: {final_acc}")
+        # print(f"Final accuracy: {final_acc}")
         model = eqx.nn.inference_mode(model)
         self.model = model
         self.t_all = t_all
