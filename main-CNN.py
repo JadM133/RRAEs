@@ -24,12 +24,12 @@ from RRAEs.utilities import out_to_pic
 
 if __name__ == "__main__":
     for i, method in enumerate(["Strong"]):
-        problem = "antenne"
+        problem = "mnist_"
         # method = "Vanilla"
-        loss_func = "bce"
+        loss_func = "Strong"
 
-        latent_size = 512
-        k_max = 30
+        latent_size = 128
+        k_max = 10
 
         folder = f"{problem}/{method}_{problem}/"
         file = f"{method}_{problem}"
@@ -45,6 +45,8 @@ if __name__ == "__main__":
             y_test_o,
             y_train,
             y_test,
+            norm_func,
+            args,
         ) = get_data(problem)
 
         print(f"Shape of data is {x_train.shape} and {x_test.shape}")
@@ -63,7 +65,7 @@ if __name__ == "__main__":
                 model_cls = LoRAE_CNN
 
         interpolation_cls = Objects_Interpolator_nD
-        
+
         # old_trainor = Trainor_class()
         # old_trainor.load("antenne_could_be/Strong_antenne/Strong_antenne")
 
@@ -76,28 +78,24 @@ if __name__ == "__main__":
             folder=folder,
             file=file,
             post_proc_func=inv_func,
-            kwargs_enc={"CNN_widths": [32,], "CNNs_num": 1},
-            kwargs_dec={
-                "CNN_widths": [32],
-                "CNNs_num": 1,
-                "kwargs_cnn": {"final_activation": lambda x: jnn.tanh(x+0.02)-0.01},
-            },
+            # kwargs_enc={"CNN_widths": [32,], "CNNs_num": 1},
+            # kwargs_dec={
+            #     "CNN_widths": [32],
+            #     "CNNs_num": 1,
+            #     "kwargs_cnn": {"final_activation": lambda x: jnn.tanh(x+0.02)-0.01},
+            # },
             key=jrandom.PRNGKey(0),
         )
 
         # trainor.set_model(old_trainor.model)
 
         kwargs = {
-            "step_st": [
-                1500,
-            ],
+            "step_st": [100000],
             "batch_size_st": [20, 20, 20, 20],
-            "lr_st": [
-                1e-4,
-            ],
+            "lr_st": [1e-4],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
-            "print_every": 1,
+            "kwargs_dec":{"kwargs_cnn":{"final_activation":jnn.tanh}},
             # "mul_lr":[10, 1, 1, 1],
             # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }

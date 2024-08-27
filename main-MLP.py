@@ -20,6 +20,110 @@ import os
 import matplotlib
 
 
+def compare_machs(trainor, idx):
+    import scipy
+    import numpy as np
+
+    def plot_scatter_wing(
+        trainor,
+        idx,
+        xlow=None,
+        xhigh=None,
+        ylow=None,
+        yhigh=None,
+        vmax=3,
+        typ="interp",
+        cmap="seismic",
+        **kwargs,
+    ):
+        def get_plotting_pic(idx, xlow, xhigh, ylow, yhigh, y_all, xyz_, indexed=False):
+            xyz = xyz_[:65535]
+            if not indexed:
+                data1 = y_all[:65535, idx]  # plane z=0
+            else:
+                data1 = y_all[:65535]
+            xs = []
+            ys = []
+            datas = []
+
+            if xlow is None or xhigh is None or ylow is None or yhigh is None:
+                xlow = min(xyz[:, 0])
+                xhigh = max(xyz[:, 0])
+                ylow = min(xyz[:, 1])
+                yhigh = max(xyz[:, 1])
+
+            for i in range(xyz.shape[0]):
+                if (
+                    xyz[i][0] > xlow
+                    and xyz[i][0] < xhigh
+                    and xyz[i][1] > ylow
+                    and xyz[i][1] < yhigh
+                ):
+                    xs.append(xyz[i][0])
+                    ys.append(xyz[i][1])
+                    datas.append(data1[i])
+
+            xs0 = jnp.array(xs)
+            ys0 = jnp.array(ys)
+            datas = jnp.array(datas)
+            N = 300j
+            extent = (min(xs0), max(xs0), min(ys0), max(ys0))
+            xs, ys = np.mgrid[extent[0] : extent[1] : N, extent[2] : extent[3] : N]
+            return scipy.interpolate.griddata((xs0, ys0), datas, (xs, ys)), extent
+
+        y_plot = trainor.y_test_o
+        true_pic, extent = get_plotting_pic(
+            idx, xlow, xhigh, ylow, yhigh, y_plot, trainor.xyz
+        )
+
+        y_plot = trainor.y_pred_test_o
+        pred_pic, _ = get_plotting_pic(
+            idx, xlow, xhigh, ylow, yhigh, y_plot, trainor.xyz
+        )
+
+        p_plot = trainor.p_test
+        p = p_plot[idx]
+        sorted_p = jnp.sort(trainor.p_train[..., 0])
+        arg = jnp.argsort(trainor.p_train[..., 0])
+        idx_s = arg[trainor.p_train.shape[0] - jnp.argmax(jnp.flip(sorted_p < p)) - 1]-4
+        idx_b = arg[jnp.argmax(sorted_p > p)]+4
+        
+        interp_pic, _ = get_plotting_pic(
+            0,
+            xlow,
+            xhigh,
+            ylow,
+            yhigh,
+            (trainor.y_train_o[..., idx_s] + trainor.y_train_o[..., idx_b])/2,
+            trainor.xyz,
+            indexed=True,
+        )
+
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 3, 1)
+        im = ax.imshow(true_pic, vmin=0, vmax=vmax, extent=extent, cmap=cmap)
+        # fig.colorbar(im, ax=ax, **kwargs)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_title(f"True Mach for p={p}")
+
+        ax = fig.add_subplot(1, 3, 2)
+        im = ax.imshow(pred_pic, vmin=0, vmax=vmax, extent=extent, cmap=cmap)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_title(f"Prediction Mach for p={p}")
+        # fig.colorbar(im, ax=ax, **kwargs)
+
+        ax = fig.add_subplot(1, 3, 3)
+        im = ax.imshow(interp_pic, vmin=0, vmax=vmax, extent=extent, cmap=cmap)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_title(f"Interpolation for p={p}")
+
+        plt.show()
+
+    plot_scatter_wing(trainor, idx, ylow=0.04, yhigh=0.1, xlow=0.05, xhigh=0.12)
+
 def plot_mult_pics(trainor, k1, k2, points=5):
     matplotlib.rc("xtick", labelsize=20)
     matplotlib.rc("ytick", labelsize=20)
@@ -84,13 +188,59 @@ def compare_imgs(trainor, idx):
     plt.show()
 
 
+def post_mach(interp=False):
+    trainor = Trainor_class()
+    trainor.load("hypersonic_2/Strong_hypersonic_2/Strong_hypersonic_2")
+    if interp:
+        problem = "hypersonic"
+        (
+            ts,
+            x_train,
+            x_test,
+            p_train,
+            p_test,
+            inv_func,
+            y_train_o,
+            y_test_o,
+            y_train,
+            y_test,
+            norm_func,
+            args,
+        ) = get_data(problem)
+
+        trainor.norm_func = norm_func
+        trainor.args = args
+        trainor.xyz = args[-1]
+        trainor.inv_func = inv_func
+        trainor.fitted = False
+        _ = trainor.post_process(
+            y_train_o,
+            y_test,
+            y_test_o,
+            None,
+            p_train,
+            p_test,
+            trainor.inv_func,
+            modes=trainor.vt_train.shape[0],
+            interp=True,
+            batch=False,
+        )
+        trainor.save(p_train=p_train, p_test=p_test)
+    compare_machs(trainor, 0)
+    pdb.set_trace()
+
+
 if __name__ == "__main__":
-    for prob in ["supersonic"]:
+    # trainor = Trainor_class()
+    # trainor.load("hypersonic_final/Strong_hypersonic/Strong_hypersonic")
+    # compare_machs(trainor, 0)
+    # pdb.set_trace()
+    for prob in ["shift"]:
         problem = prob
         method = "Strong"
         loss_func = "Strong"
 
-        latent_size = 200000
+        latent_size = 520
         k_max = 1
 
         (
@@ -108,11 +258,12 @@ if __name__ == "__main__":
             args,
         ) = get_data(problem)
 
-        pdb.set_trace()
-        
+        # y_train = y_train[:, :]-jnp.expand_dims(norm_func(args), 1)
+        # x_train = y_train
+        # y_test = y_test[:, :]-jnp.expand_dims(norm_func(args), 1)
+        # x_test = y_test
         print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
         print(f"method is {method}")
-
         match method:
             case "Strong":
                 model_cls = Strong_RRAE_MLP
@@ -127,17 +278,13 @@ if __name__ == "__main__":
 
         interpolation_cls = Objects_Interpolator_nD
 
-        import jax
-        def fin_acc(x):
-            return jnn.tanh(x)
-        
         trainor = Trainor_class(
             model_cls,
             interpolation_cls,
             data=x_train,
             latent_size=latent_size,  # 4600
             k_max=k_max,
-            folder=f"{problem}_var/{method}_{problem}/",
+            folder=f"{problem}/{method}_{problem}/",
             file=f"{method}_{problem}",
             variational=False,
             # kwargs_dec={"final_activation": jnn.tanh},
@@ -146,12 +293,11 @@ if __name__ == "__main__":
             key=jrandom.PRNGKey(0),
         )
         kwargs = {
-            "step_st": [500, 500],
+            "step_st": [2000, 2000, 1000],# [8000, 8000, 7900],
             "batch_size_st": [20, 20, 20],
-            "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
-            "print_every": 10,
+            "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
+            "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
-            "kwargs_dec": {"depth": 8}
             # "mul_lr":[0.81, 0.81, 0.81, 1],
             # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }
@@ -162,10 +308,21 @@ if __name__ == "__main__":
             training_key=jrandom.PRNGKey(50),
             **kwargs,
         )
+
+        trainor.norm_func = norm_func
+        trainor.args = args
+        trainor.inv_func = inv_func
+        trainor.fitted = False
         e0, e1, e2, e3 = trainor.post_process(
-            y_train_o, y_test, y_test_o, None, p_train, p_test, inv_func, modes=k_max, interp=True, batch=False,
+            y_train_o,
+            y_test,
+            y_test_o,
+            None,
+            p_train,
+            p_test,
+            trainor.inv_func,
+            interp=True,
         )
-        trainor.data_ref = args
         trainor.save(p_train=p_train, p_test=p_test)
         # trainor.plot_results(ts=jnp.arange(0, y_test.shape[0], 1), ts_o=ts)
     pdb.set_trace()

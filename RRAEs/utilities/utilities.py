@@ -56,6 +56,40 @@ def countList(lst1, lst2):
     return [sub[item] for item in range(len(lst2)) for sub in [lst1, lst2]]
 
 
+def eval_model_fixed_coeffs(model, input, batch_size=None, v_ref=None, *, key):
+    batch_size = input.shape[-1] if batch_size is None else batch_size
+    all_vts = []
+    all_preds = []
+    idxs = []
+    for step, (input_b, idx) in enumerate(
+        zip(
+            dataloader(
+                [input.T, jnp.arange(0, input.shape[-1], 1)],
+                batch_size,
+                key=key,
+                once=True,
+            )
+        ),
+    ):
+        pred = model(input_b.T)
+
+        if v_ref is None:
+            v_ref, vt_now = model.latent(input_b.T, ret=True)
+        else:
+            vt_now = v_ref.T @ model.latent(input_b.T)
+
+        # all_vs.append(v)
+        all_vts.append(vt_now)
+        all_preds.append(pred)
+        idxs.append(idx)
+
+    idxs = jnp.concatenate(idxs)
+    y_pred_train = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
+    vt_train = jnp.concatenate(all_vts, -1)[..., jnp.argsort(idxs)]
+    v = v_ref
+    return y_pred_train, vt_train, v
+
+
 def norm_divide_return(
     ts,
     y_all,
@@ -97,12 +131,14 @@ def norm_divide_return(
             ).T
             idx = jnp.linspace(0, res.shape[0] - 1, res.shape[0], dtype=int)
             cbt_idx = idx[jnp.sum(res, 1) == res.shape[1]]  # could be test
-            permut_idx = jrandom.permutation(jrandom.PRNGKey(200), cbt_idx.shape[0])
-            idx_test = cbt_idx[permut_idx][: int(res.shape[0] * (1 - prop_train))]
+            permut_idx = jrandom.permutation(jrandom.PRNGKey(200), cbt_idx)
+            idx_test = permut_idx[: int(res.shape[0] * (1 - prop_train))]
             if cbt_idx.shape[0] < res.shape[0] * (1 - prop_train):
                 raise ValueError("Not enough data to got an interpolable test")
             p_test = p_all[idx_test]
-            p_vals = jnp.delete(p_all, idx_test, 0)
+            p_vals = jrandom.permutation(
+                jrandom.PRNGKey(200), jnp.delete(p_all, idx_test, 0)
+            )
 
         else:
             idx_test = jrandom.permutation(jrandom.PRNGKey(200), y_all.shape[-1])[
@@ -110,7 +146,9 @@ def norm_divide_return(
             ]
 
         y_test_old = y_all[..., idx_test]
-        y_shift_old = jnp.delete(y_all, idx_test, -1)
+        y_shift_old = jrandom.permutation(
+            jrandom.PRNGKey(200), jnp.delete(y_all, idx_test, -1), -1
+        )
     else:
         if p_all is not None:
             p_test = p_all[-test_end:]
@@ -162,7 +200,7 @@ def norm_divide_return(
             output_shift,
             output_test,
             lambda xx: norm_vec(xx, y_shift_old, norm=norm_data),
-            *args
+            args,
         )
 
     u_now, _, _ = adaptive_TSVD(y_shift, eps=eps, verbose=True)
@@ -207,11 +245,32 @@ def get_data(problem, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
-        case "supersonic":
+        case "skf_ft":
+            import os
+            import scipy.io
+
+            folder = "skf_transfer_func/"
+
+            def f(n):
+                return os.path.join(folder, n)
+
+            y_all = jnp.log(
+                jnp.abs(
+                    scipy.io.loadmat(f("data_model_sensor1_lhsu.mat"))[
+                        "data_model_sensor1_lhsu"
+                    ][..., 0]
+                )
+            )
+            p_all = scipy.io.loadmat(f("parameters_set.mat"))["s"]
+            return norm_divide_return(
+                None, y_all, p_all, 0.8, norm_data="minmax", norm_p="meanstd"
+            )
+
+        case "hypersonic":
             import meshio
             import os
 
-            folder = "supersonic/Hypersonic_snapshots/"
+            folder = "hypersonic/Hypersonic_snapshots/"
 
             mashes = []
             datas = []
@@ -224,22 +283,138 @@ def get_data(problem, **kwargs):
                         ten = int(name[-4])
                     except ValueError:
                         ten = 0
-                    if i != 0:
-                        mashes.append(ten*10 + integ + dec/10)
+                    # if i != 0:
+                    mashes.append(ten * 10 + integ + dec / 10)
                 except ValueError:
                     print(f"Name {name} skipped.")
                     continue
                 mesh = meshio.read(f"{folder}{name}/solution.exo")
-                if i == 0:
-                    data_ref = mesh.point_data["Temperature"]
-                else:
-                    datas.append(mesh.point_data["Temperature"]) # Temperature, "Pressure", "Density"
+                if (ten * 10 + integ + dec / 10) == 8.2:
+                    data_ref = mesh.point_data["Mach"]
+                datas.append(
+                    mesh.point_data["Mach"]
+                )  # Temperature, "Pressure", "Density"
+                # datas.append(
+                #     mesh.point_data["Temperature"]
+                # )  # Temperature, "Pressure", "Density"
                 i += 1
 
             p_all = np.expand_dims(np.array(mashes), -1)
+            p_all = jnp.delete(p_all, jnp.array([30, 38]), 0)
             y_all = np.stack(datas, -1)
-            return norm_divide_return(None, y_all, p_all, 0.8, norm_data="minmax", args=(data_ref,))
-        
+            y_all = jnp.delete(y_all, jnp.array([30, 38]), 1)
+
+            p_all = jnp.sort(p_all, 0)
+            y_all = y_all[:, jnp.argsort(p_all, 0).flatten()]
+
+            import matplotlib.pyplot as plt
+            from RRAEs.training_classes import Trainor_class
+            import scipy
+
+            idx = jnp.argmax(p_all == 9.7)
+            y_all = jnp.concatenate(
+                (y_all[:, :idx], y_all[:, idx + 1 :], y_all[:, idx : idx + 1]), 1
+            )
+            p_all = jnp.concatenate(
+                (p_all[:idx], p_all[idx + 1 :], p_all[idx : idx + 1]), 0
+            )
+
+            def plot_scatter_wing(
+                idx,
+                y_all,
+                xlow=None,
+                xhigh=None,
+                ylow=None,
+                yhigh=None,
+                vmax=3,
+                typ="interp",
+                cmap="seismic",
+                **kwargs,
+            ):
+                def get_plotting_pic(idx, xlow, xhigh, ylow, yhigh, y_all):
+                    xyz = mesh.points[:65535]
+                    data1 = y_all[:65535, idx]  # plane z=0
+                    xs = []
+                    ys = []
+                    datas = []
+
+                    if xlow is None or xhigh is None or ylow is None or yhigh is None:
+                        xlow = min(xyz[:, 0])
+                        xhigh = max(xyz[:, 0])
+                        ylow = min(xyz[:, 1])
+                        yhigh = max(xyz[:, 1])
+
+                    for i in range(xyz.shape[0]):
+                        if (
+                            xyz[i][0] > xlow
+                            and xyz[i][0] < xhigh
+                            and xyz[i][1] > ylow
+                            and xyz[i][1] < yhigh
+                        ):
+                            xs.append(xyz[i][0])
+                            ys.append(xyz[i][1])
+                            datas.append(data1[i])
+
+                    xs0 = jnp.array(xs)
+                    ys0 = jnp.array(ys)
+                    datas = jnp.array(datas)
+                    N = 300j
+                    extent = (min(xs0), max(xs0), min(ys0), max(ys0))
+                    xs, ys = np.mgrid[
+                        extent[0] : extent[1] : N, extent[2] : extent[3] : N
+                    ]
+
+                    return (
+                        scipy.interpolate.griddata((xs0, ys0), datas, (xs, ys)),
+                        extent,
+                    )
+
+                true_pic, extent = get_plotting_pic(
+                    idx, xlow, xhigh, ylow, yhigh, y_all
+                )
+                pic_before, _ = get_plotting_pic(
+                    idx - 1, xlow, xhigh, ylow, yhigh, y_all
+                )
+                pic_after, _ = get_plotting_pic(
+                    idx + 1, xlow, xhigh, ylow, yhigh, y_all
+                )
+
+                fig = plt.figure()
+                ax = fig.add_subplot(1, 2, 1)
+                im = ax.imshow(true_pic, vmin=0, vmax=vmax, extent=extent, cmap=cmap)
+                # fig.colorbar(im, ax=ax, **kwargs)
+                ax.set_xlabel("x")
+                ax.set_ylabel("y")
+                ax.set_title(
+                    "Error between True (9.7) and Linear interpolation (9.6, 9.8)"
+                )
+
+                ax = fig.add_subplot(1, 2, 2)
+                im = ax.imshow(
+                    (pic_after + pic_before) / 2,
+                    vmin=0,
+                    vmax=vmax,
+                    extent=extent,
+                    cmap=cmap,
+                )
+                ax.set_xlabel("x")
+                ax.set_ylabel("y")
+                ax.set_title("Linear Interpolation")
+                # fig.colorbar(im, ax=ax, **kwargs)
+                plt.show()
+
+            # plot_scatter_wing(jnp.argmax(p_all==9.7), y_all, ylow=0.04, yhigh=0.1, xlow=0.05, xhigh=0.12)
+
+            return norm_divide_return(
+                None,
+                y_all,
+                p_all,
+                0.8,
+                test_end=1,
+                norm_data="minmax",
+                args=(data_ref, mesh.points),
+            )
+
         case "NVH":
             import pandas as pd
             from scipy.interpolate import interp1d
@@ -296,12 +471,12 @@ def get_data(problem, **kwargs):
             with open("antenne_data/second_data_all.pkl", "rb") as f:
                 y_all, _ = dill.load(f)
             # y_all = jnp.reshape(y_all, (1600, 100, 100)) # only for border
-            y_all = y_all[
-                :, 200:300, 200:300
-            ]  #only for not border
+            y_all = y_all[:, 200:300, 200:300]  # only for not border
             y_all = jnp.concatenate((y_all[0:1600], y_all[1800:-1]))
-            y_all = jnp.concatenate((y_all[0:400], y_all[600:800], y_all[1000:1600], y_all[1800:2200]))
-            y_all = (y_all+1)/2
+            y_all = jnp.concatenate(
+                (y_all[0:400], y_all[600:800], y_all[1000:1600], y_all[1800:2200])
+            )
+            y_all = (y_all + 1) / 2
             pdb.set_trace()
             return norm_divide_return(None, y_all.T, None, 1)
 
@@ -342,7 +517,7 @@ def get_data(problem, **kwargs):
             def sf_func(s, x):
                 return jnp.sin(x - s * jnp.pi)
 
-            p_vals = jnp.linspace(0, 1.8, 18)[:-1]
+            p_vals = jnp.linspace(0, 1.8, 18)[:-1]  # 18
             y_shift = jax.vmap(sf_func, in_axes=[0, None])(p_vals, ts).T
             p_test = jrandom.uniform(
                 jrandom.PRNGKey(0),
@@ -505,19 +680,39 @@ def get_data(problem, **kwargs):
             def f(n):
                 return os.path.join(filename, n)
 
-            def read_series(y):
-                return np.stack(
-                    y.apply(
-                        lambda x: np.array(x.strip("[]").split(), dtype=np.float32)
-                    ).to_numpy()
-                )
-
             y_all = pd.read_csv(f("db_s22_matrix.csv"), sep=" ").to_numpy()
             p_all = pd.read_csv(f("inputs.csv"), sep=",").to_numpy()
             ts = pd.read_csv(f("freq_red.csv"), sep=" ").to_numpy()
 
             return norm_divide_return(
                 ts, y_all, p_all, norm_p="meanstd", norm_data=None
+            )
+
+        case "angelo_final":
+            import os
+            import pandas as pd
+
+            filename = os.path.join(
+                os.getcwd(), "2024_06_21_NVH_transfer/6th_study_multi_anova_transfer/"
+            )
+
+            def f(n):
+                return os.path.join(filename, n)
+
+            ts = pd.read_csv(f(f"Sim_1_mean_all_points.csv")).to_numpy()[:, 0]
+            p_all = pd.read_csv(f("DOE_new_mod.csv")).to_numpy()
+            y_all = []
+            for i in range(p_all.shape[0]):
+                y_all.append(
+                    jnp.log(
+                        pd.read_csv(f(f"Sim_{i+1}_mean_all_points.csv")).to_numpy()[
+                            :, 1
+                        ]
+                    )
+                )
+            y_all = jnp.stack(y_all, -1)
+            return norm_divide_return(
+                ts, y_all, p_all, prop_train=0.9, norm_data="minmax", norm_p="meanstd"
             )
 
         case "mult_gausses":
@@ -854,7 +1049,7 @@ def get_data(problem, **kwargs):
             x_all = x_all  # [..., 45000:]
 
             return norm_divide_return(
-                None, x_all, None, test_end=x_test.shape[-1], norm_data=False
+                None, x_all, None, test_end=x_test.shape[-1], norm_data=None
             )
 
         case _:
@@ -938,7 +1133,7 @@ def find_weighted_loss(terms, weight_vals=None):
     return sum(res)
 
 
-def dataloader(arrays, batch_size, p_vals=None, *, key):
+def dataloader(arrays, batch_size, p_vals=None, once=False, *, key):
     dataset_size = arrays[0].shape[0]
     arrays = [array if array is not None else [None] * dataset_size for array in arrays]
     # assert all(array.shape[0] == dataset_size for array in arrays)
@@ -964,6 +1159,20 @@ def dataloader(arrays, batch_size, p_vals=None, *, key):
                 ]
             start = end
             end = start + batch_size
+        if once:
+            if dataset_size % batch_size != 0:
+                batch_perm = perm[-(dataset_size % batch_size) :]
+                arrs = tuple(
+                    itemgetter(*batch_perm)(array) for array in arrays
+                )  # Works for lists and arrays
+                if dataset_size % batch_size == 1:
+                    yield [
+                        [arr] if arr is None else jnp.expand_dims(jnp.array(arr), 0)
+                        for arr in arrs
+                    ]
+                else:
+                    yield [[arr] if arr is None else jnp.array(arr) for arr in arrs]
+            break
         kk += 1
 
 
@@ -1029,6 +1238,7 @@ class MLP_dropout(Module, strict=True):
     depth: tuple[int, ...]
     final_activation: Callable
     final_activation_l: Callable
+    inp: jnp.array
 
     def __init__(
         self,
@@ -1044,12 +1254,13 @@ class MLP_dropout(Module, strict=True):
         final_activation=_identity,
         final_activation_l=_identity,
         linear_l=0,
+        inp_train=None,
         *,
         key,
         **kwargs,
     ):
 
-        keys = jrandom.split(key, depth + 1)
+        keys = jrandom.split(key, depth + 2)
         layers = []
         layers_l = []
         if depth == 0:
@@ -1063,12 +1274,12 @@ class MLP_dropout(Module, strict=True):
                     Linear(width_size[i], width_size[i + 1], use_bias, key=keys[i + 1])
                 )
             layers.append(
-                Linear(width_size[depth - 1], out_size, use_final_bias, key=keys[-1])
+                Linear(width_size[depth - 1], out_size, use_final_bias, key=keys[-2])
             )
             width_size_l = [width_size[-1]] * (linear_l - 1)
             for i in range(linear_l):
                 layers_l.append(
-                    Linear(out_size, out_size, use_bias=False, key=keys[-1])
+                    Linear(out_size, out_size, use_bias=False, key=keys[-2])
                 )
 
         self.layers = tuple(layers)
@@ -1098,9 +1309,12 @@ class MLP_dropout(Module, strict=True):
         self.final_activation_l = final_activation_l
         self.use_bias = use_bias
         self.use_final_bias = use_final_bias
+        self.inp = inp_train
 
     @jax.named_scope("eqx.nn.MLP")
-    def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None, **kwargs) -> Array:
+    def __call__(
+        self, x: Array, *, key: Optional[PRNGKeyArray] = None, **kwargs
+    ) -> Array:
         if self.depth != 0:
             for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation)):
                 x = layer(x)
@@ -1123,6 +1337,35 @@ class MLP_dropout(Module, strict=True):
                 x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
             x = self.final_activation_l(x)
         return x
+
+
+class MLP_decode(Module, strict=True):
+    mlp: MLP_dropout
+    u: jnp.array
+    decoder: MLP_dropout
+    inp: jnp.array
+
+    def __init__(
+        self,
+        trainor,
+        inp_train,
+        **kwargs,
+    ):
+
+        self.inp = inp_train
+        self.u = trainor.v
+        self.decoder = trainor.model._decode
+        self.mlp = trainor.mlp
+
+    @jax.named_scope("eqx.nn.MLP")
+    def __call__(self):
+        lat = jnp.sum(
+            jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
+                self.u, self.mlp(self.inp)
+            ),
+            0,
+        )[..., 0]
+        return self.decoder(lat)
 
 
 class Func(eqx.Module):
@@ -1290,6 +1533,8 @@ class MLCNN(Module, strict=True):
         kwargs_cnn={},
         **kwargs,
     ):
+        """Note: if provided as lists, activations should be one less than widths.
+        The last activation is specified by "final activation"."""
 
         CNN_widths = (
             [CNN_widths] * (CNNs_num - 1) + [out_dim]
@@ -1327,12 +1572,11 @@ class MLCNN(Module, strict=True):
 
     @jax.named_scope("eqx.nn.MLCNN")
     def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
-        for i, (layer, act) in enumerate(zip(self.layers, self.activation)):
+        for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation[:-1])):
             x = layer(x)
             layer_activation = jtu.tree_map(lambda x: x[i] if is_array(x) else x, act)
             x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
-
-        x = self.final_activation(x)
+        x = self.final_activation(self.layers[-1](x))
         return x
 
 
@@ -1347,13 +1591,13 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         self,
         data_dim0,
         out,
-        CNNs_num=1,
-        CNN_widths=64,
+        CNNs_num=4,
+        CNN_widths=[32, 64, 128, 256],
         width_mlp=64,
-        depth_mlp=1,
-        kernel_conv=3,
-        stride=1,
-        padding=2,
+        depth_mlp=2,
+        kernel_conv=4,
+        stride=2,
+        padding=1,
         dropout=0,
         *,
         key,
@@ -1417,20 +1661,22 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
     layers_: tuple[MLCNN, MLP_dropout]
     start_dim: int
     last_D: int
+    out_after_mlp: int
     # CNN_activations: list[Callable]
     # CNN_layers: tuple[eqx.nn.Conv, ...]
 
     def __init__(
         self,
         data_dim0,
-        out,
-        CNNs_num=1,
-        width_CNNs=64,
+        inp,
+        out_after_mlp=32,
+        CNNs_num=2,
+        width_CNNs=[8, 1],
         width_mlp=64,
-        depth_mlp=1, #6
-        kernel_conv=3,
-        stride=1,
-        padding=2,
+        depth_mlp=2,  # 6
+        kernel_conv=4,
+        stride=2,
+        padding=1,
         dropout=0,
         *,
         key,
@@ -1439,36 +1685,60 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         **kwargs,
     ):
         super().__init__()
+
         final_D = prev_D_CNN_trans(
             data_dim0, padding, kernel_conv, stride, CNNs_num + 1, all_Ds=[]
         )[-1]
+
         key1, key2 = jax.random.split(key, 2)
-        mlcnn_ = MLCNN(out, 1, stride, padding, kernel_conv, width_CNNs, CNNs_num, transpose=True, key=key1, **kwargs_cnn)
+        mlcnn_ = MLCNN(
+            out_after_mlp,
+            1,
+            stride,
+            padding,
+            kernel_conv,
+            width_CNNs,
+            CNNs_num,
+            transpose=True,
+            key=key1,
+            **kwargs_cnn,
+        )
         mlp_ = MLP_dropout(
-            out,
-            out * final_D ** 2,
+            inp,
+            out_after_mlp * final_D**2,
             width_mlp,
             depth_mlp,
             eqx.nn.Dropout(dropout),
             key=key2,
             **kwargs_mlp,
         )
-        self.start_dim = out
+        self.start_dim = inp
         self.last_D = final_D
-        self.layers_ = tuple([mlcnn_, mlp_])
+        self.layers_ = tuple([mlp_, mlcnn_])
+        self.out_after_mlp = out_after_mlp
 
     def __call__(self, x, *args, **kwargs):
         x = jnp.squeeze(jnp.expand_dims(x, 1))
-        x = self.layers_[1](x)
-        x = jnp.squeeze(x)
-        x = jnp.reshape(x, (self.start_dim, self.last_D, self.last_D))
         x = self.layers_[0](x)
-        # for i, (layer, activation) in enumerate(
-        #     zip(self.CNN_layers, self.CNN_activations)
-        # ):
-        #     x = layer(x)
-        #     layer_activation = jtu.tree_map(
-        #         lambda x: x[i] if is_array(x) else x, activation
-        #     )
-        #     x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
+        x = jnp.squeeze(x)
+        x = jnp.reshape(x, (self.out_after_mlp, self.last_D, self.last_D))
+        x = self.layers_[1](x)
         return x[0]
+
+
+class Sample(eqx.Module):
+    sample_dim: int
+
+    def __init__(self, sample_dim):
+        self.sample_dim = sample_dim
+
+    def __call__(self, x, epsilon=None, ret=False, *args, **kwargs):
+        mean = x[..., : self.sample_dim]
+        logvar = x[..., self.sample_dim :]
+        epsilon = 0 if epsilon is None else epsilon
+        if ret:
+            return mean + jnp.exp(0.5 * logvar) * epsilon, mean, logvar
+        return mean + jnp.exp(0.5 * logvar) * epsilon
+
+    def create_epsilon(self, seed, batch_size):
+        return jrandom.normal(jrandom.key(seed), (self.sample_dim, batch_size))

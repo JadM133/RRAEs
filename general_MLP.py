@@ -144,60 +144,63 @@ def train_alpha(
         if out_labels_test is None:
             out_labels_test = out_test
 
-    for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
+    try:
+        for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
 
-        optim = optax.adabelief(lr)
-        opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
-        stagn_num = 0
-        loss_old = jnp.inf
-        t_t = 0
+            optim = optax.adabelief(lr)
+            opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
+            stagn_num = 0
+            loss_old = jnp.inf
+            t_t = 0
 
-        keys = jr.split(jrandom.PRNGKey(500), steps)
+            keys = jr.split(jrandom.PRNGKey(500), steps)
 
-        if batch_size > inp_train.shape[0] or batch_size == -1:
-            batch_size = inp_train.shape[0]
+            if batch_size > inp_train.shape[0] or batch_size == -1:
+                batch_size = inp_train.shape[0]
 
-        for step, (yb, out_b, out_labels_tr) in zip(
-            range(steps),
-            dataloader(
-                [inp_train, out_train, out_labels_train],
-                batch_size,
-                key=jrandom.PRNGKey(2568),
-            ),
-        ):
-            start = time.time()
-            loss, model, opt_state, aux = make_step(yb, model, opt_state, out_b)
-            model = eqx.nn.inference_mode(model)
-            pred_train = jax.vmap(model)(yb)
-
-            accuracy_train = acc_func(out_labels_tr, pred_train)
-
-            if inp_test is not None:
-                pred_test = jax.vmap(model)(inp_test)
-                accuracy_test = acc_func(out_labels_test, pred_test)
+            for step, (yb, out_b, out_labels_tr) in zip(
+                range(steps),
+                dataloader(
+                    [inp_train, out_train, out_labels_train],
+                    batch_size,
+                    key=jrandom.PRNGKey(2568),
+                ),
+            ):
+                start = time.time()
+                loss, model, opt_state, aux = make_step(yb, model, opt_state, out_b)
                 model = eqx.nn.inference_mode(model)
+                pred_train = jax.vmap(model)(yb)
 
-            end = time.time()
-            t_t += end - start
-            if (step % stagn_every) == 0:
-                if jnp.abs(loss_old - loss) / jnp.abs(loss_old) * 100 < 1:
-                    stagn_num += 1
-                    if stagn_num > 10:
-                        print("Stagnated....")
-                        break
-                loss_old = loss
+                accuracy_train = acc_func(out_labels_tr, pred_train)
 
-            if (step % print_every) == 0 or step == steps - 1:
                 if inp_test is not None:
-                    print(
-                        f"Step: {step}, Loss: {loss}, Acc train {accuracy_train},  Acc test {accuracy_test}, Computation time: {t_t}"
-                    )
-                else:
-                    print(
-                        f"Step: {step}, Loss: {loss}, Acc train {accuracy_train}, Computation time: {t_t}"
-                    )
-                t_t = 0
-    model = eqx.nn.inference_mode(model)
+                    pred_test = jax.vmap(model)(inp_test)
+                    accuracy_test = acc_func(out_labels_test, pred_test)
+                    model = eqx.nn.inference_mode(model)
+
+                end = time.time()
+                t_t += end - start
+                if (step % stagn_every) == 0:
+                    if jnp.abs(loss_old - loss) / jnp.abs(loss_old) * 100 < 1:
+                        stagn_num += 1
+                        if stagn_num > 10:
+                            print("Stagnated....")
+                            break
+                    loss_old = loss
+
+                if (step % print_every) == 0 or step == steps - 1:
+                    if inp_test is not None:
+                        print(
+                            f"Step: {step}, Loss: {loss}, Acc train {accuracy_train},  Acc test {accuracy_test}, Computation time: {t_t}"
+                        )
+                    else:
+                        print(
+                            f"Step: {step}, Loss: {loss}, Acc train {accuracy_train}, Computation time: {t_t}"
+                        )
+                    t_t = 0
+        model = eqx.nn.inference_mode(model)
+    except:
+        pdb.set_trace()
 
     pred_train = jax.vmap(model)(inp_train)
     pred_mlp_train = acc_func(out_labels_train, pred_train, True)
@@ -373,32 +376,35 @@ if __name__ == "__main__":
         ["Strong"]
     ):
         confi_err = []
-        problem="NVH"
+        problem="skf_ft"
         folder = f"{problem}/{method}_{problem}/"
         file = f"{method}_{problem}"
         trainor = Trainor_class()
         trainor.load(os.path.join(folder, file))
-        (
-            ts,
-            x_train,
-            x_test,
-            p_train,
-            p_test,
-            inv_func,
-            y_train_o,
-            y_test_o,
-            y_train,
-            y_test,
-        ) = get_data(problem)
 
-        trainor.p_train = p_train
-        trainor.p_test = p_test
+        # (
+        #     ts,
+        #     x_train,
+        #     x_test,
+        #     p_train,
+        #     p_test,
+        #     inv_func,
+        #     y_train_o,
+        #     y_test_o,
+        #     y_train,
+        #     y_test,
+        #     norm_func,
+        #     args
+        # ) = get_data(problem)
+
+        # trainor.p_train = p_train
+        # trainor.p_test = p_test
         kwargs = {
             "dropout": 0,
-            "step_st": [2000,],
+            "step_st": [20000,],
             "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
             "width_size": 64,
-            "depth": 1,
+            "depth": 2,
             # "inside_activation":jnn.relu,
             "batch_size_st": [64, 64, 64],
         }
@@ -406,7 +412,7 @@ if __name__ == "__main__":
         input_train = trainor.p_train # trainor.model.latent(trainor.x_train).T
         input_test = trainor.p_test # trainor.model.latent(trainor.x_test_interp).T
         output_train =  trainor.vt_train.T
-        pdb.set_trace()
+
         def acc_func(output_test, pred_test, ret=False):
             lat = jnp.sum(
                 jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
@@ -449,6 +455,4 @@ if __name__ == "__main__":
     # trainor.confi_entropy = confi_err
     trainor = find_originals(trainor)
     trainor.save(os.path.join(folder, file))
-    
-    # print(f"Confi error is {trainor.confi_entropy}")
     pdb.set_trace()

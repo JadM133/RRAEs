@@ -1,25 +1,21 @@
 import jax
 import jax.numpy as jnp
-from abc import abstractmethod
 import pdb
 from RRAEs.utilities import (
     Func,
+    Sample,
     v_vt_class,
     CNNs_with_MLP,
     MLP_with_CNNs_trans,
+    dataloader,
 )
+import itertools
 import equinox as eqx
 import jax.random as jrandom
-import jax.nn as jnn
 from equinox._doc_utils import doc_repr
 import warnings
-import numpy as np
 
 _identity = doc_repr(lambda x, **kwargs: x, "lambda x: x")
-
-
-def None_ag_kg(*args, **kwargs):
-    return [None] * len(args) + [None] * len(kwargs)
 
 
 class Autoencoder(eqx.Module):
@@ -81,6 +77,7 @@ class Autoencoder(eqx.Module):
         if _encode is None:
             if "width_size" not in kwargs_enc.keys():
                 kwargs_enc["width_size"] = 64
+
             if "depth" not in kwargs_enc.keys():
                 kwargs_enc["depth"] = 1
 
@@ -144,72 +141,77 @@ class Autoencoder(eqx.Module):
         new_decode = lambda x: self._decode(x, *args, **kwargs)
         return jax.vmap(new_decode, in_axes=[-1], out_axes=-1)(y)
 
-    def __call__(self, x, batch=None, *args, **kwargs):
-        if batch is None:
-            kwargs = {**kwargs, **self.params}
-            return self.decode(
-                self.perform_in_latent(self.encode(x, *args, **kwargs), *args, **kwargs),
-                *args,
-                **kwargs,
-            )
-        else:
-            kwargs = {**kwargs, **self.params}
-            idx = jnp.arange(x.shape[-1])
-            idx = jrandom.permutation(jrandom.PRNGKey(5230), idx)
-            ii = 0
-            sols = []
-            endit = False
-            while True:
-                if (ii+1)*batch > x.shape[-1]:
-                    if ii*batch == x.shape[-1]:
-                        break
-                    btch = idx[ii*batch:]
-                    endit = True
-                btch = idx[ii*batch:(ii+1)*batch]
-                sol = self.decode(
-                self.perform_in_latent(self.encode(x[..., btch], *args, **kwargs), *args, **kwargs),
-                *args,
-                **kwargs,
-                )
-                sols.append(sol)
-                ii += 1
-                if endit:
-                    break
-            res = np.concatenate(sols, axis=-1)
-            res = res[..., idx]
-            return res
+    def __call__(self, x, *args, **kwargs):
+        kwargs = {**kwargs, **self.params}
+        return self.decode(
+            self.perform_in_latent(self.encode(x, *args, **kwargs), *args, **kwargs),
+            *args,
+            **kwargs,
+        )
+
+    def eval_with_batches(self, x, batch_size, latent=False, *args, key, **kwargs):
+
+        eval = self.__call__ if latent is False else self.latent
+        idxs = []
+        all_preds = []
+
+        for _, (input_b, idx) in zip(
+            itertools.count(start=0),
+            dataloader(
+                [x.T, jnp.arange(0, x.shape[-1], 1)],
+                batch_size,
+                key=key,
+                once=True,
+            ),
+        ):
+
+            pred = eval(input_b.T)
+            idxs.append(idx)
+            all_preds.append(pred)
+
+        idxs = jnp.concatenate(idxs)
+        final_pred = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
+        return final_pred
 
     def latent(self, x, *args, **kwargs):
         kwargs = {**kwargs, **self.params}
         return self.perform_in_latent(self.encode(x, *args, **kwargs), *args, **kwargs)
 
 
-def latent_func_strong_VAE(y, k_max, ret=False, eps_rand=0.1, *args, **kwargs):
-    if k_max == -1 and (y.shape[0] % 2) != 0:
-        raise ValueError("k_max can not be -1 for Variational Strong RRAEs")
-    elif k_max == -1:
-        means = y[:int(y.shape[0]/2)]
-        stds = y[int(y.shape[0]/2):]
-        return eps_rand * jnp.exp(stds * .5) + means
-                                                              
-    u, s, v = jnp.linalg.svd(y, full_matrices=False)
-    sigs = s[:k_max]
-    v_now = v[:k_max, :]
-    u_now = u[:, :k_max]
-    v_now = jnp.multiply(v_now, jnp.expand_dims(sigs, -1))
+# class RRAutoencoder(Autoencoder):
+#     def eval_with_batches(self, x, batch_size, *args, key, **kwargs): # x is input with batch in first dim
 
-    eps = jrandom.uniform(jrandom.PRNGKey(0), (v_now.shape[0], v_now.shape[-1],))
-    new_v_now = jax.vmap(lambda x, ep: x+0.1*ep)(v_now, eps)
+#         idxs = []
+#         all_preds = []
+#         all_vts = []
 
-    y_approx = jnp.sum(
-        jax.vmap(
-            lambda u, v: jnp.outer(u, v), in_axes=[-1, 0], out_axes=-1
-        )(u_now, new_v_now),
-        axis=-1,
-    )
-    if ret:
-        return u_now, new_v_now
-    return y_approx
+#         for step, (input_b, idx) in zip(
+#             itertools.count(start=0),
+#             dataloader(
+#                 [x.T, jnp.arange(0, x.shape[-1], 1)],
+#                 batch_size,
+#                 key=key,
+#                 once=True,
+#             ),
+#         ):
+#             if step == 0:
+#                 v_ref, vt_now, sigs = self.latent(input_b.T, ret=True)
+#             else:
+#                 vt_now = v_ref.T @ self.latent(input_b.T)
+
+#             pred = self.__call__(input_b.T)
+
+#             all_vts.append(vt_now)
+#             idxs.append(idx)
+#             all_preds.append(pred)
+
+#         idxs = jnp.concatenate(idxs)
+#         final_pred = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
+#         vt_train = jnp.concatenate(all_vts, -1)[..., jnp.argsort(idxs)]
+#         sigs = sigs
+#         v = v_ref
+#         return final_pred #, (v, vt_train, sigs, v_ref)
+
 
 def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
     """Performing the truncated SVD in the latent space.
@@ -233,11 +235,11 @@ def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
         v_now = v[:k_max, :]
         u_now = u[:, :k_max]
 
-        v_now = jnp.multiply(v_now, jnp.expand_dims(sigs, -1))
+        coeffs = jnp.multiply(v_now, jnp.expand_dims(sigs, -1))
         y_approx = jnp.sum(
-            jax.vmap(
-                lambda u, v: jnp.outer(u, v), in_axes=[-1, 0], out_axes=-1
-            )(u_now, v_now),
+            jax.vmap(lambda u, v: jnp.outer(u, v), in_axes=[-1, 0], out_axes=-1)(
+                u_now, coeffs
+            ),
             axis=-1,
         )
         # y_approx = jnp.sum(
@@ -252,7 +254,8 @@ def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
         v_now = None
         sigs = None
     if ret:
-        return u_now, jnp.multiply(v_now, jnp.expand_dims(sigs, -1))
+        # coeffs includes a multiplication by sigs
+        return u_now, coeffs, sigs
     return y_approx
 
 
@@ -278,7 +281,6 @@ class Strong_RRAE_MLP(Autoencoder):
         latent_size,
         k_max,
         post_proc_func=None,
-        variational=False,
         *,
         key,
         kwargs_enc={},
@@ -290,15 +292,8 @@ class Strong_RRAE_MLP(Autoencoder):
             warnings.warn("linear_l can not be specified for Strong")
             kwargs.pop("linear_l")
 
-        if variational:
-            k_max = k_max # * 2
+        latent_func = latent_func_strong_RRAE
 
-        if variational:
-            latent_func = latent_func_strong_VAE
-        else:
-            latent_func = latent_func_strong_RRAE
-
-        
         super().__init__(
             data,
             latent_size,
@@ -321,7 +316,14 @@ class Vanilla_AE_MLP(Autoencoder):
     """
 
     def __init__(
-        self, data, latent_size, variational=False, *, key, kwargs_enc={}, kwargs_dec={}, **kwargs
+        self,
+        data,
+        latent_size,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
     ):
         if "k_max" in kwargs.keys():
             if kwargs["k_max"] != -1:
@@ -330,12 +332,8 @@ class Vanilla_AE_MLP(Autoencoder):
                 )
             kwargs.pop("k_max")
 
-        if variational:
-            latent_func = latent_func_strong_VAE
-            latent_size_after = int(latent_size/2)
-        else:
-            latent_func = None
-            latent_size_after = latent_size
+        latent_func = None
+        latent_size_after = latent_size
 
         super().__init__(
             data,
@@ -346,7 +344,6 @@ class Vanilla_AE_MLP(Autoencoder):
             kwargs_enc=kwargs_enc,
             kwargs_dec=kwargs_dec,
             _perform_in_latent=latent_func,
-            map_latent=False,
             **kwargs,
         )
 
@@ -384,6 +381,45 @@ class Weak_RRAE_MLP(Autoencoder):
             k_max = data.shape[-1]
 
         self.v_vt = v_vt_class(latent_size, data.shape[-1], k_max, key=key)
+
+
+def sample(y, sample_cls, epsilon=None, *args, **kwargs):
+    if epsilon is None:
+        new_perform_sample = lambda x: sample_cls(x, *args, **kwargs)
+        return jax.vmap(new_perform_sample, in_axes=[-1], out_axes=-1)(y)
+    else:
+        new_perform_sample = lambda x, s: sample_cls(x, s, *args, **kwargs)
+        return jax.vmap(new_perform_sample, in_axes=[-1, -1], out_axes=-1)(y, epsilon)
+
+
+class VAR_AE_MLP(Autoencoder):
+    _sample: Sample
+
+    def __init__(
+        self,
+        data,
+        latent_size,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
+
+        self._sample = Sample(sample_dim=latent_size)
+
+        super().__init__(
+            data,
+            latent_size=latent_size * 2,
+            latent_size_after=latent_size,
+            _perform_in_latent=lambda y, *args, **kwargs: sample(
+                y, self._sample, *args, **kwargs
+            ),  # Note: can not define sample as calss method to maintain tree structure
+            map_latent=False,
+            key=key,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
+        )
 
 
 class IRMAE_MLP(Autoencoder):
@@ -442,6 +478,7 @@ class CNN_Autoencoder(Autoencoder):
         self,
         data,
         latent_size,
+        latent_size_after=None,
         k_max=-1,
         _perform_in_latent=_identity,
         *,
@@ -450,6 +487,9 @@ class CNN_Autoencoder(Autoencoder):
         kwargs_dec={},
         **kwargs,
     ):
+        latent_size_after = (
+            latent_size if latent_size_after is None else latent_size_after
+        )
         key1, key2, key3 = jrandom.split(key, 3)
         _encode = CNNs_with_MLP(
             data_dim0=data.shape[0],
@@ -459,7 +499,7 @@ class CNN_Autoencoder(Autoencoder):
         )
         _decode = MLP_with_CNNs_trans(
             data_dim0=data.shape[0],
-            out=latent_size,
+            inp=latent_size_after,
             key=key2,
             **kwargs_dec,
         )
@@ -473,6 +513,35 @@ class CNN_Autoencoder(Autoencoder):
             _decode=_decode,
             key=key3,
             **kwargs,
+        )
+
+
+class VAR_AE_CNN(CNN_Autoencoder):
+    _sample: Sample
+
+    def __init__(
+        self,
+        data,
+        latent_size,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
+
+        self._sample = Sample(sample_dim=latent_size)
+
+        super().__init__(
+            data,
+            latent_size=latent_size * 2,
+            latent_size_after=latent_size,
+            _perform_in_latent=lambda y, *args, **kwargs: sample(
+                y, self._sample, *args, **kwargs
+            ),  # Note: can not define sample as calss method to maintain tree structure
+            key=key,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
         )
 
 
@@ -491,6 +560,7 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
             key=key,
             **kwargs,
         )
+
 
 class Vanilla_AE_CNN(CNN_Autoencoder):
     """Vanilla Autoencoder.

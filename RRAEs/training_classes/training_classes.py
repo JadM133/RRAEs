@@ -125,6 +125,10 @@ class Objects_Interpolator_nD(Interpolator):
         self.model = lambda x_test: p_of_dim_n_equi_grid(y_train, x_train, x_test)
 
     def __call__(self, x_new, *args, **kwargs):
+        if self.model is None:
+            raise ValueError(
+                "Interpolation Model is not available. You should fit the interpolation class first."
+            )
         return self.model(x_new)
 
 
@@ -155,6 +159,9 @@ class Trainor_class:
         self.ts = ts
         self.file = file
         self.fitted = False
+
+    def special_inv(self, x):
+        return self.inv_func(x + jnp.expand_dims(self.norm_func(self.args), 1))
 
     def set_model(self, model):
         self.model = model
@@ -218,7 +225,6 @@ class Trainor_class:
 
         norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
 
-
         if (loss_func == "Strong") or (loss_func is None) or (loss_func == "Vanilla"):
 
             @eqx.filter_value_and_grad(has_aux=True)
@@ -278,38 +284,25 @@ class Trainor_class:
         elif loss_func == "var":
 
             @eqx.filter_value_and_grad(has_aux=True)
-            def loss_fun(model, input, out, idx, rd, **kwargs):
-                pred = model(input, eps_rand=rd)
-                y = model.encode(input)
-                means = y[: int(y.shape[0] / 2)]
-                stds = y[int(y.shape[0] / 2) :]
-                wv = jnp.array([1.0, 0.01])
-                kl_loss = -0.5 * (1 + stds - jnp.square(means) - jnp.exp(stds))
-                kl_loss = jnp.mean(jnp.sum(kl_loss, axis=1))
-                return find_weighted_loss(
-                    [norm_loss_(pred, out), kl_loss], weight_vals=wv
-                ), (norm_loss_(pred, out), kl_loss)
-
-        elif loss_func == "bce":
-
-            @eqx.filter_value_and_grad(has_aux=True)
-            def loss_fun(model, input, out, idx, rd, **kwargs):
-                # my_lf = lambda x1, x2: jnp.mean(
-                #     (1 - x2) * jnp.square(x1 + 1 * jnp.ones_like(x1)) / 2
-                #     + (1 + x2) * jnp.square(x1 - jnp.ones_like(x1)) / 2
-                # )
-                lf = lambda x1, x2:  jnp.mean(jnp.sum(-x2*jnp.log(x1) - (1-x2)*jnp.log(1-x1), 0))
-                pred = model(input)
-                wv = jnp.array(
-                    [
-                        1.0,
-                    ]
+            def loss_fun(model, input, out, idx, epsilon, **kwargs):
+                pred = model(input, epsilon=epsilon)
+                _, means, logvars = model.latent(
+                    input, epsilon=epsilon, ret=True
                 )
-                return find_weighted_loss([lf(pred, out)], weight_vals=wv), (pred,)
+                wv = jnp.array([1.0, 1.0])
+                kl_loss = jnp.sum(
+                    -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
+                )
+                return find_weighted_loss([norm_loss_(pred, out), kl_loss], weight_vals=wv), (
+                    norm_loss_(pred, out),
+                    kl_loss,
+                )
 
         @eqx.filter_jit
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
-            (loss, aux), grads = loss_fun(model, input, out, idx, **loss_kwargs)
+            (loss, aux), grads = loss_fun(
+                model, input, out, idx, **loss_kwargs
+            )
             updates, opt_state = optim.update(grads, opt_state)
             model = eqx.apply_updates(model, updates)
             return loss, model, opt_state, aux
@@ -327,101 +320,105 @@ class Trainor_class:
 
         t_all = 0
 
-        try:
-            for steps, lr, batch_size, mul_l in zip(step_st, lr_st, batch_size_st, mul_lr):
-                stagn_num = 0
-                loss_old = jnp.inf
-                t_t = 0
+        # try:
+        counter = 0
+        for steps, lr, batch_size, mul_l in zip(
+            step_st, lr_st, batch_size_st, mul_lr
+        ):
+            stagn_num = 0
+            loss_old = jnp.inf
+            t_t = 0
 
-                if mul_lr_func is not None:
-                    optim = optax.chain(
-                        optax.masked(optax.adabelief(lr), is_not_acc),
-                        optax.masked(optax.adabelief(mul_l * lr), is_acc),
-                    )
-                else:
-                    optim = optax.adabelief(lr)
+            if mul_lr_func is not None:
+                optim = optax.chain(
+                    optax.masked(optax.adabelief(lr), is_not_acc),
+                    optax.masked(optax.adabelief(mul_l * lr), is_acc),
+                )
+            else:
+                optim = optax.adabelief(lr)
 
-                filtered_model = eqx.filter(model, eqx.is_inexact_array)
-                try:
-                    opt_state = optim.init(filtered_model)
-                except ValueError:
-                    raise ValueError(
-                        "Optax has a bug! Send a message to Jad so he can fix it to you..."
-                    )
+            filtered_model = eqx.filter(model, eqx.is_inexact_array)
+            try:
+                opt_state = optim.init(filtered_model)
+            except ValueError:
+                raise ValueError(
+                    "Optax has a bug! Send a message to Jad so he can fix it to you..."
+                )
 
-                if (batch_size > input.shape[-1]) or batch_size == -1:
-                    batch_size = input.shape[-1]
+            if (batch_size > input.shape[-1]) or batch_size == -1:
+                batch_size = input.shape[-1]
+
+            for step, (input_b, out, idx) in zip(
+                range(steps),
+                dataloader(
+                    [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
+                    batch_size,
+                    key=training_key,
+                ),
+            ):
+                start = time.time()
 
                 if loss_func == "var":
-                    all_rds = jrandom.normal(
-                        jrandom.PRNGKey(1253),
-                        shape=(steps, int(model.latent(input).shape[0]), input.shape[-1]),
-                    )
-                else:
-                    all_rds = [None] * steps
+                    epsilon = model._sample.create_epsilon(counter, input_b.shape[0])
+                    loss_kwargs["epsilon"] = epsilon
 
-                for step, (input_b, out, idx) in zip(
-                    range(steps),
-                    dataloader(
-                        [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
-                        batch_size,
-                        key=training_key,
-                    ),
-                ):
-                    start = time.time()
-                    loss_kwargs["rd"] = all_rds[step]
-                    loss, model, opt_state, aux = make_step(
-                        model, input_b.T, out.T, opt_state, idx, **loss_kwargs
-                    )
-                    end = time.time()
-                    t_t += end - start
+                loss, model, opt_state, aux = make_step(
+                    model,
+                    input_b.T,
+                    out.T,
+                    opt_state,
+                    idx,
+                    **loss_kwargs,
+                )
+                counter += 1
+                end = time.time()
+                t_t += end - start
 
-                    if stagn_every is not None:
-                        if (step % stagn_every) == 0:
-                            if jnp.abs(loss_old - loss) / jnp.abs(loss_old) * 100 < 1:
-                                stagn_num += 1
-                                if stagn_num > 10:
-                                    v_print("Stagnated....", verbose)
-                                    break
-                            loss_old = loss
+                if stagn_every is not None:
+                    if (step % stagn_every) == 0:
+                        if jnp.abs(loss_old - loss) / jnp.abs(loss_old) * 100 < 1:
+                            stagn_num += 1
+                            if stagn_num > 10:
+                                v_print("Stagnated....", verbose)
+                                break
+                        loss_old = loss
 
-                    if (step % print_every) == 0 or step == steps - 1:
-                        if regression:
-                            pred = np.zeros_like(aux)
-                            pred[aux.argmax(0), np.arange(aux.shape[-1])] = 1
+                if (step % print_every) == 0 or step == steps - 1:
+                    if regression:
+                        pred = np.zeros_like(aux)
+                        pred[aux.argmax(0), np.arange(aux.shape[-1])] = 1
+                        v_print(
+                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}, Accuracy: {jnp.sum((pred == out.T))/pred.size*100}",
+                            verbose,
+                        )
+                    else:
+                        # to_acc =  (aux[0] > 0.5)*1 # (aux[0] > 0.5) * 2 - 1  #
+                        # accuracy = jnp.sum(to_acc == out.T) / to_acc.size * 100
+                        # print("Accuracy: ", accuracy)
+
+                        if len(aux) == 2:
                             v_print(
-                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}, Accuracy: {jnp.sum((pred == out.T))/pred.size*100}",
+                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
                                 verbose,
                             )
                         else:
-                            # to_acc =  (aux[0] > 0.5)*1 # (aux[0] > 0.5) * 2 - 1  # 
-                            # accuracy = jnp.sum(to_acc == out.T) / to_acc.size * 100
-                            # print("Accuracy: ", accuracy)
-
-                            if len(aux) == 2:
-                                v_print(
-                                    f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
-                                    verbose,
-                                )
-                            else:
-                                v_print(
-                                    f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
-                                    verbose,
-                                )
-                        t_all += t_t
-                        t_t = 0
-                    if jnp.isnan(loss):
-                        print("Loss is nan, stopping training...")
-                        break
-        except:
-            pass
-            pdb.set_trace()
-
-        self.y_pred_train = self.model(input, batch=batch_size_st[0])
-        final_acc = jnp.sum((self.y_pred_train > 0.5)*1 == output) / self.y_pred_train.size * 100
-        # print(f"Final accuracy: {final_acc}")
+                            v_print(
+                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
+                                verbose,
+                            )
+                    t_all += t_t
+                    t_t = 0
+                if jnp.isnan(loss):
+                    print("Loss is nan, stopping training...")
+                    break
+        # except (Exception, KeyboardInterrupt) as e:
+        #     print(e)
+        #     pass
+        pdb.set_trace()
         model = eqx.nn.inference_mode(model)
         self.model = model
+        self.y_pred_train = model.eval_with_batches(input, batch_size, key=training_key)
+        self.latent_train = model.eval_with_batches(input, batch_size, latent=True, key=training_key)
         self.t_all = t_all
         return model
 
@@ -497,10 +494,7 @@ class Trainor_class:
         p_test=None,
         inv_func=None,
         save=False,
-        modes="all",
         interp=None,
-        verbose=False,
-        batch=False,
         **kwargs,
     ):
         """Performs post-processing to find the relative error of the RRAE model.
@@ -520,27 +514,19 @@ class Trainor_class:
         save: bool
             If anything other than False, the model as well as the results will be saved in f"{save}".pkl
         """
-        if batch:
-            y_pred_train = self.y_pred_train
-        else:
-            y_pred_train = self.model(self.x_train)
-            self.y_pred_train = y_pred_train
         error_train = (
-            jnp.linalg.norm(y_pred_train - self.y_train)
+            jnp.linalg.norm(self.y_pred_train - self.y_train)
             / jnp.linalg.norm(self.y_train)
             * 100
         )
         print("Train error: ", error_train)
         self.error_train = error_train
-        self.p_train = p_train
-        self.p_test = p_test
         self.y_train_o = y_train_o
         self.y_test_o = y_test_o
         self.y_test = y_test
 
         if (y_train_o is not None) and (inv_func is not None):
-            y_pred_train_o = inv_func(y_pred_train)
-            self.inv_func = inv_func
+            y_pred_train_o = inv_func(self.y_pred_train)
             error_train_o = (
                 jnp.linalg.norm(y_pred_train_o - self.y_train_o)
                 / jnp.linalg.norm(self.y_train_o)
@@ -553,16 +539,7 @@ class Trainor_class:
             error_train_o = None
 
         self.error_train_o = error_train_o
-        latent_train = self.model.latent(self.x_train)
-        u_vec, sing, vt = adaptive_TSVD(
-            latent_train, full_matrices=False, verbose=verbose, modes=modes, **kwargs
-        )
-        sv = jnp.expand_dims(sing, 0)
-        v = jnp.multiply(sv, u_vec)
-        self.v = v
-        self.vt_train = vt
-        # plt.scatter(p_train, vt)
-        # plt.show()
+
         if x_test is not None:
             y_pred_test = self.model(x_test)
             error_test = (
@@ -583,32 +560,18 @@ class Trainor_class:
 
         elif interp:
 
-            self.latent_train = latent_train
-
-            if modes == "all":
-                latent_test = self.interpolate(p_test, p_train, latent_train, save=save)
-                self.vt_test = None
-            else:
-                self.vt_test = self.interpolate(p_test, p_train, vt, save=save)
-                latent_test = jnp.sum(
-                    jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
-                        self.v, self.vt_test
-                    ),
-                    0,
-                )
-            self.latent_test = latent_test
-
-            y_pred_test = self.model.decode(latent_test)
+            self.latent_test = self.interpolate(p_test, p_train, self.latent_train, save=save)
+            y_pred_test = self.model.decode(self.latent_test)
             error_test = (
                 jnp.linalg.norm(y_pred_test - y_test) / jnp.linalg.norm(y_test) * 100
             )
             print("Test error: ", error_test)
             if self.y_test_o is not None:
-                y_pred_test_o = inv_func(self.model.decode(latent_test))
+                y_pred_test_o = inv_func(y_pred_test)
                 self.y_pred_test_o = y_pred_test_o
                 error_test_o = (
                     jnp.linalg.norm(y_pred_test_o - y_test_o)
-                    / jnp.linalg.norm(y_test)
+                    / jnp.linalg.norm(y_test_o)
                     * 100
                 )
                 print("Test error_o: ", error_test_o)
@@ -668,6 +631,7 @@ class Trainor_class:
                 ),
                 f,
             )
+        print(f"Model saved in {filename}.pkl")
 
     def load(self, filename):
         with open(f"{filename}.pkl", "rb") as f:
