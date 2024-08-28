@@ -178,7 +178,6 @@ class Trainor_class:
         step_st=[3000, 3000],  # 000, 8000],
         lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
         print_every=20,
-        stagn_every=None,
         batch_size_st=[16, 16, 16, 16, 32],
         mul_lr=None,
         mul_lr_func=None,  #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
@@ -202,7 +201,6 @@ class Trainor_class:
             "step_st": step_st,
             "lr_st": lr_st,
             "print_every": print_every,
-            "stagn_every": stagn_every,
             "batch_size_st": batch_size_st,
             "mul_lr": mul_lr,
             "mul_lr_func": mul_lr_func,
@@ -289,7 +287,7 @@ class Trainor_class:
                 _, means, logvars = model.latent(
                     input, epsilon=epsilon, ret=True
                 )
-                wv = jnp.array([1.0, 1.0])
+                wv = jnp.array([1.0, 0.1])
                 kl_loss = jnp.sum(
                     -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
                 )
@@ -320,82 +318,59 @@ class Trainor_class:
 
         t_all = 0
 
-        # try:
-        counter = 0
-        for steps, lr, batch_size, mul_l in zip(
-            step_st, lr_st, batch_size_st, mul_lr
-        ):
-            stagn_num = 0
-            loss_old = jnp.inf
-            t_t = 0
-
-            if mul_lr_func is not None:
-                optim = optax.chain(
-                    optax.masked(optax.adabelief(lr), is_not_acc),
-                    optax.masked(optax.adabelief(mul_l * lr), is_acc),
-                )
-            else:
-                optim = optax.adabelief(lr)
-
-            filtered_model = eqx.filter(model, eqx.is_inexact_array)
-            try:
-                opt_state = optim.init(filtered_model)
-            except ValueError:
-                raise ValueError(
-                    "Optax has a bug! Send a message to Jad so he can fix it to you..."
-                )
-
-            if (batch_size > input.shape[-1]) or batch_size == -1:
-                batch_size = input.shape[-1]
-
-            for step, (input_b, out, idx) in zip(
-                range(steps),
-                dataloader(
-                    [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
-                    batch_size,
-                    key=training_key,
-                ),
+        try:
+            counter = 0
+            for steps, lr, batch_size, mul_l in zip(
+                step_st, lr_st, batch_size_st, mul_lr
             ):
-                start = time.time()
+                t_t = 0
 
-                if loss_func == "var":
-                    epsilon = model._sample.create_epsilon(counter, input_b.shape[0])
-                    loss_kwargs["epsilon"] = epsilon
+                if mul_lr_func is not None:
+                    optim = optax.chain(
+                        optax.masked(optax.adabelief(lr), is_not_acc),
+                        optax.masked(optax.adabelief(mul_l * lr), is_acc),
+                    )
+                else:
+                    optim = optax.adabelief(lr)
 
-                loss, model, opt_state, aux = make_step(
-                    model,
-                    input_b.T,
-                    out.T,
-                    opt_state,
-                    idx,
-                    **loss_kwargs,
-                )
-                counter += 1
-                end = time.time()
-                t_t += end - start
+                filtered_model = eqx.filter(model, eqx.is_inexact_array)
+                try:
+                    opt_state = optim.init(filtered_model)
+                except ValueError:
+                    raise ValueError(
+                        "Optax has a bug! Send a message to Jad so he can fix it to you..."
+                    )
 
-                if stagn_every is not None:
-                    if (step % stagn_every) == 0:
-                        if jnp.abs(loss_old - loss) / jnp.abs(loss_old) * 100 < 1:
-                            stagn_num += 1
-                            if stagn_num > 10:
-                                v_print("Stagnated....", verbose)
-                                break
-                        loss_old = loss
+                if (batch_size > input.shape[-1]) or batch_size == -1:
+                    batch_size = input.shape[-1]
 
-                if (step % print_every) == 0 or step == steps - 1:
-                    if regression:
-                        pred = np.zeros_like(aux)
-                        pred[aux.argmax(0), np.arange(aux.shape[-1])] = 1
-                        v_print(
-                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}, Accuracy: {jnp.sum((pred == out.T))/pred.size*100}",
-                            verbose,
-                        )
-                    else:
-                        # to_acc =  (aux[0] > 0.5)*1 # (aux[0] > 0.5) * 2 - 1  #
-                        # accuracy = jnp.sum(to_acc == out.T) / to_acc.size * 100
-                        # print("Accuracy: ", accuracy)
+                for step, (input_b, out, idx) in zip(
+                    range(steps),
+                    dataloader(
+                        [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
+                        batch_size,
+                        key=training_key,
+                    ),
+                ):
+                    start = time.perf_counter()
 
+                    if loss_func == "var":
+                        epsilon = model._sample.create_epsilon(counter, input_b.shape[0])
+                        loss_kwargs["epsilon"] = epsilon
+
+                    loss, model, opt_state, aux = make_step(
+                        model,
+                        input_b.T,
+                        out.T,
+                        opt_state,
+                        idx,
+                        **loss_kwargs,
+                    )
+                    counter += 1
+                    end = time.perf_counter()
+                    t_t += end - start
+
+                    if (step % print_every) == 0 or step == steps - 1:
                         if len(aux) == 2:
                             v_print(
                                 f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
@@ -406,14 +381,14 @@ class Trainor_class:
                                 f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
                                 verbose,
                             )
-                    t_all += t_t
-                    t_t = 0
-                if jnp.isnan(loss):
-                    print("Loss is nan, stopping training...")
-                    break
-        # except (Exception, KeyboardInterrupt) as e:
-        #     print(e)
-        #     pass
+                        t_all += t_t
+                        t_t = 0
+                    if jnp.isnan(loss):
+                        print("Loss is nan, stopping training...")
+                        break
+        except (Exception, KeyboardInterrupt) as e:
+            print(e)
+            pass
         pdb.set_trace()
         model = eqx.nn.inference_mode(model)
         self.model = model

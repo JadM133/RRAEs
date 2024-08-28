@@ -21,6 +21,9 @@ import warnings
 import pdb
 from RRAEs.utilities import out_to_pic
 
+from jax.lib import xla_bridge
+
+print(xla_bridge.get_backend().platform)
 
 if __name__ == "__main__":
     for i, method in enumerate(["Strong"]):
@@ -66,9 +69,6 @@ if __name__ == "__main__":
 
         interpolation_cls = Objects_Interpolator_nD
 
-        # old_trainor = Trainor_class()
-        # old_trainor.load("antenne_could_be/Strong_antenne/Strong_antenne")
-
         trainor = Trainor_class(
             model_cls,
             interpolation_cls,
@@ -78,33 +78,24 @@ if __name__ == "__main__":
             folder=folder,
             file=file,
             post_proc_func=inv_func,
-            # kwargs_enc={"CNN_widths": [32,], "CNNs_num": 1},
-            # kwargs_dec={
-            #     "CNN_widths": [32],
-            #     "CNNs_num": 1,
-            #     "kwargs_cnn": {"final_activation": lambda x: jnn.tanh(x+0.02)-0.01},
-            # },
+            kwargs_dec={"final_activation": jnn.tanh},  # this is how you change the final activation
             key=jrandom.PRNGKey(0),
         )
 
-        # trainor.set_model(old_trainor.model)
-
-        kwargs = {
-            "step_st": [100000],
+        train_kwargs = {
+            "step_st": [150000],
             "batch_size_st": [20, 20, 20, 20],
             "lr_st": [1e-4],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
-            "kwargs_dec":{"kwargs_cnn":{"final_activation":jnn.tanh}},
-            # "mul_lr":[10, 1, 1, 1],
-            # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }
+        pdb.set_trace()
         trainor.fit(
             x_train,
             y_train,
             loss_func=loss_func,
             training_key=jrandom.PRNGKey(50),
-            **kwargs,
+            **train_kwargs,
         )
         e0, e1, e2, e3 = trainor.post_process(
             y_train_o, y_test, y_test_o, None, p_train, p_test, inv_func, modes=k_max
