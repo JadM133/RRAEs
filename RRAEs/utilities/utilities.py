@@ -1503,11 +1503,13 @@ def plot_welding(trainor, idx):
     ax3.set_xticks([])
     plt.show()
 
+
 class Conv2d_(Conv2d):
     def __init__(self, *args, **kwargs):
         if "output_padding" in kwargs:
             kwargs.pop("output_padding")
         super().__init__(*args, **kwargs)
+
 
 class MLCNN(Module, strict=True):
     layers: tuple[eqx.nn.Conv, ...]
@@ -1521,6 +1523,7 @@ class MLCNN(Module, strict=True):
         stride,
         padding,
         kernel_conv,
+        dilation,
         CNN_widths,
         CNNs_num,
         activation=_relu,
@@ -1553,6 +1556,7 @@ class MLCNN(Module, strict=True):
                     kernel_size=kernel_conv,
                     stride=stride,
                     padding=padding,
+                    dilation=dilation,
                     output_padding=output_padding,
                     key=CNN_keys[i],
                     **kwargs_cnn,
@@ -1596,6 +1600,7 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         kernel_conv=3,
         stride=2,
         padding=1,
+        dilation=1,
         final_activation=_identity,
         *,
         key,
@@ -1617,13 +1622,14 @@ class CNNs_with_MLP(eqx.Module, strict=True):
             stride,
             padding,
             kernel_conv,
+            dilation,
             CNN_widths,
             CNNs_num,
             key=key1,
             final_activation=_relu,
             **kwargs_cnn,
         )
-        
+
         final_D = mlcnn(jnp.zeros((1, data_dim0, data_dim0))).shape[-1]
         mlp = Linear((final_D) ** 2 * last_width, out, key=key2)
         act = lambda x: final_activation(x)
@@ -1638,29 +1644,50 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         return x
 
 
-def next_D_CNN(D, pad, ker, st, num, all_Ds=[]):
+# def next_D_CNN(D, pad, ker, st, dil, num, all_Ds=[]):
+#     if num == 0:
+#         return all_Ds
+#     all_Ds.append(int(jnp.floor(D)))
+#     return next_D_CNN((D + 2 * pad - dil*(ker-1)) / st + 1, pad, ker, st, dil, num - 1)
+
+
+def prev_D_CNN_trans(D, pad, ker, st, dil, outpad, num, all_Ds=[]):
     if num == 0:
         return all_Ds
-    all_Ds.append(int(D))
-    return next_D_CNN((D + 2 * pad - ker) / st + 1, pad, ker, st, num - 1)
+    all_Ds.append(int(jnp.ceil(D)))
+    return prev_D_CNN_trans(
+        (D + 2 * pad - dil * (ker - 1) - 1 - outpad) / st + 1,
+        pad,
+        ker,
+        st,
+        dil,
+        outpad,
+        num - 1,
+    )
 
 
-def prev_D_CNN_trans(D, pad, ker, st, num, all_Ds=[]):
-    if num == 0:
-        return all_Ds
-    all_Ds.append(int(D))
-    return prev_D_CNN_trans((D + 2 * pad - ker) / st + 1, pad, ker, st, num - 1)
+def find_padding_convT(D, data_dim0, ker, st, dil, outpad):
+
+    return D
 
 
-def next_CNN_trans(O, pad, ker, st, num, all_Ds=[]):
+def next_CNN_trans(O, pad, ker, st, dil, outpad, num, all_Ds=[]):
     if num == 0:
         return all_Ds
     all_Ds.append(int(O))
-    return next_CNN_trans((O - 1) * st + ker - 2 * pad, pad, ker, st, num - 1)
+    return next_CNN_trans(
+        (O - 1) * st + dil * (ker - 1) - 2 * pad + 1 + outpad,
+        pad,
+        ker,
+        st,
+        dil,
+        outpad,
+        num - 1,
+    )
 
 
-def is_convT_valid(D, data_dim0, pad, ker, st, nums):
-    final_D = next_CNN_trans(D, pad, ker, st, nums, all_Ds=[])[-1]
+def is_convT_valid(D, data_dim0, pad, ker, st, dil, outpad, nums):
+    final_D = next_CNN_trans(D, pad, ker, st, dil, outpad, nums, all_Ds=[])[-1]
     return final_D == data_dim0, final_D
 
 
@@ -1671,10 +1698,8 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
 
     layers_: tuple[MLCNN, MLP_dropout]
     start_dim: int
-    last_D: int
+    first_D: int
     out_after_mlp: int
-    # CNN_activations: list[Callable]
-    # CNN_layers: tuple[eqx.nn.Conv, ...]
 
     def __init__(
         self,
@@ -1686,6 +1711,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         kernel_conv=3,
         stride=2,
         padding=1,
+        dilation=1,
         output_padding=1,
         final_activation=_identity,
         *,
@@ -1696,15 +1722,26 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         super().__init__()
 
         first_D = prev_D_CNN_trans(
-            data_dim0, padding, kernel_conv, stride, CNNs_num + 1, all_Ds=[]
+            data_dim0,
+            padding,
+            kernel_conv,
+            stride,
+            dilation,
+            output_padding,
+            CNNs_num + 1,
+            all_Ds=[],
         )[-1]
 
-        # valid, final_D = is_convT_valid(
-        #     first_D, data_dim0, padding, kernel_conv, stride, CNNs_num + 1
-        # )
-        # assert (
-        #     valid
-        # ), f"The dimensions of the transpose CNNs are not valid (output of shape {final_D} not {data_dim0}), specify stride = 1 if unsure how to choose the architecture."
+        valid, final_D = is_convT_valid(
+            first_D,
+            data_dim0,
+            padding,
+            kernel_conv,
+            stride,
+            dilation,
+            output_padding,
+            CNNs_num + 1,
+        )
 
         key1, key2 = jax.random.split(key, 2)
         mlcnn_ = MLCNN(
@@ -1713,6 +1750,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
             stride,
             padding,
             kernel_conv,
+            dilation,
             width_CNNs,
             CNNs_num,
             transpose=True,
@@ -1721,37 +1759,27 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
             key=key1,
             **kwargs_cnn,
         )
-        # mlp_ = MLP_dropout(
-        #     inp,
-        #     out_after_mlp * first_D**2,
-        #     width_mlp,
-        #     depth_mlp,
-        #     eqx.nn.Dropout(dropout),
-        #     key=key2,
-        #     **kwargs_mlp,
-        # )
-        mlp_ = Linear(inp, out_after_mlp * first_D ** 2, key=key2)
 
+        mlp_ = Linear(inp, out_after_mlp * first_D**2, key=key2)
         final_conv = Conv2d(
             width_CNNs[-1],
             1,
-            kernel_size=1+(width_CNNs[-1]-data_dim0),
+            kernel_size=1 + (final_D - data_dim0),
             stride=1,
             padding=0,
+            dilation=1,
             key=key2,
         )
 
         self.start_dim = inp
-        self.last_D = first_D
+        self.first_D = first_D
         act = lambda x: final_activation(x)
         self.layers_ = tuple([mlp_, mlcnn_, final_conv, act])
         self.out_after_mlp = out_after_mlp
 
     def __call__(self, x, *args, **kwargs):
-        x = jnp.squeeze(jnp.expand_dims(x, 1))
         x = self.layers_[0](x)
-        x = jnp.squeeze(x)
-        x = jnp.reshape(x, (self.out_after_mlp, self.last_D, self.last_D))
+        x = jnp.reshape(x, (self.out_after_mlp, self.first_D, self.first_D))
         x = self.layers_[1](x)
         x = self.layers_[2](x)
         x = self.layers_[3](x)

@@ -72,7 +72,7 @@ if __name__ == "__main__":
         trainor = Trainor_class(
             model_cls,
             interpolation_cls,
-            data=x_train,
+            data=x_train[:20, :20],
             latent_size=latent_size,  # 4600
             k_max=k_max,
             folder=folder,
@@ -89,10 +89,10 @@ if __name__ == "__main__":
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
         }
-        pdb.set_trace()
+
         trainor.fit(
-            x_train,
-            y_train,
+            x_train[:20, :20],
+            y_train[:20, :20],
             loss_func=loss_func,
             training_key=jrandom.PRNGKey(50),
             **train_kwargs,

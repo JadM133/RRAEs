@@ -389,7 +389,7 @@ class Trainor_class:
         except (Exception, KeyboardInterrupt) as e:
             print(e)
             pass
-        pdb.set_trace()
+        
         model = eqx.nn.inference_mode(model)
         self.model = model
         self.y_pred_train = model.eval_with_batches(input, batch_size, key=training_key)
