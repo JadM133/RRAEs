@@ -77,6 +77,7 @@ if __name__ == "__main__":
             k_max=k_max,
             folder=folder,
             file=file,
+            norm_type="minmax",
             post_proc_func=inv_func,
             kwargs_dec={"final_activation": jnn.tanh},  # this is how you change the final activation
             key=jrandom.PRNGKey(0),

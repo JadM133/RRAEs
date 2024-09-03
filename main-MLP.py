@@ -286,6 +286,7 @@ if __name__ == "__main__":
             k_max=k_max,
             folder=f"{problem}/{method}_{problem}/",
             file=f"{method}_{problem}",
+            norm_type="minmax",
             variational=False,
             # kwargs_dec={"final_activation": jnn.tanh},
             # kwargs_enc={"depth":6},
@@ -301,6 +302,7 @@ if __name__ == "__main__":
             # "mul_lr":[0.81, 0.81, 0.81, 1],
             # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }
+        pdb.set_trace()
         trainor.fit(
             x_train,
             y_train,

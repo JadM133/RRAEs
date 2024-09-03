@@ -9,6 +9,7 @@ from RRAEs.utilities import (
     MLP_with_CNNs_trans,
     dataloader,
 )
+from RRAEs.norm import Norm
 import itertools
 import equinox as eqx
 import jax.random as jrandom
@@ -22,6 +23,7 @@ class Autoencoder(eqx.Module):
     _encode: Func
     _decode: Func
     _perform_in_latent: None
+    norm_cls: Norm
     k_max: int
     params: dict
 
@@ -62,13 +64,14 @@ class Autoencoder(eqx.Module):
         _perform_in_latent=None,
         _decode=None,
         map_latent=True,
+        norm_type="None",
         *,
         key,
         kwargs_enc={},
         kwargs_dec={},
         **kwargs,
     ):
-
+        self.norm_cls = Norm(data, norm_type=norm_type)
         key_e, key_d = jrandom.split(key)
 
         if latent_size_after is None:
@@ -122,10 +125,16 @@ class Autoencoder(eqx.Module):
             "kwargs_dec": kwargs_dec,
         }
 
-    def encode(self, x, *argss, **kwargs):
+    def encode(self, x, *args, **kwargs):
+        return self.norm_cls.norm_wrapper(self.no_norm_encode)(x, *args, **kwargs)
+
+    def no_norm_encode(self, x, *argss, **kwargs):
         kwargs = {**self.params, **kwargs}
         new_encode = lambda x: self._encode(x, *argss, **kwargs)
         return jax.vmap(new_encode, in_axes=[-1], out_axes=-1)(x)
+
+    def norm(self, x):
+        return self.norm_cls.norm(x)
 
     def perform_in_latent(self, y, *args, **kwargs):
         kwargs = {**self.params, **kwargs}
@@ -137,9 +146,15 @@ class Autoencoder(eqx.Module):
         return self._perform_in_latent(y, *args, **kwargs)
 
     def decode(self, y, *args, **kwargs):
+        return self.norm_cls.inv_wrapper(self.no_invnorm_decode)(y, *args, **kwargs)
+
+    def no_invnorm_decode(self, y, *args, **kwargs):
         kwargs = {**self.params, **kwargs}
         new_decode = lambda x: self._decode(x, *args, **kwargs)
         return jax.vmap(new_decode, in_axes=[-1], out_axes=-1)(y)
+
+    def inv_norm(self, x):
+        return self.norm_cls.inv_norm(x)
 
     def __call__(self, x, *args, **kwargs):
         kwargs = {**kwargs, **self.params}
@@ -178,41 +193,6 @@ class Autoencoder(eqx.Module):
         return self.perform_in_latent(self.encode(x, *args, **kwargs), *args, **kwargs)
 
 
-# class RRAutoencoder(Autoencoder):
-#     def eval_with_batches(self, x, batch_size, *args, key, **kwargs): # x is input with batch in first dim
-
-#         idxs = []
-#         all_preds = []
-#         all_vts = []
-
-#         for step, (input_b, idx) in zip(
-#             itertools.count(start=0),
-#             dataloader(
-#                 [x.T, jnp.arange(0, x.shape[-1], 1)],
-#                 batch_size,
-#                 key=key,
-#                 once=True,
-#             ),
-#         ):
-#             if step == 0:
-#                 v_ref, vt_now, sigs = self.latent(input_b.T, ret=True)
-#             else:
-#                 vt_now = v_ref.T @ self.latent(input_b.T)
-
-#             pred = self.__call__(input_b.T)
-
-#             all_vts.append(vt_now)
-#             idxs.append(idx)
-#             all_preds.append(pred)
-
-#         idxs = jnp.concatenate(idxs)
-#         final_pred = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
-#         vt_train = jnp.concatenate(all_vts, -1)[..., jnp.argsort(idxs)]
-#         sigs = sigs
-#         v = v_ref
-#         return final_pred #, (v, vt_train, sigs, v_ref)
-
-
 def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
     """Performing the truncated SVD in the latent space.
 
@@ -242,19 +222,12 @@ def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
             ),
             axis=-1,
         )
-        # y_approx = jnp.sum(
-        #     jax.vmap(
-        #         lambda u, s, v: s * jnp.outer(u, v), in_axes=[-1, 0, 0], out_axes=-1
-        #     )(u_now, sigs, v_now),
-        #     axis=-1,
-        # )
     else:
         y_approx = y
         u_now = None
         v_now = None
         sigs = None
     if ret:
-        # coeffs includes a multiplication by sigs
         return u_now, coeffs, sigs
     return y_approx
 

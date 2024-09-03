@@ -608,7 +608,7 @@ class Trainor_class:
             )
         print(f"Model saved in {filename}.pkl")
 
-    def load(self, filename):
+    def load(self, filename, erase=False):
         with open(f"{filename}.pkl", "rb") as f:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
@@ -620,3 +620,5 @@ class Trainor_class:
             for key in attributes:
                 setattr(self, key, attributes[key])
             self.fitted = True
+        if erase:
+            os.remove(f"{filename}.pkl")
