@@ -3,21 +3,17 @@ import jax.numpy as jnp
 import jax.nn as jnn
 import jax
 import jax.random as jrandom
-from RRAEs.utilities import MLP_dropout
 from RRAEs.AE_classes import (
     Strong_RRAE_CNN,
     Weak_RRAE_CNN,
     Vanilla_AE_CNN,
     IRMAE_CNN,
     LoRAE_CNN,
-    CNN_Autoencoder,
 )
 from equinox._doc_utils import doc_repr
 from RRAEs.utilities import get_data
 from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
 
-_identity = doc_repr(lambda x, **kwargs: x, "lambda x: x")
-import warnings
 import pdb
 from RRAEs.utilities import out_to_pic
 
@@ -80,12 +76,14 @@ if __name__ == "__main__":
             file=file,
             norm_type="minmax",
             # post_proc_func=inv_func,
-            kwargs_dec={"final_activation": jnn.tanh},  # this is how you change the final activation
+            kwargs_dec={
+                "final_activation": jnn.tanh
+            },  # this is how you change the final activation
             key=jrandom.PRNGKey(0),
         )
 
         train_kwargs = {
-            "step_st": [150000],
+            "step_st": [2],
             "batch_size_st": [20, 20, 20, 20],
             "lr_st": [1e-4],
             "print_every": 100,
@@ -93,14 +91,22 @@ if __name__ == "__main__":
         }
 
         trainor.fit(
-            x_train[:20, :20],
-            y_train[:20, :20],
+            x_train,
+            y_train,
             loss_func=loss_func,
             training_key=jrandom.PRNGKey(50),
             **train_kwargs,
         )
         e0, e1, e2, e3 = trainor.post_process(
-            x_train, y_train_o, y_test, y_test_o, None, p_train, p_test, inv_func, modes=k_max
+            x_train,
+            y_train_o,
+            y_test,
+            y_test_o,
+            None,
+            p_train,
+            p_test,
+            inv_func,
+            modes=k_max,
         )
         trainor.save()
 

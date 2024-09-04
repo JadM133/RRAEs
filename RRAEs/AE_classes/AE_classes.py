@@ -7,7 +7,7 @@ from RRAEs.utilities import (
     CNNs_with_linear,
     Linear_with_CNNs_trans,
     dataloader,
-    MLP_with_linear
+    MLP_with_linear,
 )
 from RRAEs.norm import Norm
 import itertools
@@ -17,6 +17,7 @@ from equinox._doc_utils import doc_repr
 import warnings
 
 _identity = doc_repr(lambda x, *args, **kwargs: x, "lambda x: x")
+
 
 class BaseClass(eqx.Module):
     map_axis: int
@@ -30,7 +31,7 @@ class BaseClass(eqx.Module):
         if self.map_axis is None:
             return self.model(x)
         return jax.vmap(self.model, in_axes=[self.map_axis], out_axes=self.map_axis)(x)
-    
+
     def eval_with_batches(self, x, batch_size, *args, key, func=None, **kwargs):
 
         eval = self.__call__ if func is None else func
@@ -57,6 +58,7 @@ class BaseClass(eqx.Module):
 
     def __getattr__(self, name: str):
         return getattr(self.model, name)
+
 
 class Autoencoder(eqx.Module):
     encode: MLP_with_linear
@@ -154,19 +156,19 @@ class Autoencoder(eqx.Module):
         self.k_max = k_max
         self.map_latent = map_latent
 
-
-    def perform_in_latent(self, y):
+    def perform_in_latent(self, y, *args, **kwargs):
         if self.map_latent:
-            return jax.vmap(self._perform_in_latent, in_axes=[-1, None], out_axes=-1)(y, self.k_max)
-        return self._perform_in_latent(y, self.k_max)
-
+            new_perform_in_latent = lambda x: self._perform_in_latent(
+                x, self.k_max, *args, **kwargs
+            )
+            return jax.vmap(new_perform_in_latent, in_axes=[-1], out_axes=-1)(y)
+        return self._perform_in_latent(y, self.k_max, *args, **kwargs)
 
     def __call__(self, x):
         return self.decode(self.perform_in_latent(self.encode(x)))
 
-
-    def latent(self, x):
-        return self.perform_in_latent(self.encode(x))
+    def latent(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, **kwargs)
 
 
 def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
@@ -313,7 +315,16 @@ class Weak_RRAE_MLP(Autoencoder):
     """
 
     def __init__(
-        self, in_size, latent_size, k_max, data_size, *, key, kwargs_enc={}, kwargs_dec={}, **kwargs
+        self,
+        in_size,
+        latent_size,
+        k_max,
+        data_size,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
     ):
 
         super().__init__(
@@ -456,7 +467,7 @@ class CNN_Autoencoder(Autoencoder):
             **kwargs_dec,
         )
         _decode = BaseClass(decode, -1)
-        
+
         super().__init__(
             in_size,
             latent_size,

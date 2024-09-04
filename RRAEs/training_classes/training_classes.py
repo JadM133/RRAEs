@@ -198,8 +198,7 @@ class Trainor_class:
         verbose=True,
         loss_kwargs={},
         *,
-        training_key,
-        **kwargs,
+        training_key
     ):
 
         if (self.all_kwargs["model_cls"] is None) or (
@@ -221,9 +220,8 @@ class Trainor_class:
             "verbose": verbose,
             "loss_kwargs": loss_kwargs,
             "training_key": training_key,
-            "kwargs": kwargs,
         }
-        self.all_kwargs = {**self.all_kwargs, **training_params, **kwargs}
+        self.all_kwargs = {**self.all_kwargs, **training_params}
         self.x_train = input
         self.y_train = output
         model = self.model
