@@ -14,9 +14,10 @@ def test_fitting(): # Only to test if saving/loading is causing a problem
     interpolation_cls = Objects_Interpolator_nD
 
     trainor = Trainor_class(
+        data,
         model_cls,
         interpolation_cls,
-        data=data,
+        in_size=data.shape[0],
         latent_size=200,
         k_max=2,
         norm_type="minmax",

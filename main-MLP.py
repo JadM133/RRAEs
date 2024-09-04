@@ -279,22 +279,21 @@ if __name__ == "__main__":
         interpolation_cls = Objects_Interpolator_nD
 
         trainor = Trainor_class(
+            x_train,
             model_cls,
             interpolation_cls,
-            data=x_train,
             latent_size=latent_size,  # 4600
+            in_size=x_train.shape[0],
             k_max=k_max,
             folder=f"{problem}/{method}_{problem}/",
             file=f"{method}_{problem}",
             norm_type="minmax",
             variational=False,
-            # kwargs_dec={"final_activation": jnn.tanh},
-            # kwargs_enc={"depth":6},
-            # linear_l=2,
             key=jrandom.PRNGKey(0),
         )
         kwargs = {
-            "step_st": [2000, 2000, 1000],# [8000, 8000, 7900],
+            "step_st": [2],# [8000, 8000, 7900],
+            # "step_st": [2000, 2000, 1000],# [8000, 8000, 7900],
             "batch_size_st": [20, 20, 20],
             "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
             "print_every": 100,
@@ -302,7 +301,7 @@ if __name__ == "__main__":
             # "mul_lr":[0.81, 0.81, 0.81, 1],
             # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
         }
-        pdb.set_trace()
+
         trainor.fit(
             x_train,
             y_train,
@@ -316,6 +315,7 @@ if __name__ == "__main__":
         trainor.inv_func = inv_func
         trainor.fitted = False
         e0, e1, e2, e3 = trainor.post_process(
+            x_train,
             y_train_o,
             y_test,
             y_test_o,

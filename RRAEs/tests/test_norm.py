@@ -18,9 +18,10 @@ def test_fitting(norm_type):
     interpolation_cls = Objects_Interpolator_nD
 
     trainor = Trainor_class(
+        data,
         model_cls,
         interpolation_cls,
-        data=data,
+        in_size=data.shape[0],
         latent_size=200,
         k_max=2,
         norm_type=norm_type,
@@ -32,8 +33,8 @@ def test_fitting(norm_type):
     elif norm_type == "minmax":
         assert (trainor.model.norm(data) <= 1).all()
         assert (trainor.model.norm(data) >= 0).all()
-        assert trainor.model.norm_cls.params.keys() == {"min", "max"}
     elif norm_type == "meanstd":
         assert jnp.abs(jnp.mean(trainor.model.norm(data))) <= 1e-3
         assert jnp.abs(jnp.std(trainor.model.norm(data)) - 1) <= 1e-3
-        assert trainor.model.norm_cls.params.keys() == {"mean", "std"}
+    assert jnp.allclose(trainor.model.inv_norm(trainor.model.norm(data)), data, rtol=1e-2)
+

@@ -70,15 +70,16 @@ if __name__ == "__main__":
         interpolation_cls = Objects_Interpolator_nD
 
         trainor = Trainor_class(
+            x_train,
             model_cls,
             interpolation_cls,
-            data=x_train[:20, :20],
+            in_size=x_train.shape[0],
             latent_size=latent_size,  # 4600
             k_max=k_max,
             folder=folder,
             file=file,
             norm_type="minmax",
-            post_proc_func=inv_func,
+            # post_proc_func=inv_func,
             kwargs_dec={"final_activation": jnn.tanh},  # this is how you change the final activation
             key=jrandom.PRNGKey(0),
         )
@@ -99,7 +100,7 @@ if __name__ == "__main__":
             **train_kwargs,
         )
         e0, e1, e2, e3 = trainor.post_process(
-            y_train_o, y_test, y_test_o, None, p_train, p_test, inv_func, modes=k_max
+            x_train, y_train_o, y_test, y_test_o, None, p_train, p_test, inv_func, modes=k_max
         )
         trainor.save()
 

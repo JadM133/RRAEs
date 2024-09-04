@@ -1224,12 +1224,11 @@ class v_vt_class(eqx.Module):
         return U_mat @ self.vt
 
 
-class MLP_dropout(Module, strict=True):
+class MLP_with_linear(Module, strict=True):
     layers: tuple[Linear, ...]
     layers_l: tuple[Linear, ...]
     activation: Callable
     activation_l: Callable
-    dropout: eqx.nn.Dropout = 0
     use_bias: bool = field(static=True)
     use_final_bias: bool = field(static=True)
     in_size: Union[int, Literal["scalar"]] = field(static=True)
@@ -1238,7 +1237,6 @@ class MLP_dropout(Module, strict=True):
     depth: tuple[int, ...]
     final_activation: Callable
     final_activation_l: Callable
-    inp: jnp.array
 
     def __init__(
         self,
@@ -1246,7 +1244,6 @@ class MLP_dropout(Module, strict=True):
         out_size,
         width_size,
         depth,
-        dropout=eqx.nn.Dropout(0),
         activation=_relu,
         activation_l=_identity,
         use_bias=True,
@@ -1254,7 +1251,6 @@ class MLP_dropout(Module, strict=True):
         final_activation=_identity,
         final_activation_l=_identity,
         linear_l=0,
-        inp_train=None,
         *,
         key,
         **kwargs,
@@ -1288,7 +1284,6 @@ class MLP_dropout(Module, strict=True):
         self.out_size = out_size
         self.width_size = width_size
         self.depth = depth
-        self.dropout = dropout
 
         if depth != 0:
             self.activation = [
@@ -1309,7 +1304,6 @@ class MLP_dropout(Module, strict=True):
         self.final_activation_l = final_activation_l
         self.use_bias = use_bias
         self.use_final_bias = use_final_bias
-        self.inp = inp_train
 
     @jax.named_scope("eqx.nn.MLP")
     def __call__(
@@ -1318,7 +1312,6 @@ class MLP_dropout(Module, strict=True):
         if self.depth != 0:
             for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation)):
                 x = layer(x)
-                # x = self.dropout(x, key=key)
                 layer_activation = jtu.tree_map(
                     lambda x: x[i] if is_array(x) else x, act
                 )
@@ -1330,95 +1323,12 @@ class MLP_dropout(Module, strict=True):
                 zip(self.layers_l[:-1], self.activation_l)
             ):
                 x = layer(x)
-                # x = self.dropout(x, key=key)
                 layer_activation = jtu.tree_map(
                     lambda x: x[i] if is_array(x) else x, act
                 )
                 x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
             x = self.final_activation_l(x)
         return x
-
-
-class MLP_decode(Module, strict=True):
-    mlp: MLP_dropout
-    u: jnp.array
-    decoder: MLP_dropout
-    inp: jnp.array
-
-    def __init__(
-        self,
-        trainor,
-        inp_train,
-        **kwargs,
-    ):
-
-        self.inp = inp_train
-        self.u = trainor.v
-        self.decoder = trainor.model._decode
-        self.mlp = trainor.mlp
-
-    @jax.named_scope("eqx.nn.MLP")
-    def __call__(self):
-        lat = jnp.sum(
-            jax.vmap(lambda o1, o2: jnp.outer(o1, o2), in_axes=[-1, 0])(
-                self.u, self.mlp(self.inp)
-            ),
-            0,
-        )[..., 0]
-        return self.decoder(lat)
-
-
-class Func(eqx.Module):
-    mlp: MLP_dropout
-    post_proc_func: Callable
-
-    def __init__(
-        self,
-        data_size,
-        width_size,
-        depth,
-        out_size=None,
-        dropout=0,
-        linear_l=0,
-        *,
-        key,
-        inside_activation=None,
-        final_activation=None,
-        post_proc_func=_identity,
-        use_bias=True,
-        **kwargs,
-    ):
-        super().__init__()
-
-        if out_size is None:
-            out_size = data_size
-
-        final_activation = (
-            _identity if final_activation is None else final_activation
-        )  # not used
-        inside_activation = (
-            jnn.softplus if inside_activation is None else inside_activation
-        )
-
-        self.mlp = MLP_dropout(
-            in_size=data_size,
-            out_size=out_size,
-            width_size=width_size,
-            depth=depth,
-            activation=inside_activation,
-            dropout=eqx.nn.Dropout(dropout),
-            final_activation=final_activation,
-            use_bias=use_bias,
-            linear_l=linear_l,
-            key=key,
-        )
-        self.post_proc_func = post_proc_func
-
-    def __call__(self, y, k=None, train=True, **kwargs):
-        if not train:
-            return self.post_proc_func(self.mlp(y, key=k))
-        else:
-            return self.mlp(y, key=k)
 
 
 def plot_welding(trainor, idx):
@@ -1584,12 +1494,12 @@ class MLCNN(Module, strict=True):
         return x
 
 
-class CNNs_with_MLP(eqx.Module, strict=True):
+class CNNs_with_linear(eqx.Module, strict=True):
     """Class mainly for creating encoders with CNNs.
     The encoder is composed of multiple CNNs followed by an MLP.
     """
 
-    layers: tuple[MLCNN, MLP_dropout]
+    layers: tuple[MLCNN, MLP_with_linear]
 
     def __init__(
         self,
@@ -1631,9 +1541,9 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         )
 
         final_D = mlcnn(jnp.zeros((1, data_dim0, data_dim0))).shape[-1]
-        mlp = Linear((final_D) ** 2 * last_width, out, key=key2)
+        linear = Linear((final_D) ** 2 * last_width, out, key=key2)
         act = lambda x: final_activation(x)
-        self.layers = tuple([mlcnn, mlp, act])
+        self.layers = tuple([mlcnn, linear, act])
 
     def __call__(self, x, *args, **kwargs):
         x = jnp.expand_dims(x, 0)
@@ -1691,12 +1601,12 @@ def is_convT_valid(D, data_dim0, pad, ker, st, dil, outpad, nums):
     return final_D == data_dim0, final_D
 
 
-class MLP_with_CNNs_trans(eqx.Module, strict=True):
+class Linear_with_CNNs_trans(eqx.Module, strict=True):
     """Class mainly for creating encoders with CNNs.
     The encoder is composed of multiple CNNs followed by an MLP.
     """
 
-    layers_: tuple[MLCNN, MLP_dropout]
+    layers_: tuple[MLCNN, MLP_with_linear]
     start_dim: int
     first_D: int
     out_after_mlp: int
@@ -1760,7 +1670,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
             **kwargs_cnn,
         )
 
-        mlp_ = Linear(inp, out_after_mlp * first_D**2, key=key2)
+        linear = Linear(inp, out_after_mlp * first_D**2, key=key2)
         final_conv = Conv2d(
             width_CNNs[-1],
             1,
@@ -1774,7 +1684,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         self.start_dim = inp
         self.first_D = first_D
         act = lambda x: final_activation(x)
-        self.layers_ = tuple([mlp_, mlcnn_, final_conv, act])
+        self.layers_ = tuple([linear, mlcnn_, final_conv, act])
         self.out_after_mlp = out_after_mlp
 
     def __call__(self, x, *args, **kwargs):

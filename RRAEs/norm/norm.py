@@ -1,8 +1,17 @@
+import pdb
 import jax.numpy as jnp
+import equinox as eqx
 
-class Norm():
-    def __init__(self, x_train, norm_type='minmax'):
+class Norm(eqx.Module):
+    model: eqx.Module
+    norm_type: str
+    params: dict
+    norm_func: callable
+    inv_func: callable
+
+    def __init__(self, model, x_train, norm_type='minmax'):
         self.norm_type = norm_type
+        self.model = model
         match norm_type:
             case 'minmax':
                 self.params = {'min': jnp.min(x_train), 'max': jnp.max(x_train)}
@@ -13,6 +22,7 @@ class Norm():
                 self.norm_func = lambda x: (x - self.params["mean"]) / self.params["std"]
                 self.inv_func = lambda x: x * self.params["std"] + self.params["mean"]
             case 'None':
+                self.params = {}
                 self.norm_func = lambda x: x
                 self.inv_func = lambda x: x
             case _:
@@ -35,3 +45,9 @@ class Norm():
         def wrapper(*args, **kwargs):
             return self.inv_func(func(*args, **kwargs))
         return wrapper
+    
+    def __call__(self, x):
+        return self.inv_norm(self.model(self.norm(x)))
+    
+    def __getattr__(self, name: str):
+        return getattr(self.model, name)

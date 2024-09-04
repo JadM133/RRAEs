@@ -12,5 +12,6 @@ from .AE_classes import (
     LoRAE_CNN,
     CNN_Autoencoder,
     VAR_AE_MLP,
-    VAR_AE_CNN
+    VAR_AE_CNN, 
+    BaseClass
 )

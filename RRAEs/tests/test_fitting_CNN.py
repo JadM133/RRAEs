@@ -23,9 +23,11 @@ def test_fitting(model_cls, sh, lf):
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
     interpolation_cls = Objects_Interpolator_nD
     trainor = Trainor_class(
+        x,
         model_cls,
         interpolation_cls,
-        data=x,
+        in_size=x.shape[0],
+        data_size=x.shape[-1], # only required for the Weak
         latent_size=2000,
         k_max=2,
         key=jrandom.PRNGKey(0),
