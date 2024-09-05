@@ -9,7 +9,6 @@ from RRAEs.utilities import (
     dataloader,
     MLP_with_linear,
 )
-from RRAEs.norm import Norm
 import itertools
 import equinox as eqx
 import jax.random as jrandom

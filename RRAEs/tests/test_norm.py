@@ -7,11 +7,9 @@ from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
 from RRAEs.utilities import find_weighted_loss
 
 
-@pytest.mark.parametrize(
-    "norm_type",
-    ["minmax", "meanstd", "None"],
-)
-def test_fitting(norm_type):
+@pytest.mark.parametrize("norm_in", ["minmax", "meanstd", "None"])
+@pytest.mark.parametrize("norm_out", ["minmax", "meanstd"])
+def test_fitting(norm_in, norm_out):
 
     data = jrandom.normal(jrandom.key(0), (28, 28, 1))
     model_cls = Strong_RRAE_CNN
@@ -24,17 +22,27 @@ def test_fitting(norm_type):
         in_size=data.shape[0],
         latent_size=200,
         k_max=2,
-        norm_type=norm_type,
+        norm_in=norm_in,
+        norm_out=norm_out,
+        out_train=data,
         key=jrandom.PRNGKey(0),
     )
 
-    if norm_type == "None":
-        assert (trainor.model.norm(data) == data).all()
-    elif norm_type == "minmax":
-        assert (trainor.model.norm(data) <= 1).all()
-        assert (trainor.model.norm(data) >= 0).all()
-    elif norm_type == "meanstd":
-        assert jnp.abs(jnp.mean(trainor.model.norm(data))) <= 1e-3
-        assert jnp.abs(jnp.std(trainor.model.norm(data)) - 1) <= 1e-3
-    assert jnp.allclose(trainor.model.inv_norm(trainor.model.norm(data)), data, rtol=1e-2)
+    if norm_in == "None":
+        assert (trainor.model.norm_in(data) == data).all()
+    elif norm_in == "minmax":
+        assert (trainor.model.norm_in(data) <= 1).all()
+        assert (trainor.model.norm_in(data) >= 0).all()
+    elif norm_in == "meanstd":
+        assert jnp.abs(jnp.mean(trainor.model.norm_in(data))) <= 1e-3
+        assert jnp.abs(jnp.std(trainor.model.norm_in(data)) - 1) <= 1e-3
+
+    if norm_out == "minmax":
+        assert (trainor.model.norm_out(data) <= 1).all()
+        assert (trainor.model.norm_out(data) >= 0).all()
+    elif norm_out == "meanstd":
+        assert jnp.abs(jnp.mean(trainor.model.norm_out(data))) <= 1e-3
+        assert jnp.abs(jnp.std(trainor.model.norm_out(data)) - 1) <= 1e-3
+    assert jnp.allclose(trainor.model.inv_norm_in(trainor.model.norm_in(data)), data, rtol=1e-2)
+    assert jnp.allclose(trainor.model.inv_norm_out(trainor.model.norm_out(data)), data, rtol=1e-2)
 
