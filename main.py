@@ -25,8 +25,8 @@ if __name__ == "__main__":
 
     model_cls = eqx.nn.MLP
     mlp_kwargs = {
-        "in_size": alphas.shape[-1],
-        "out_size": betas.shape[-1],
+        "in_size": betas.shape[-1],
+        "out_size": alphas.shape[-1],
         "depth": 6,
         "width_size": 64,
         "key": jrandom.key(0),
@@ -35,14 +35,14 @@ if __name__ == "__main__":
         alphas_train,
         model_cls,
         map_axis=0,
-        norm_in="meanstd",
+        norm_in="minmax",
         norm_out="minmax",
         out_train=betas_train,
         **mlp_kwargs
     )
     trainor.fit(
-        alphas_train,
         betas_train,
+        alphas_train,
         step_st=[1000],
         batch_size_st=[64],
         lr_st=[1e-4],

@@ -32,6 +32,9 @@ def test_fitting(model_cls, sh, lf):
         interpolation_cls,
         in_size=x.shape[0],
         data_size=x.shape[-1],
+        norm_in="meanstd",
+        norm_out="minmax",
+        out_train=x,
         latent_size=2000,
         k_max=2,
         key=jrandom.PRNGKey(0),
@@ -51,3 +54,47 @@ def test_fitting(model_cls, sh, lf):
         )
     except Exception as e:
         assert False, f"Fitting failed with the following exception {repr(e)}"
+
+
+def test_weak_mul_lr():
+    try:
+        model_cls = Weak_RRAE_MLP  # Without parenthesis! Only the class
+        interpolation_cls = Objects_Interpolator_nD
+        x_train = jrandom.normal(jrandom.PRNGKey(0), (500, 10))
+        y_train = jrandom.normal(jrandom.PRNGKey(1), (500, 10))
+        latent_size = 2000
+        k_max = 2
+        trainor_Weak = Trainor_class(
+            x_train,
+            model_cls,
+            interpolation_cls,
+            latent_size=latent_size,  # 4600
+            in_size=x_train.shape[0],
+            data_size=x_train.shape[-1],  # Only needed for Weak_RRAE_MLP
+            k_max=k_max,
+            folder=f"test/",
+            file=f"testing_Weak",
+            norm_in="minmax",  # could choose "meanstd", or "None"
+            norm_out="minmax",  # could choose "meanstd", or "None"
+            out_train=x_train,
+            key=jrandom.PRNGKey(100),
+        )
+        training_kwargs = {
+            "step_st": [1500, 1500, 1500],  # number of batches strategy
+            "batch_size_st": [20, 20, 20, 20],  # batch size strategy
+            "lr_st": [1e-3, 1e-4, 1e-5],  # learning rate strategy
+            "print_every": 100,
+            "mul_lr": [0.05, 0.05, 0.05],  # The values of kappa (to multiply lr for A)
+            "mul_lr_func": lambda tree: (
+                tree.v_vt.vt,
+            ),  # Who will be affected by kappa, this means A
+        }
+        _ = trainor_Weak.fit(
+            x_train,
+            y_train,
+            loss_func="Weak",
+            training_key=jrandom.PRNGKey(50),
+            **training_kwargs,
+        )
+    except Exception as e:
+        assert False, f"Can not change lr in Weak for the following reason: {repr(e)}"

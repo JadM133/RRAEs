@@ -3,6 +3,31 @@ import jax.numpy as jnp
 import equinox as eqx
 
 
+class Attribute_Class(eqx.Module):
+    attr: eqx.Module
+    call_func: callable
+
+    def __init__(self, attr, call_func):
+        self.attr = attr
+        self.call_func = call_func
+
+    def __repr__(self):
+        return repr(self.attr)
+
+    def __getattr__(self, name):
+        if hasattr(self.attr, name):
+            return getattr(self.attr, name)
+        else:
+            raise AttributeError(f"Attribute {name} not found in {self.attr}")
+
+    def __str__(self):
+        return str(self.attr)
+
+    def __call__(self, *args, **kwargs):
+        pdb.set_trace()
+        return self.call_func(*args, **kwargs)
+
+
 class Norm(eqx.Module):
     model: eqx.Module
     norm_in: str
@@ -13,6 +38,7 @@ class Norm(eqx.Module):
     inv_norm_in: callable
     norm_out: callable
     inv_norm_out: callable
+    norm_and_inv_func: callable
 
     def __init__(
         self, model, in_train, out_train=None, norm_in="None", norm_out="None"
@@ -66,7 +92,9 @@ class Norm(eqx.Module):
                     "mean": jnp.mean(out_train),
                     "std": jnp.std(out_train),
                 }
-                self.norm_out = lambda x: (x - self.params_out["mean"]) / self.params_out["std"]
+                self.norm_out = (
+                    lambda x: (x - self.params_out["mean"]) / self.params_out["std"]
+                )
                 self.inv_norm_out = (
                     lambda x: x * self.params_out["std"] + self.params_out["mean"]
                 )
@@ -75,11 +103,36 @@ class Norm(eqx.Module):
                 self.norm_out = lambda x: x
                 self.inv_norm_out = lambda x: x
 
-    def with_no_inv(self, x):
-        return self.model(self.norm_in(x))
-    
-    def __call__(self, x):
-        return self.inv_norm_out(self.model(self.norm_in(x)))
+        def norm_and_inv_func(
+            func, norm_bool=True, inv_bool=True
+        ):  # functions to be norm/inv_norl have to accept x as first arg
+            if norm_bool and inv_bool:
+                return lambda x, *args, **kwargs: self.inv_norm_out(
+                    func(self.norm_in(x), *args, **kwargs)
+                )
+            if norm_bool:
+                return lambda x, *args, **kwargs: func(self.norm_in(x), *args, **kwargs)
+            if inv_bool:
+                return lambda x, *args, **kwargs: self.inv_norm_out(
+                    func(x), *args, **kwargs
+                )
+            return lambda *args, **kwargs: func(*args, **kwargs)
+
+        self.norm_and_inv_func = norm_and_inv_func
+
+    def __call__(self, x, norm_in=True, inv_norm_out=True):
+        return self.norm_and_inv_func(self.model, norm_in, inv_norm_out)(x)
 
     def __getattr__(self, name: str):
-        return getattr(self.model, name)
+        if hasattr(self.model, "norm_funcs"):
+            norm_bool = name in self.model.norm_funcs
+        else:
+            norm_bool = False
+        if hasattr(self.model, "inv_norm_funcs"):
+            inv_bool = name in self.model.inv_norm_funcs
+        else:
+            inv_bool = False
+
+        attr = getattr(self.model, name)
+        call_func = self.norm_and_inv_func(attr, norm_bool, inv_bool)
+        return Attribute_Class(attr, call_func)

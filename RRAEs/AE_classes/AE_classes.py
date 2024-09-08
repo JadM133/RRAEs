@@ -21,6 +21,7 @@ _identity = doc_repr(lambda x, *args, **kwargs: x, "lambda x: x")
 class BaseClass(eqx.Module):
     map_axis: int
     model: eqx.Module
+    # norm_funcs: list
 
     def __init__(self, model, map_axis=None, *args, **kwargs):
         self.map_axis = map_axis
@@ -31,9 +32,7 @@ class BaseClass(eqx.Module):
             return self.model(x)
         return jax.vmap(self.model, in_axes=[self.map_axis], out_axes=self.map_axis)(x)
 
-    def eval_with_batches(self, x, batch_size, *args, key, func=None, **kwargs):
-
-        eval = self.__call__ if func is None else func
+    def eval_with_batches(self, x, batch_size, call_func, *args, key, **kwargs):
         idxs = []
         all_preds = []
 
@@ -47,7 +46,7 @@ class BaseClass(eqx.Module):
             ),
         ):
 
-            pred = eval(input_b.T)
+            pred = call_func(input_b.T)
             idxs.append(idx)
             all_preds.append(pred)
 
@@ -65,6 +64,8 @@ class Autoencoder(eqx.Module):
     _perform_in_latent: None
     k_max: int
     map_latent: bool
+    norm_funcs: list
+    inv_norm_funcs: list
 
     """Abstract base class for all Autoencoders.
 
@@ -154,6 +155,8 @@ class Autoencoder(eqx.Module):
 
         self.k_max = k_max
         self.map_latent = map_latent
+        self.inv_norm_funcs = ["decode"]
+        self.norm_funcs = ["encode", "latent"]
 
     def perform_in_latent(self, y, *args, **kwargs):
         if self.map_latent:

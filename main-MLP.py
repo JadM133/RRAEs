@@ -237,8 +237,8 @@ if __name__ == "__main__":
     # pdb.set_trace()
     for prob in ["shift"]:
         problem = prob
-        method = "Strong"
-        loss_func = "Strong"
+        method = "Weak"
+        loss_func = "Weak"
 
         latent_size = 520
         k_max = 1
@@ -284,24 +284,27 @@ if __name__ == "__main__":
             interpolation_cls,
             latent_size=latent_size,  # 4600
             in_size=x_train.shape[0],
+            data_size=x_train.shape[-1],
             k_max=k_max,
             folder=f"{problem}/{method}_{problem}/",
             file=f"{method}_{problem}",
-            norm_type="minmax",
-            variational=False,
+            norm_in="minmax",
+            norm_out="minmax",
+            out_train=x_train,
             key=jrandom.PRNGKey(0),
         )
         kwargs = {
-            "step_st": [2],# [8000, 8000, 7900],
-            # "step_st": [2000, 2000, 1000],# [8000, 8000, 7900],
+            "step_st": [500],# [8000, 8000, 7900],
             "batch_size_st": [20, 20, 20],
             "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
-            # "mul_lr":[0.81, 0.81, 0.81, 1],
-            # "mul_lr_func": lambda tree: (tree.v_vt.vt,),
+            "mul_lr":[0.05, 0.05, 0.05], # The values of kappa (to multiply lr for A)
+            "mul_lr_func": lambda tree: (tree.v_vt.vt,), # Who will be affected by kappa, this means A
         }
-
+        # trainor.model.decode(trainor.model.encode(x_train))
+        # trainor.model.eval_with_batches(x_train, 32, key=jrandom.PRNGKey(0))
+        # pdb.set_trace()
         trainor.fit(
             x_train,
             y_train,

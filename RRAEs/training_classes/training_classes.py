@@ -15,9 +15,9 @@ from RRAEs.utilities import (
     v_print,
     remove_keys_from_dict,
     merge_dicts,
-    MLP_with_linear,
+    MLP_with_linear
 )
-from RRAEs.AE_classes import BaseClass
+from RRAEs.AE_classes import BaseClass, CNN_Autoencoder
 from RRAEs.norm import Norm
 import os
 import time
@@ -234,9 +234,7 @@ class Trainor_class:
         model = self.model
 
         if mul_lr is None:
-            mul_lr = [
-                1,
-            ] * len(lr_st)
+            mul_lr = [1] * len(lr_st)
 
         norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
 
@@ -244,7 +242,7 @@ class Trainor_class:
 
             @eqx.filter_value_and_grad(has_aux=True)
             def loss_fun(model, input, out, idx, **kwargs):
-                pred = model.with_no_inv(input)
+                pred = model(input, inv_norm_out=False)
                 wv = jnp.array([1.0])
                 return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (
                     pred,
@@ -282,10 +280,10 @@ class Trainor_class:
                     norm_loss = norm_loss_
                 pred = model(input)
                 wv = jnp.array([1.0, lambda_nuc])
-                if isinstance(model.encode, MLP_with_linear):
-                    weight = model.encode.layers_l[0].weight
-                else:
+                if isinstance(model, CNN_Autoencoder):
                     weight = model.encode.layers[1].weight
+                else:
+                    weight = model.encode.layers_l[0].weight
                 return find_weighted_loss(
                     [
                         norm_loss(pred, out),
@@ -322,6 +320,7 @@ class Trainor_class:
 
         if mul_lr_func is not None:
             filter_spec = jtu.tree_map(lambda _: False, model)
+            pdb.set_trace()
             is_acc = eqx.tree_at(
                 mul_lr_func,
                 filter_spec,
@@ -331,78 +330,78 @@ class Trainor_class:
 
         t_all = 0
 
-        try:
-            counter = 0
-            for steps, lr, batch_size, mul_l in zip(step_st, lr_st, batch_size_st, mul_lr):
-                t_t = 0
+        # try:
+        counter = 0
+        for steps, lr, batch_size, mul_l in zip(step_st, lr_st, batch_size_st, mul_lr):
+            t_t = 0
 
-                if mul_lr_func is not None:
-                    optim = optax.chain(
-                        optax.masked(optax.adabelief(lr), is_not_acc),
-                        optax.masked(optax.adabelief(mul_l * lr), is_acc),
-                    )
-                else:
-                    optim = optax.adabelief(lr)
+            if mul_lr_func is not None:
+                optim = optax.chain(
+                    optax.masked(optax.adabelief(lr), is_not_acc),
+                    optax.masked(optax.adabelief(mul_l * lr), is_acc),
+                )
+            else:
+                optim = optax.adabelief(lr)
 
-                filtered_model = eqx.filter(model, eqx.is_inexact_array)
-                try:
-                    opt_state = optim.init(filtered_model)
-                except ValueError:
-                    raise ValueError(
-                        "Optax has a bug! Send a message to Jad so he can fix it to you..."
-                    )
+            filtered_model = eqx.filter(model, eqx.is_inexact_array)
+            try:
+                opt_state = optim.init(filtered_model)
+            except ValueError:
+                raise ValueError(
+                    "Optax has a bug! Send a message to Jad so he can fix it to you..."
+                )
 
-                if (batch_size > input.shape[-1]) or batch_size == -1:
-                    batch_size = input.shape[-1]
+            if (batch_size > input.shape[-1]) or batch_size == -1:
+                batch_size = input.shape[-1]
 
-                for step, (input_b, out, idx) in zip(
-                    range(steps),
-                    dataloader(
-                        [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
-                        batch_size,
-                        key=training_key,
-                    ),
-                ):
-                    start = time.perf_counter()
+            for step, (input_b, out, idx) in zip(
+                range(steps),
+                dataloader(
+                    [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
+                    batch_size,
+                    key=training_key,
+                ),
+            ):
+                start = time.perf_counter()
 
-                    if loss_func == "var":
-                        epsilon = model._sample.create_epsilon(counter, input_b.shape[0])
-                        loss_kwargs["epsilon"] = epsilon
-                    loss, model, opt_state, aux = make_step(
-                        model,
-                        input_b.T,
-                        out.T,
-                        opt_state,
-                        idx,
-                        **loss_kwargs,
-                    )
-                    counter += 1
-                    end = time.perf_counter()
-                    t_t += end - start
+                if loss_func == "var":
+                    epsilon = model._sample.create_epsilon(counter, input_b.shape[0])
+                    loss_kwargs["epsilon"] = epsilon
+                loss, model, opt_state, aux = make_step(
+                    model,
+                    input_b.T,
+                    out.T,
+                    opt_state,
+                    idx,
+                    **loss_kwargs,
+                )
+                counter += 1
+                end = time.perf_counter()
+                t_t += end - start
 
-                    if (step % print_every) == 0 or step == steps - 1:
-                        if len(aux) == 2:
-                            v_print(
-                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
-                                verbose,
-                            )
-                        else:
-                            v_print(
-                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
-                                verbose,
-                            )
-                        t_all += t_t
-                        t_t = 0
-                    if jnp.isnan(loss):
-                        print("Loss is nan, stopping training...")
-                        break
-        except (Exception, KeyboardInterrupt) as e:
-            print(e)
-            pass
+                if (step % print_every) == 0 or step == steps - 1:
+                    if len(aux) == 2:
+                        v_print(
+                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
+                            verbose,
+                        )
+                    else:
+                        v_print(
+                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
+                            verbose,
+                        )
+                    t_all += t_t
+                    t_t = 0
+                if jnp.isnan(loss):
+                    print("Loss is nan, stopping training...")
+                    break
+        # except (Exception, KeyboardInterrupt) as e:
+        #     print(e)
+        #     pass
 
         model = eqx.nn.inference_mode(model)
         self.model = model
-        self.y_pred_train = model.eval_with_batches(input, batch_size, key=training_key)
+        self.y_pred_train = self.model.eval_with_batches(input, batch_size, call_func=self.model, key=training_key)
         self.t_all = t_all
         return model
 
@@ -501,7 +500,7 @@ class Trainor_class:
             If anything other than False, the model as well as the results will be saved in f"{save}".pkl
         """
         self.latent_train = self.model.eval_with_batches(
-            x_train, batch_size, func=self.model.latent, key=jrandom.key(0)
+            x_train, batch_size, call_func=self.model.latent, key=jrandom.key(0)
         )
         error_train = (
             jnp.linalg.norm(self.y_pred_train - self.y_train)
@@ -639,7 +638,7 @@ class Trainor_class:
                 in_train=self.in_train,
                 norm_in=self.norm_in,
                 out_train=self.out_train,
-                norm_out=self.norm_out
+                norm_out=self.norm_out,
             )
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             self.interpolation = self.interpolation_cls(**kwargs)
