@@ -7,8 +7,7 @@ from RRAEs.AE_classes import (
 )
 import jax.numpy as jnp
 import equinox as eqx
-from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
-from RRAEs.utilities import find_weighted_loss
+from RRAEs.training_classes import AE_Trainor_class
 
 
 @pytest.mark.parametrize(
@@ -21,7 +20,7 @@ from RRAEs.utilities import find_weighted_loss
 )
 def test_fitting(model_cls, sh, lf):
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
-    trainor = Trainor_class(
+    trainor = AE_Trainor_class(
         x,
         model_cls,
         in_size=x.shape[0],

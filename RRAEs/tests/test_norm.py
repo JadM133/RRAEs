@@ -3,7 +3,7 @@ import pytest
 from RRAEs.AE_classes import Strong_RRAE_CNN
 import jax.numpy as jnp
 import equinox as eqx
-from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
+from RRAEs.training_classes import AE_Trainor_class
 from RRAEs.utilities import find_weighted_loss
 
 
@@ -13,12 +13,10 @@ def test_fitting(norm_in, norm_out):
 
     data = jrandom.normal(jrandom.key(0), (28, 28, 1))
     model_cls = Strong_RRAE_CNN
-    interpolation_cls = Objects_Interpolator_nD
 
-    trainor = Trainor_class(
+    trainor = AE_Trainor_class(
         data,
         model_cls,
-        interpolation_cls,
         in_size=data.shape[0],
         latent_size=200,
         k_max=2,

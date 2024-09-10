@@ -32,7 +32,16 @@ class BaseClass(eqx.Module):
             return self.model(x)
         return jax.vmap(self.model, in_axes=[self.map_axis], out_axes=self.map_axis)(x)
 
-    def eval_with_batches(self, x, batch_size, call_func, *args, key, **kwargs):
+    def eval_with_batches(
+        self,
+        x,
+        batch_size,
+        call_func,
+        end_type="concat_and_resort",
+        *args,
+        key,
+        **kwargs,
+    ):
         idxs = []
         all_preds = []
 
@@ -45,13 +54,22 @@ class BaseClass(eqx.Module):
                 once=True,
             ),
         ):
-
             pred = call_func(input_b.T)
             idxs.append(idx)
             all_preds.append(pred)
+            if end_type == "first":
+                break
 
         idxs = jnp.concatenate(idxs)
-        final_pred = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
+        match end_type:
+            case "concat_and_resort":
+                final_pred = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
+            case "mean":
+                final_pred = sum(all_preds) / len(all_preds)
+            case "first":
+                final_pred = all_preds[0]
+            case _:
+                final_pred = all_preds
         return final_pred
 
     def __getattr__(self, name: str):
@@ -166,14 +184,14 @@ class Autoencoder(eqx.Module):
             return jax.vmap(new_perform_in_latent, in_axes=[-1], out_axes=-1)(y)
         return self._perform_in_latent(y, self.k_max, *args, **kwargs)
 
-    def __call__(self, x):
-        return self.decode(self.perform_in_latent(self.encode(x)))
+    def __call__(self, x, *args, **kwargs):
+        return self.decode(self.perform_in_latent(self.encode(x), *args, **kwargs))
 
     def latent(self, x, *args, **kwargs):
         return self.perform_in_latent(self.encode(x), *args, **kwargs)
 
 
-def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
+def latent_func_strong_RRAE(y, k_max, basis=None, ret=False, *args, **kwargs):
     """Performing the truncated SVD in the latent space.
 
     Parameters
@@ -189,6 +207,9 @@ def latent_func_strong_RRAE(y, k_max, ret=False, *args, **kwargs):
     y_approx : jnp.array
         The latent space after the truncation.
     """
+    if basis is not None:
+        return basis @ basis.T @ y
+      
     if k_max != -1:
         u, s, v = jnp.linalg.svd(y, full_matrices=False)
         sigs = s[:k_max]

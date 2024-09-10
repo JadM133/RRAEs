@@ -300,10 +300,6 @@ class Trainor_class:
             If anything other than False, the model as well as the results will be saved in f"{save}".pkl
         """
         batch_size = self.batch_size if batch_size is None else batch_size
-        self.latent_train = self.model.eval_with_batches(
-            x_train_o, batch_size, call_func=self.model.latent, key=jrandom.key(0)
-        )
-
         self.x_train_o = x_train_o
         self.y_train_o = y_train_o
         self.error_train_o = (
@@ -323,6 +319,7 @@ class Trainor_class:
         print("Train error on normalized output: ", self.error_train)
 
         if x_test_o is not None:
+            self.x_test_o = x_test_o
             self.y_pred_test_o = self.model.eval_with_batches(
                 x_test_o, batch_size, call_func=self.model, key=jrandom.key(0)
             )
@@ -343,9 +340,7 @@ class Trainor_class:
             )
             print("Test error on normalized output: ", self.error_test)
 
-            self.latent_test = self.model.eval_with_batches(
-                x_test_o, batch_size, call_func=self.model.latent, key=jrandom.key(0)
-            )
+
         else:
             self.error_test = None
             self.error_test_o = None
@@ -354,50 +349,6 @@ class Trainor_class:
 
         print("Total training time: ", self.t_all)
         return self.error_train, self.error_test, self.error_train_o, self.error_test_o
-
-    def AE_interpolate(self, p_train, p_test, y_test_o=None, batch_size=None):
-        """Interpolates the latent space of the model and then decodes it to find the output."""
-
-        self.y_test_o = y_test_o if y_test_o is not None else self.y_test_o
-        self.y_test = self.model.norm_out(self.y_test_o)
-
-        try:
-            self.p_train = p_train
-            self.p_test = p_test
-
-            batch_size = self.batch_size if batch_size is None else batch_size
-
-            interpolation = Objects_Interpolator_nD()
-            self.latent_test_interp = interpolation(
-                self.p_test, self.p_train, self.latent_train
-            )
-
-            self.y_pred_interp_test_o = self.model.decode(self.latent_test_interp)
-            self.error_interp_test_o = (
-                jnp.linalg.norm(self.y_pred_interp_test_o - self.y_test_o)
-                / jnp.linalg.norm(self.y_test_o)
-                * 100
-            )
-            print(
-                "Test (interpolation) error over original output: ",
-                self.error_interp_test_o,
-            )
-
-            self.y_pred_interp_test = self.model.norm_out(self.y_pred_interp_test_o)
-            self.error_interp_test = (
-                jnp.linalg.norm(self.y_pred_interp_test - self.y_test)
-                / jnp.linalg.norm(self.y_test)
-                * 100
-            )
-            print(
-                "Test (interpolation) error over normalized output: ",
-                self.error_interp_test,
-            )
-            return self.error_interp_test, self.error_interp_test_o
-        except AttributeError:
-            raise AttributeError(
-                "You should first call the post_process method before calling the AE_interpolate method."
-            )
 
     def save(self, filename=None, erase=True, **kwargs):
         """Saves the trainor class."""
@@ -443,3 +394,93 @@ class Trainor_class:
             self.fitted = True
         if erase:
             os.remove(f"{filename}.pkl")
+
+class AE_Trainor_class(Trainor_class):
+    def post_process(self, x_train_o, y_train_o, x_test_o=None, y_test_o=None, p_train=None, p_test=None, batch_size=None):
+        super().post_process(x_train_o, y_train_o, None, None, batch_size)
+
+        batch_size = self.batch_size if batch_size is None else batch_size
+
+        self.latent_train = self.model.eval_with_batches(
+            self.x_train_o, batch_size, call_func=self.model.latent, key=jrandom.key(0)
+        )
+
+        basis_func = lambda x: self.model.latent(x, ret=True)[0]
+        self.basis = self.model.eval_with_batches(
+            self.x_train_o, batch_size, call_func=basis_func, end_type="mean", key=jrandom.key(0)
+        )
+
+        if x_test_o is not None:
+            self.x_test_o = x_test_o
+            assert y_test_o is not None, "You should provide y_test_o if you provide x_test_o."
+            call_func = lambda x: self.model.latent(x, basis=self.basis)
+            self.latent_test = self.model.eval_with_batches(
+                self.x_test_o, batch_size, call_func=call_func, key=jrandom.key(0)
+            )
+            self.y_pred_test_o = self.model.eval_with_batches(
+                self.latent_test, batch_size, call_func=self.model.decode, key=jrandom.key(0)
+            )
+
+            self.y_test_o = y_test_o
+            self.error_test_o = (
+                jnp.linalg.norm(self.y_pred_test_o - self.y_test_o)
+                / jnp.linalg.norm(self.y_test_o)
+                * 100
+            )
+            print("Test error on original output: ", self.error_test_o)
+
+            self.y_test = self.model.norm_out(self.y_test_o)
+            self.y_pred_test = self.model.norm_out(self.y_pred_test_o)
+            self.error_test = (
+                jnp.linalg.norm(self.y_pred_test - self.y_test)
+                / jnp.linalg.norm(self.y_test)
+                * 100
+            )
+            print("Test error on normalized output: ", self.error_test)
+        else:
+            self.latent_test = None
+
+        if p_train is not None:
+            assert p_test is not None, "You should provide p_test if you provide p_train."
+            self.AE_interpolate(p_train, p_test, batch_size)
+    
+    def AE_interpolate(self, p_train, p_test, batch_size=None):
+        """Interpolates the latent space of the model and then decodes it to find the output."""
+
+        batch_size = self.batch_size if batch_size is None else batch_size
+
+        try:
+            self.p_train = p_train
+            self.p_test = p_test
+
+            interpolation = Objects_Interpolator_nD()
+            self.latent_test_interp = interpolation(
+                self.p_test, self.p_train, self.latent_train
+            )
+
+            self.y_pred_interp_test_o = self.model.decode(self.latent_test_interp)
+            self.error_interp_test_o = (
+                jnp.linalg.norm(self.y_pred_interp_test_o - self.y_test_o)
+                / jnp.linalg.norm(self.y_test_o)
+                * 100
+            )
+            print(
+                "Test (interpolation) error over original output: ",
+                self.error_interp_test_o,
+            )
+
+            self.y_pred_interp_test = self.model.norm_out(self.y_pred_interp_test_o)
+            self.error_interp_test = (
+                jnp.linalg.norm(self.y_pred_interp_test - self.y_test)
+                / jnp.linalg.norm(self.y_test)
+                * 100
+            )
+            print(
+                "Test (interpolation) error over normalized output: ",
+                self.error_interp_test,
+            )
+            return self.error_interp_test, self.error_interp_test_o
+        except AttributeError:
+            raise AttributeError(
+                "You should first call the post_process method before calling the AE_interpolate method."
+            )

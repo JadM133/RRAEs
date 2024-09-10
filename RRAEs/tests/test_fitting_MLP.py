@@ -9,7 +9,7 @@ from RRAEs.AE_classes import (
 )
 import jax.numpy as jnp
 import equinox as eqx
-from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
+from RRAEs.training_classes import AE_Trainor_class
 from RRAEs.utilities import find_weighted_loss
 
 
@@ -25,7 +25,7 @@ from RRAEs.utilities import find_weighted_loss
 )
 def test_fitting(model_cls, sh, lf):
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
-    trainor = Trainor_class(
+    trainor = AE_Trainor_class(
         x,
         model_cls,
         in_size=x.shape[0],
@@ -64,7 +64,7 @@ def test_weak_mul_lr():
         y_train = jrandom.normal(jrandom.PRNGKey(1), (500, 10))
         latent_size = 2000
         k_max = 2
-        trainor_Weak = Trainor_class(
+        trainor_Weak = AE_Trainor_class(
             x_train,
             model_cls,
             latent_size=latent_size,  # 4600

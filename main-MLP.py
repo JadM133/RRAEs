@@ -9,7 +9,7 @@ from RRAEs.AE_classes import (
     LoRAE_MLP,
 )
 import jax.nn as jnn
-from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
+from RRAEs.training_classes import AE_Trainor_class
 import jax.random as jrandom
 import pdb
 import equinox as eqx
@@ -267,7 +267,7 @@ if __name__ == "__main__":
             case "LoRAE":
                 model_cls = LoRAE_MLP
 
-        trainor = Trainor_class(
+        trainor = AE_Trainor_class(
             x_train,
             model_cls,
             latent_size=latent_size,
@@ -298,16 +298,16 @@ if __name__ == "__main__":
         )
 
 
-        e0, e1, e2, e3 = trainor.post_process(
+        trainor.post_process(
             x_train,
             y_train,
             x_test,
-            y_test
+            y_test,
+            p_train,
+            p_test
         )
 
-        e5, e6 = trainor.AE_interpolate(p_train, p_test)
 
-        trainor.save(p_train=p_train, p_test=p_test)
-        # trainor.plot_results(ts=jnp.arange(0, y_test.shape[0], 1), ts_o=ts)
+        trainor.save()
     pdb.set_trace()
     #  preds_img = jnp.reshape((trainor.y_pred_train > 0)*2-1, (100, 100, 200)).T

@@ -7,7 +7,6 @@ from RRAEs.AE_classes import (
     IRMAE_MLP,
     LoRAE_MLP,
 )
-from RRAEs.training_classes import Trainor_class
 import jax.numpy as jnp
 
 
