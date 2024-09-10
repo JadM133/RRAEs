@@ -24,7 +24,6 @@ class Attribute_Class(eqx.Module):
         return str(self.attr)
 
     def __call__(self, *args, **kwargs):
-        pdb.set_trace()
         return self.call_func(*args, **kwargs)
 
 

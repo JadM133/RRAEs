@@ -21,11 +21,9 @@ from RRAEs.utilities import find_weighted_loss
 )
 def test_fitting(model_cls, sh, lf):
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
-    interpolation_cls = Objects_Interpolator_nD
     trainor = Trainor_class(
         x,
         model_cls,
-        interpolation_cls,
         in_size=x.shape[0],
         data_size=x.shape[-1], # only required for the Weak
         latent_size=2000,

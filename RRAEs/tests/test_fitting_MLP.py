@@ -25,11 +25,9 @@ from RRAEs.utilities import find_weighted_loss
 )
 def test_fitting(model_cls, sh, lf):
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
-    interpolation_cls = Objects_Interpolator_nD
     trainor = Trainor_class(
         x,
         model_cls,
-        interpolation_cls,
         in_size=x.shape[0],
         data_size=x.shape[-1],
         norm_in="meanstd",
@@ -56,10 +54,12 @@ def test_fitting(model_cls, sh, lf):
         assert False, f"Fitting failed with the following exception {repr(e)}"
 
 
+@pytest.mark.skip(
+    reason="modifying lr of specific pytree nodes is currently not possible."
+)
 def test_weak_mul_lr():
     try:
-        model_cls = Weak_RRAE_MLP  # Without parenthesis! Only the class
-        interpolation_cls = Objects_Interpolator_nD
+        model_cls = Weak_RRAE_MLP
         x_train = jrandom.normal(jrandom.PRNGKey(0), (500, 10))
         y_train = jrandom.normal(jrandom.PRNGKey(1), (500, 10))
         latent_size = 2000
@@ -67,7 +67,6 @@ def test_weak_mul_lr():
         trainor_Weak = Trainor_class(
             x_train,
             model_cls,
-            interpolation_cls,
             latent_size=latent_size,  # 4600
             in_size=x_train.shape[0],
             data_size=x_train.shape[-1],  # Only needed for Weak_RRAE_MLP

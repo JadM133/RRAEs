@@ -90,39 +90,21 @@ def eval_model_fixed_coeffs(model, input, batch_size=None, v_ref=None, *, key):
     return y_pred_train, vt_train, v
 
 
-def norm_divide_return(
-    ts,
-    y_all,
-    p_all,
+def divide_return(
+    inp_all,
+    p_all=None,
+    output=None,
     prop_train=0.8,
     pod=False,
     test_end=0,
     eps=1,
-    output=None,
-    norm_p=None,
-    norm_data=None,
-    conv=False,
     args=(),
 ):
-    """p_all of shape (P x N) and y_all of shape (T x N)"""
-
-    def norm_vec(x, y=None, norm=norm_p, inv=False):
-        if y is None:
-            y = x
-        match norm:
-            case "minmax":
-                if inv:
-                    return x * (jnp.max(y) - jnp.min(y)) + jnp.min(y)
-                return (x - jnp.min(y)) / (jnp.max(y) - jnp.min(y))
-            case "meanstd":
-                if inv:
-                    return x * jnp.std(y) + jnp.mean(y)
-                return (x - jnp.mean(y)) / jnp.std(y)
-            case _:
-                raise ValueError(f"Norm {norm} not recognized")
-
-    if norm_p is not None and p_all is not None:
-        p_all = jnp.stack(my_vmap(lambda y: norm_vec(y))(p_all.T)).T
+    """p_all of shape (P x N) and y_all of shape (T x N).
+    The function divides into train/test according to the parameters
+    to allow the test set to be interpolated linearly from the training set
+    (if possible). If test_end is specified this is overwridden to only take
+    the lest test_end values for testing."""
 
     if test_end == 0:
         if p_all is not None:
@@ -136,109 +118,80 @@ def norm_divide_return(
             if cbt_idx.shape[0] < res.shape[0] * (1 - prop_train):
                 raise ValueError("Not enough data to got an interpolable test")
             p_test = p_all[idx_test]
-            p_vals = jrandom.permutation(
+            p_train = jrandom.permutation(
                 jrandom.PRNGKey(200), jnp.delete(p_all, idx_test, 0)
             )
 
         else:
-            idx_test = jrandom.permutation(jrandom.PRNGKey(200), y_all.shape[-1])[
-                : int(y_all.shape[-1] * (1 - prop_train))
+            idx_test = jrandom.permutation(jrandom.PRNGKey(200), inp_all.shape[-1])[
+                : int(inp_all.shape[-1] * (1 - prop_train))
             ]
 
-        y_test_old = y_all[..., idx_test]
-        y_shift_old = jrandom.permutation(
-            jrandom.PRNGKey(200), jnp.delete(y_all, idx_test, -1), -1
+        x_test = inp_all[..., idx_test]
+        x_train = jrandom.permutation(
+            jrandom.PRNGKey(200), jnp.delete(inp_all, idx_test, -1), -1
         )
     else:
         if p_all is not None:
             p_test = p_all[-test_end:]
-            p_vals = p_all[: len(p_all) - test_end]
-        y_test_old = y_all[..., -test_end:]
-        y_shift_old = y_all[..., : y_all.shape[-1] - test_end]
-
-    if norm_data is not None:
-        y_shift = norm_vec(y_shift_old, norm=norm_data)
-        y_test = norm_vec(y_test_old, y_shift_old, norm_data)
-    else:
-        y_shift = y_shift_old
-        y_test = y_test_old
+            p_train = p_all[: len(p_all) - test_end]
+        x_test = inp_all[..., -test_end:]
+        x_train = inp_all[..., : inp_all.shape[-1] - test_end]
 
     if output is None:
-        output_shift = y_shift
-        output_test = y_test
+        output_train = x_train
+        output_test = x_test
     else:
         output_test = output[idx_test]
-        output_shift = jnp.delete(output, idx_test, 0)
-
-    if norm_data is not None:
-
-        def inv_func(xx):
-            return norm_vec(xx, y_shift_old, norm=norm_data, inv=True)
-
-    else:
-
-        def inv_func(xx):
-            return xx
+        output_train = jnp.delete(output, idx_test, 0)
 
     if p_all is not None:
-        p_vals = jnp.expand_dims(p_vals, -1) if len(p_vals.shape) == 1 else p_vals
+        p_train = jnp.expand_dims(p_train, -1) if len(p_train.shape) == 1 else p_train
         p_test = jnp.expand_dims(p_test, -1) if len(p_test.shape) == 1 else p_test
     else:
-        p_vals = None
+        p_train = None
         p_test = None
 
     if not pod:
         return (
-            ts,
-            y_shift,
-            y_test,
-            p_vals,
+            x_train,
+            x_test,
+            p_train,
             p_test,
-            inv_func,
-            y_shift_old,
-            y_test_old,
-            output_shift,
+            output_train,
             output_test,
-            lambda xx: norm_vec(xx, y_shift_old, norm=norm_data),
             args,
         )
 
-    u_now, _, _ = adaptive_TSVD(y_shift, eps=eps, verbose=True)
-    coeffs_shift = u_now.T @ y_shift
-    mean_vals = jnp.mean(coeffs_shift, axis=1)
-    std_vals = jnp.std(coeffs_shift, axis=1)
-    coeffs_shift = jax.vmap(lambda x, m, s: (x - m) / s)(
-        coeffs_shift, mean_vals, std_vals
+    u_now, _, _ = adaptive_TSVD(x_train, eps=eps, verbose=True)
+    coeffs_train = u_now.T @ x_train
+    mean_vals = jnp.mean(coeffs_train, axis=1)
+    std_vals = jnp.std(coeffs_train, axis=1)
+    coeffs_train = jax.vmap(lambda x, m, s: (x - m) / s)(
+        coeffs_train, mean_vals, std_vals
     )
 
-    coeffs_test = u_now.T @ y_test
+    coeffs_test = u_now.T @ x_test
     coeffs_test = jax.vmap(lambda x, m, s: (x - m) / s)(
         coeffs_test, mean_vals, std_vals
     )
 
-    def inv_func(xx):
-        return u_now @ jax.vmap(lambda x, m, s: x * s + m)(xx, mean_vals, std_vals)
-
     if output is None:
-        output_shift = coeffs_shift
+        output_train = coeffs_train
         output_test = coeffs_test
     else:
         output_test = output[idx_test]
-        output_shift = jnp.delete(output, idx_test, 0)
+        output_train = jnp.delete(output, idx_test, 0)
 
     return (
-        ts,
-        coeffs_shift,
+        coeffs_train,
         coeffs_test,
-        p_vals,
+        p_train,
         p_test,
-        inv_func,
-        y_shift,
-        y_test,
-        output_shift,
+        output_train,
         output_test,
-        lambda xx: norm_vec(xx, y_shift_old, norm=norm_data),
-    ) + args
+        args,
+    )
 
 
 def get_data(problem, **kwargs):
@@ -262,9 +215,7 @@ def get_data(problem, **kwargs):
                 )
             )
             p_all = scipy.io.loadmat(f("parameters_set.mat"))["s"]
-            return norm_divide_return(
-                None, y_all, p_all, 0.8, norm_data="minmax", norm_p="meanstd"
-            )
+            return divide_return(y_all, p_all, None, 0.8)
 
         case "hypersonic":
             import meshio
@@ -405,14 +356,8 @@ def get_data(problem, **kwargs):
 
             # plot_scatter_wing(jnp.argmax(p_all==9.7), y_all, ylow=0.04, yhigh=0.1, xlow=0.05, xhigh=0.12)
 
-            return norm_divide_return(
-                None,
-                y_all,
-                p_all,
-                0.8,
-                test_end=1,
-                norm_data="minmax",
-                args=(data_ref, mesh.points),
+            return divide_return(
+                y_all, p_all, None, 0.8, test_end=1, args=(data_ref, mesh.points)
             )
 
         case "NVH":
@@ -458,14 +403,7 @@ def get_data(problem, **kwargs):
                 )(f_aux)
 
             y_all = outputs_raw_y
-            return norm_divide_return(
-                None,
-                y_all.T[:400],
-                p_all,
-                prop_train=0.9,
-                norm_data="minmax",
-                norm_p="meanstd",
-            )
+            return divide_return(y_all.T[:400], p_all, None, prop_train=0.9)
 
         case "antenne":
             with open("antenne_data/second_data_all.pkl", "rb") as f:
@@ -477,20 +415,7 @@ def get_data(problem, **kwargs):
                 (y_all[0:400], y_all[600:800], y_all[1000:1600], y_all[1800:2200])
             )
             y_all = (y_all + 1) / 2
-            pdb.set_trace()
-            return norm_divide_return(None, y_all.T, None, 1)
-
-            # with open("antenne_data/data_border.pkl", "rb") as f:
-            #     y_all, _ = dill.load(f)
-
-            # y_all = jnp.reshape(
-            #     y_all,
-            #     (int(y_all.shape[0] / y_all.shape[1]), y_all.shape[1], y_all.shape[1]),
-            # )
-
-            # return norm_divide_return(
-            #     None, jnp.reshape(y_all, (y_all.shape[0], -1)).T, None, 1
-            # )
+            return divide_return(y_all.T, None, None, 1)
 
         case "accelerate":
             ts = jnp.linspace(0, 2 * jnp.pi, 200)
@@ -509,7 +434,7 @@ def get_data(problem, **kwargs):
             y_test = jax.vmap(func, in_axes=[0, None])(p_test, ts).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
-            return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
+            return divide_return(y_all, p_all, test_end=y_test.shape[-1])
 
         case "shift":
             ts = jnp.linspace(0, 2 * jnp.pi, 200)
@@ -528,7 +453,7 @@ def get_data(problem, **kwargs):
             y_test = jax.vmap(sf_func, in_axes=[0, None])(p_test, ts).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
-            return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
+            return divide_return(y_all, p_all, test_end=y_test.shape[-1])
 
         case "stairs":
             Tend = 3.5  # [s]
@@ -593,7 +518,7 @@ def get_data(problem, **kwargs):
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
             ts = jnp.arange(0, y_shift.shape[0], 1)
-            return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
+            return divide_return(y_all, p_all, test_end=y_test.shape[-1])
 
         case "mult_freqs":
             p_vals_0 = jnp.repeat(jnp.linspace(0.5 * jnp.pi, jnp.pi, 15), 15)
@@ -622,7 +547,7 @@ def get_data(problem, **kwargs):
             ).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
-            return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
+            return divide_return(y_all, p_all, test_end=y_test.shape[-1])
 
         case "angelo_new":
             import os
@@ -669,7 +594,7 @@ def get_data(problem, **kwargs):
 
             p_all = jnp.delete(p_all, idxs, 0)
             y_all = jnp.delete(y_all, idxs, 1)
-            return norm_divide_return(ts, y_all, p_all, test_end=y_all_1.shape[-1])
+            return divide_return(y_all, p_all, test_end=y_all_1.shape[-1])
 
         case "angelo_newest":
             import os
@@ -684,9 +609,7 @@ def get_data(problem, **kwargs):
             p_all = pd.read_csv(f("inputs.csv"), sep=",").to_numpy()
             ts = pd.read_csv(f("freq_red.csv"), sep=" ").to_numpy()
 
-            return norm_divide_return(
-                ts, y_all, p_all, norm_p="meanstd", norm_data=None
-            )
+            return divide_return(y_all, p_all)
 
         case "angelo_final":
             import os
@@ -711,9 +634,7 @@ def get_data(problem, **kwargs):
                     )
                 )
             y_all = jnp.stack(y_all, -1)
-            return norm_divide_return(
-                ts, y_all, p_all, prop_train=0.9, norm_data="minmax", norm_p="meanstd"
-            )
+            return divide_return(y_all, p_all, prop_train=0.9)
 
         case "mult_gausses":
 
@@ -751,7 +672,7 @@ def get_data(problem, **kwargs):
             )(p_test, ts).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
-            return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
+            return divide_return(y_all, p_all, test_end=y_test.shape[-1])
 
         case "avrami_noise":
             n = jnp.repeat(jnp.repeat(jnp.linspace(2, 3.5, 10), 10), 10)
@@ -808,9 +729,7 @@ def get_data(problem, **kwargs):
             y_all = jax.vmap(
                 lambda y, k: y + jrandom.normal(k, y.shape) * 0.01, in_axes=[-1, 0]
             )(y_all, noise_keys).T
-            return norm_divide_return(
-                ts, y_all, p_all, eps=1.4, pod=True, test_end=y_test.shape[-1]
-            )
+            return divide_return(y_all, p_all, eps=1.4, pod=True, test_end=y_test.shape[-1])
 
         case "avrami":
             n = jnp.repeat(jnp.repeat(jnp.linspace(2.5, 3.5, 3), 3), 3)
@@ -863,7 +782,7 @@ def get_data(problem, **kwargs):
             )
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
-            return norm_divide_return(ts, y_all, p_all, test_end=y_test.shape[-1])
+            return divide_return(y_all, p_all, test_end=y_test.shape[-1])
 
         case "welding":
             import os
@@ -900,23 +819,10 @@ def get_data(problem, **kwargs):
                 | (p_all_test <= jnp.min(p_all_train, 0)),
                 1,
             )
-            # p_all_test = jnp.delete(p_all_test, to_remove, 0)
-            # y_all_test = jnp.delete(y_all_test, to_remove, 1)
-            # y_all_test = jnp.delete(
-            #     y_all_test,
-            #     np.bitwise_or.reduce(
-            #         (p_all_test >= jnp.max(p_all_train, 0))
-            #         | (p_all_test <= jnp.min(p_all_train, 0)),
-            #         1,
-            #     ),
-            #     1,
-            # )
 
             p_all = jnp.concatenate([p_all_train, p_all_test], 0)
             y_all = jnp.concatenate([y_all_train, y_all_test], -1)
-            return norm_divide_return(
-                (X, Y), y_all, p_all, norm_data="meanstd", test_end=p_all_test.shape[0]
-            )
+            return divide_return(y_all, p_all, test_end=p_all_test.shape[0])
 
         case "multiple_steps":
 
@@ -998,9 +904,7 @@ def get_data(problem, **kwargs):
             permutation = jrandom.permutation(jrandom.PRNGKey(0), y_all.shape[1])
             y_all = y_all[:, permutation]
             output_all = output_all[:, permutation]
-            return norm_divide_return(
-                t, y_all, jnp.expand_dims(p_all, -1), prop_train=0.8, output=output_all
-            )
+            return divide_return(y_all, jnp.expand_dims(p_all, -1), prop_train=0.8, output=output_all)
 
         case "mnist_":
             import torchvision
@@ -1048,10 +952,7 @@ def get_data(problem, **kwargs):
                     )  # [45000:]
             x_all = x_all  # [..., 45000:]
 
-            return norm_divide_return(
-                None, x_all, None, test_end=x_test.shape[-1], norm_data=None
-            )
-
+            return divide_return(x_all, None, test_end=x_test.shape[-1])
         case _:
             raise ValueError(f"Problem {problem} not recognized")
 

@@ -237,31 +237,22 @@ if __name__ == "__main__":
     # pdb.set_trace()
     for prob in ["shift"]:
         problem = prob
-        method = "Weak"
-        loss_func = "Weak"
+        method = "Strong"
+        loss_func = "Strong"
 
         latent_size = 520
         k_max = 1
 
         (
-            ts,
             x_train,
             x_test,
             p_train,
             p_test,
-            inv_func,
-            y_train_o,
-            y_test_o,
             y_train,
             y_test,
-            norm_func,
             args,
         ) = get_data(problem)
 
-        # y_train = y_train[:, :]-jnp.expand_dims(norm_func(args), 1)
-        # x_train = y_train
-        # y_test = y_test[:, :]-jnp.expand_dims(norm_func(args), 1)
-        # x_test = y_test
         print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
         print(f"method is {method}")
         match method:
@@ -276,15 +267,11 @@ if __name__ == "__main__":
             case "LoRAE":
                 model_cls = LoRAE_MLP
 
-        interpolation_cls = Objects_Interpolator_nD
-
         trainor = Trainor_class(
             x_train,
             model_cls,
-            interpolation_cls,
-            latent_size=latent_size,  # 4600
+            latent_size=latent_size,
             in_size=x_train.shape[0],
-            data_size=x_train.shape[-1],
             k_max=k_max,
             folder=f"{problem}/{method}_{problem}/",
             file=f"{method}_{problem}",
@@ -293,18 +280,15 @@ if __name__ == "__main__":
             out_train=x_train,
             key=jrandom.PRNGKey(0),
         )
+
         kwargs = {
-            "step_st": [500],# [8000, 8000, 7900],
-            "batch_size_st": [20, 20, 20],
-            "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
+            "step_st": [1500],
+            "batch_size_st": [20],
+            "lr_st": [1e-3, 1e-6, 1e-7, 1e-8],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
-            "mul_lr":[0.05, 0.05, 0.05], # The values of kappa (to multiply lr for A)
-            "mul_lr_func": lambda tree: (tree.v_vt.vt,), # Who will be affected by kappa, this means A
         }
-        # trainor.model.decode(trainor.model.encode(x_train))
-        # trainor.model.eval_with_batches(x_train, 32, key=jrandom.PRNGKey(0))
-        # pdb.set_trace()
+
         trainor.fit(
             x_train,
             y_train,
@@ -313,21 +297,16 @@ if __name__ == "__main__":
             **kwargs,
         )
 
-        trainor.norm_func = norm_func
-        trainor.args = args
-        trainor.inv_func = inv_func
-        trainor.fitted = False
+
         e0, e1, e2, e3 = trainor.post_process(
             x_train,
-            y_train_o,
-            y_test,
-            y_test_o,
-            None,
-            p_train,
-            p_test,
-            trainor.inv_func,
-            interp=True,
+            y_train,
+            x_test,
+            y_test
         )
+
+        e5, e6 = trainor.AE_interpolate(p_train, p_test)
+
         trainor.save(p_train=p_train, p_test=p_test)
         # trainor.plot_results(ts=jnp.arange(0, y_test.shape[0], 1), ts_o=ts)
     pdb.set_trace()
