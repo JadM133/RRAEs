@@ -5,8 +5,8 @@ import dill
 import pdb
 import sys
 import matplotlib
-from RRAEs.RRAEs.training_classes.training_classes import Trainor_class
-from utilities import get_data
+from RRAEs.training_classes import Trainor_class
+from RRAEs.utilities import get_data
 
 folder_for_all = "figures/"
 

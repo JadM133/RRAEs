@@ -14,6 +14,7 @@ import equinox as eqx
 import jax.random as jrandom
 from equinox._doc_utils import doc_repr
 import warnings
+from tqdm import tqdm
 
 _identity = doc_repr(lambda x, *args, **kwargs: x, "lambda x: x")
 
@@ -31,13 +32,14 @@ class BaseClass(eqx.Module):
         if self.map_axis is None:
             return self.model(x)
         return jax.vmap(self.model, in_axes=[self.map_axis], out_axes=self.map_axis)(x)
-
+    
     def eval_with_batches(
         self,
         x,
         batch_size,
         call_func,
         end_type="concat_and_resort",
+        str=None,
         *args,
         key,
         **kwargs,
@@ -45,7 +47,13 @@ class BaseClass(eqx.Module):
         idxs = []
         all_preds = []
 
-        for _, (input_b, idx) in zip(
+        if str is not None:
+            print(str)
+            fn = lambda x, *args, **kwargs: tqdm(x, *args, **kwargs)
+        else:
+            fn = lambda x, *args, **kwargs: x
+            
+        for _, (input_b, idx) in fn(zip(
             itertools.count(start=0),
             dataloader(
                 [x.T, jnp.arange(0, x.shape[-1], 1)],
@@ -53,7 +61,7 @@ class BaseClass(eqx.Module):
                 key=key,
                 once=True,
             ),
-        ):
+        ), total=int(x.shape[-1] / batch_size)):
             pred = call_func(input_b.T)
             idxs.append(idx)
             all_preds.append(pred)
@@ -191,7 +199,7 @@ class Autoencoder(eqx.Module):
         return self.perform_in_latent(self.encode(x), *args, **kwargs)
 
 
-def latent_func_strong_RRAE(y, k_max, basis=None, ret=False, *args, **kwargs):
+def latent_func_strong_RRAE(y, k_max, apply_basis=None, get_basis=False, ret=False, *args, **kwargs):
     """Performing the truncated SVD in the latent space.
 
     Parameters
@@ -207,8 +215,17 @@ def latent_func_strong_RRAE(y, k_max, basis=None, ret=False, *args, **kwargs):
     y_approx : jnp.array
         The latent space after the truncation.
     """
-    if basis is not None:
-        return basis @ basis.T @ y
+    if get_basis:
+        if y.shape[-1] > y.shape[0]:
+            new_y = y @ y.T
+        else:
+            new_y = y
+        u, s, v = jnp.linalg.svd(new_y, full_matrices=False)
+        u_now = u[:, :k_max]
+        return u_now
+    
+    if apply_basis is not None:
+        return apply_basis @ apply_basis.T @ y
       
     if k_max != -1:
         u, s, v = jnp.linalg.svd(y, full_matrices=False)

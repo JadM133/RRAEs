@@ -729,7 +729,9 @@ def get_data(problem, **kwargs):
             y_all = jax.vmap(
                 lambda y, k: y + jrandom.normal(k, y.shape) * 0.01, in_axes=[-1, 0]
             )(y_all, noise_keys).T
-            return divide_return(y_all, p_all, eps=1.4, pod=True, test_end=y_test.shape[-1])
+            return divide_return(
+                y_all, p_all, eps=1.4, pod=True, test_end=y_test.shape[-1]
+            )
 
         case "avrami":
             n = jnp.repeat(jnp.repeat(jnp.linspace(2.5, 3.5, 3), 3), 3)
@@ -904,7 +906,9 @@ def get_data(problem, **kwargs):
             permutation = jrandom.permutation(jrandom.PRNGKey(0), y_all.shape[1])
             y_all = y_all[:, permutation]
             output_all = output_all[:, permutation]
-            return divide_return(y_all, jnp.expand_dims(p_all, -1), prop_train=0.8, output=output_all)
+            return divide_return(
+                y_all, jnp.expand_dims(p_all, -1), prop_train=0.8, output=output_all
+            )
 
         case "mnist_":
             import torchvision
@@ -1032,6 +1036,48 @@ def find_weighted_loss(terms, weight_vals=None):
         weights = weight_vals
     res = jnp.multiply(terms, weights)
     return sum(res)
+
+
+def v_dataloader(arrays, batch_size, p_vals=None, once=False, *, key, idx_changer=0):
+    dataset_size = arrays[0].shape[0]
+    arrays = [array if array is not None else [None] * dataset_size for array in arrays]
+    indices = jnp.arange(dataset_size)
+    kk = idx_changer
+    start = 0
+    all_zeros = jnp.zeros((arrays[0].shape[0], batch_size))
+    idx_batch = jnp.arange(batch_size)
+
+    while True:
+        perm = jrandom.permutation(key, indices)
+        i = kk
+        start = 0
+        end = batch_size
+        while end <= dataset_size:
+            batch_perm = perm[start:end]
+            I = all_zeros.at[batch_perm, idx_batch].set(1)
+            i += 1
+            G = jrandom.normal(jrandom.key(i), (arrays[0].shape[0], batch_size))/1000
+            G = jnp.zeros_like(G)
+            X = I + G
+            arrs = [(array.T @ X).T for array in arrays]
+            start = end
+            end = start + batch_size
+            yield arrs
+        if once:
+            if dataset_size % batch_size != 0:
+                batch_perm = perm[-(dataset_size % batch_size) :]
+                arrs = tuple(
+                    itemgetter(*batch_perm)(array) for array in arrays
+                )  # Works for lists and arrays
+                if dataset_size % batch_size == 1:
+                    yield [
+                        [arr] if arr is None else jnp.expand_dims(jnp.array(arr), 0)
+                        for arr in arrs
+                    ]
+                else:
+                    yield [[arr] if arr is None else jnp.array(arr) for arr in arrs]
+            break
+        kk += 1
 
 
 def dataloader(arrays, batch_size, p_vals=None, once=False, *, key):

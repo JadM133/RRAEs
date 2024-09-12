@@ -10,9 +10,8 @@ from RRAEs.AE_classes import (
     IRMAE_CNN,
     LoRAE_CNN,
 )
-from equinox._doc_utils import doc_repr
 from RRAEs.utilities import get_data
-from RRAEs.training_classes import Trainor_class, Objects_Interpolator_nD
+from RRAEs.training_classes import AE_Trainor_class, V_AE_Trainor_class
 
 import pdb
 from RRAEs.utilities import out_to_pic
@@ -28,23 +27,18 @@ if __name__ == "__main__":
         loss_func = "Strong"
 
         latent_size = 128
-        k_max = 10
+        k_max = 5
 
         folder = f"{problem}/{method}_{problem}/"
-        file = f"{method}_{problem}"
+        file = f"{method}_{problem}_var"
 
         (
-            ts,
             x_train,
             x_test,
             p_train,
             p_test,
-            inv_func,
-            y_train_o,
-            y_test_o,
             y_train,
             y_test,
-            norm_func,
             args,
         ) = get_data(problem)
 
@@ -63,29 +57,27 @@ if __name__ == "__main__":
             case "LoRAE":
                 model_cls = LoRAE_CNN
 
-        interpolation_cls = Objects_Interpolator_nD
-
-        trainor = Trainor_class(
+        trainor = AE_Trainor_class(
             x_train,
             model_cls,
-            interpolation_cls,
             in_size=x_train.shape[0],
             latent_size=latent_size,  # 4600
             k_max=k_max,
             folder=folder,
             file=file,
-            norm_type="minmax",
-            # post_proc_func=inv_func,
+            norm_in="minmax",
+            norm_out="minmax",
+            out_train=y_train,
             kwargs_dec={
-                "final_activation": jnn.tanh
+                "final_activation": jnn.sigmoid
             },  # this is how you change the final activation
             key=jrandom.PRNGKey(0),
         )
 
         train_kwargs = {
-            "step_st": [2],
+            "step_st": [60000, 60000],
             "batch_size_st": [20, 20, 20, 20],
-            "lr_st": [1e-4],
+            "lr_st": [1e-4, 1e-5],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
         }
@@ -97,17 +89,7 @@ if __name__ == "__main__":
             training_key=jrandom.PRNGKey(50),
             **train_kwargs,
         )
-        e0, e1, e2, e3 = trainor.post_process(
-            x_train,
-            y_train_o,
-            y_test,
-            y_test_o,
-            None,
-            p_train,
-            p_test,
-            inv_func,
-            modes=k_max,
-        )
+        trainor.post_process(x_train, y_train, x_test, y_test, p_train, p_test)
         trainor.save()
 
     pdb.set_trace()

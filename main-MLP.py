@@ -9,7 +9,7 @@ from RRAEs.AE_classes import (
     LoRAE_MLP,
 )
 import jax.nn as jnn
-from RRAEs.training_classes import AE_Trainor_class
+from RRAEs.training_classes import AE_Trainor_class, V_AE_Trainor_class
 import jax.random as jrandom
 import pdb
 import equinox as eqx
@@ -85,16 +85,18 @@ def compare_machs(trainor, idx):
         p = p_plot[idx]
         sorted_p = jnp.sort(trainor.p_train[..., 0])
         arg = jnp.argsort(trainor.p_train[..., 0])
-        idx_s = arg[trainor.p_train.shape[0] - jnp.argmax(jnp.flip(sorted_p < p)) - 1]-4
-        idx_b = arg[jnp.argmax(sorted_p > p)]+4
-        
+        idx_s = (
+            arg[trainor.p_train.shape[0] - jnp.argmax(jnp.flip(sorted_p < p)) - 1] - 4
+        )
+        idx_b = arg[jnp.argmax(sorted_p > p)] + 4
+
         interp_pic, _ = get_plotting_pic(
             0,
             xlow,
             xhigh,
             ylow,
             yhigh,
-            (trainor.y_train_o[..., idx_s] + trainor.y_train_o[..., idx_b])/2,
+            (trainor.y_train_o[..., idx_s] + trainor.y_train_o[..., idx_b]) / 2,
             trainor.xyz,
             indexed=True,
         )
@@ -123,6 +125,7 @@ def compare_machs(trainor, idx):
         plt.show()
 
     plot_scatter_wing(trainor, idx, ylow=0.04, yhigh=0.1, xlow=0.05, xhigh=0.12)
+
 
 def plot_mult_pics(trainor, k1, k2, points=5):
     matplotlib.rc("xtick", labelsize=20)
@@ -189,7 +192,7 @@ def compare_imgs(trainor, idx):
 
 
 def post_mach(interp=False):
-    trainor = Trainor_class()
+    trainor = AE_Trainor_class()
     trainor.load("hypersonic_2/Strong_hypersonic_2/Strong_hypersonic_2")
     if interp:
         problem = "hypersonic"
@@ -240,7 +243,7 @@ if __name__ == "__main__":
         method = "Strong"
         loss_func = "Strong"
 
-        latent_size = 520
+        latent_size = 5000
         k_max = 1
 
         (
@@ -267,7 +270,7 @@ if __name__ == "__main__":
             case "LoRAE":
                 model_cls = LoRAE_MLP
 
-        trainor = AE_Trainor_class(
+        trainor = V_AE_Trainor_class(
             x_train,
             model_cls,
             latent_size=latent_size,
@@ -282,9 +285,9 @@ if __name__ == "__main__":
         )
 
         kwargs = {
-            "step_st": [1500],
-            "batch_size_st": [20],
-            "lr_st": [1e-3, 1e-6, 1e-7, 1e-8],
+            "step_st": [4000, 4000],
+            "batch_size_st": [20, 20],
+            "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
             "print_every": 100,
             "loss_kwargs": {"lambda_nuc": 0.001},
         }
@@ -297,16 +300,7 @@ if __name__ == "__main__":
             **kwargs,
         )
 
-
-        trainor.post_process(
-            x_train,
-            y_train,
-            x_test,
-            y_test,
-            p_train,
-            p_test
-        )
-
+        trainor.post_process(x_train, y_train, x_test, y_test, p_train, p_test)
 
         trainor.save()
     pdb.set_trace()
