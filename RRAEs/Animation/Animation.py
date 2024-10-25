@@ -224,10 +224,10 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.plot_above.axes.set_ylim([self.min_v, self.max_v])
         self.plot_below.axes.set_ylim(self.min_v, self.max_v)
         if self.zm_val:
-            self.plot_below.axes.set_ylim(0.2, 0.6)
-            self.plot_above.axes.set_ylim(0.2, 0.6)
-            self.plot_below.axes.set_xlim(0.2, 0.6)
-            self.plot_above.axes.set_xlim(0.2, 0.6)
+            self.plot_below.axes.set_ylim(-25, -15)
+            self.plot_above.axes.set_ylim(-25, -15)
+            self.plot_below.axes.set_xlim(0.1, 0.5)
+            self.plot_above.axes.set_xlim(0.1, 0.5)
 
         self.plot_above.axes.plot(jnp.linspace(0, 1, self.interp_res[:, 0].shape[0]), self.interp_res[:, 0], color="blue", linewidth=3)
         self.plot_above.axes.plot(jnp.linspace(0, 1, self.interp_res[:, -1].shape[0]), self.interp_res[:, -1], color="red", linewidth=3)
@@ -241,32 +241,32 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.run_simul.repaint()
         if self.reg_val:
             curves = jnp.concatenate(
-                (self.y_plot[:, self.idx1_val], self.y_plot[:, self.idx2_val])
+                (self.y_plot[:, self.idx1_val:self.idx1_val+1], self.y_plot[:, self.idx2_val:self.idx2_val+1])
             )
             self.plot_below.axes.plot(
-                jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]), self.y_plot[:, self.idx1_val], color="blue", linewidth=3
+                jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]), self.y_plot[:, self.idx1_val:self.idx1_val+1], color="blue", linewidth=3
             )
             self.plot_below.axes.plot(
-                jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]), self.y_plot[:, self.idx2_val], color="red", linewidth=3
+                jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]), self.y_plot[:, self.idx2_val:self.idx2_val+1], color="red", linewidth=3
             )
         else:
             trainor = Trainor_class()
             trainor.load(self.path)
             curves = jnp.concatenate(
                 (
-                    trainor.inv_func(self.y_plot[:, self.idx1_val]),
-                    trainor.inv_func(self.y_plot[:, self.idx2_val]),
+                    trainor.inv_func(self.y_plot[:, self.idx1_val:self.idx1_val+1]),
+                    trainor.inv_func(self.y_plot[:, self.idx2_val:self.idx2_val+1]),
                 )
             )
             self.plot_below.axes.plot(
                 jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]),
-                trainor.inv_func(self.y_plot[:, self.idx1_val]),
+                trainor.inv_func(self.y_plot[:, self.idx1_val:self.idx1_val+1]),
                 color="blue",
                 linewidth=3,
             )
             self.plot_below.axes.plot(
                 jnp.linspace(0, 1, self.y_plot[:, 0].shape[0]),
-                trainor.inv_func(self.y_plot[:, self.idx2_val]),
+                trainor.inv_func(self.y_plot[:, self.idx2_val:self.idx2_val+1]),
                 color="red",
                 linewidth=3,
             )
@@ -283,10 +283,10 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.plot_below.axes.set_ylim(self.min_v, self.max_v)
         self.plot_above.axes.set_ylim(self.min_v, self.max_v)
         if self.zm_val:
-            self.plot_below.axes.set_ylim(0.2, 0.6)
-            self.plot_above.axes.set_ylim(0.2, 0.6)
-            self.plot_below.axes.set_xlim(0.2, 0.6)
-            self.plot_above.axes.set_xlim(0.2, 0.6)
+            self.plot_below.axes.set_ylim(-25, -15)
+            self.plot_above.axes.set_ylim(-25, -15)
+            self.plot_below.axes.set_xlim(0.1, 0.5)
+            self.plot_above.axes.set_xlim(0.1, 0.5)
 
         self.plot_below.axes.set_ylabel("True")
         self.plot_below.draw()

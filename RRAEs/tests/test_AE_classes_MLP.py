@@ -16,7 +16,7 @@ import jax.numpy as jnp
 class Test_AEs_shapes:
     def test_Strong_MLP(self, latent, num_modes, dim_D):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, dim_D))
-        model = Strong_RRAE_MLP(x, latent, num_modes, key=jrandom.PRNGKey(0))
+        model = Strong_RRAE_MLP(x.shape[0], latent, num_modes, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
         y = model.perform_in_latent(y)
@@ -27,7 +27,7 @@ class Test_AEs_shapes:
 
     def test_Vanilla_MLP(self, latent, num_modes, dim_D):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, dim_D))
-        model = Vanilla_AE_MLP(x, latent, key=jrandom.PRNGKey(0))
+        model = Vanilla_AE_MLP(x.shape[0], latent, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
         x = model.decode(y)
@@ -35,7 +35,7 @@ class Test_AEs_shapes:
 
     def test_Weak_MLP(self, latent, num_modes, dim_D):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, dim_D))
-        model = Weak_RRAE_MLP(x, latent, num_modes, key=jrandom.PRNGKey(0))
+        model = Weak_RRAE_MLP(x.shape[0], latent, num_modes, x.shape[-1], key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
         x = model.decode(y)
@@ -45,19 +45,19 @@ class Test_AEs_shapes:
 
     def test_IRMAE_MLP(self, latent, num_modes, dim_D):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, dim_D))
-        model = IRMAE_MLP(x, latent, linear_l=2, key=jrandom.PRNGKey(0))
+        model = IRMAE_MLP(x.shape[0], latent, linear_l=2, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
-        assert len(model._encode.mlp.layers_l) == 2
+        assert len(model.encode.layers_l) == 2
         x = model.decode(y)
         assert x.shape == (500, dim_D)
 
     def test_LoRAE_MLP(self, latent, num_modes, dim_D):
         x = jrandom.normal(jrandom.PRNGKey(0), (500, dim_D))
-        model = LoRAE_MLP(x, latent, key=jrandom.PRNGKey(0))
+        model = LoRAE_MLP(x.shape[0], latent, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
-        assert len(model._encode.mlp.layers_l) == 1
+        assert len(model.encode.layers_l) == 1
         x = model.decode(y)
         assert x.shape == (500, dim_D)
 
@@ -69,7 +69,7 @@ class Test_width:
         true_width = width if isinstance(width, list) else [width] * depth
         kwargs_enc={"width_size":width, "depth":depth}
         model = Strong_RRAE_MLP(
-            x, 200, 3, key=jrandom.PRNGKey(0), kwargs_enc=kwargs_enc
+            x.shape[0], 200, 3, key=jrandom.PRNGKey(0), kwargs_enc=kwargs_enc
         )
         try:
             model(x)
@@ -77,19 +77,28 @@ class Test_width:
             raise ValueError("Width is not correctly specified")
         assert all(
             [
-                model._encode.mlp.layers[i].weight.shape[0] == true_width[i]
+                model.encode.layers[i].weight.shape[0] == true_width[i]
                 for i in range(depth)
             ]
         )
 
         kwargs_dec={"width_size":width, "depth":depth}
         model = Weak_RRAE_MLP(
-            x, 200, 3, key=jrandom.PRNGKey(0), kwargs_dec=kwargs_dec
+            x.shape[0], 200, 3, x.shape[-1], key=jrandom.PRNGKey(0), kwargs_dec=kwargs_dec
         )
         model(x)
         assert all(
             [
-                model._decode.mlp.layers[i].weight.shape[0] == true_width[i]
+                model.decode.layers[i].weight.shape[0] == true_width[i]
                 for i in range(depth)
             ]
         )
+
+def test_getting_SVD_coeffs():
+    data = jrandom.uniform(jrandom.key(0), (500, 15))
+    model_s = Strong_RRAE_MLP(data.shape[0], 200, 3, key=jrandom.PRNGKey(0))
+    basis, coeffs, sigs = model_s.latent(data, ret=True)
+    model_w = Weak_RRAE_MLP(data.shape[0], 200, 3, data.shape[-1], key=jrandom.PRNGKey(0))
+    basis = model_w.v_vt.v
+    coeffs = model_w.v_vt.vt
+
