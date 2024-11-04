@@ -3,7 +3,7 @@ import pytest
 from RRAEs.AE_classes import Strong_RRAE_CNN
 import jax.numpy as jnp
 import equinox as eqx
-from RRAEs.training_classes import AE_Trainor_class
+from RRAEs.training_classes import RRAE_Trainor_class
 from RRAEs.utilities import find_weighted_loss
 
 
@@ -14,7 +14,7 @@ def test_fitting(norm_in, norm_out):
     data = jrandom.normal(jrandom.key(0), (28, 28, 1))
     model_cls = Strong_RRAE_CNN
 
-    trainor = AE_Trainor_class(
+    trainor = RRAE_Trainor_class(
         data,
         model_cls,
         in_size=data.shape[0],

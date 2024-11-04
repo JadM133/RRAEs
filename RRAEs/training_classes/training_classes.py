@@ -44,10 +44,16 @@ class Trainor_class:
                 norm_in=norm_in,
                 norm_out=norm_out,
             )
+            params_in = self.model.params_in
+            params_out = self.model.params_out
+        else:
+            params_in = None
+            params_out = None
+
         self.all_kwargs = {
             "kwargs": kwargs,
-            "in_train": in_train,
-            "out_train": out_train,
+            "params_in": params_in,
+            "params_out": params_out,
             "norm_in": norm_in,
             "norm_out": norm_out,
             "map_axis": map_axis,
@@ -328,16 +334,16 @@ class Trainor_class:
             self.model_cls = self.all_kwargs["model_cls"]
             kwargs = self.all_kwargs["kwargs"]
             self.map_axis = self.all_kwargs["map_axis"]
-            self.in_train = self.all_kwargs["in_train"]
-            self.out_train = self.all_kwargs["out_train"]
+            self.params_in = self.all_kwargs["params_in"]
+            self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
             self.model = Norm(
                 BaseClass(self.model_cls(**kwargs), map_axis=self.map_axis),
-                in_train=self.in_train,
                 norm_in=self.norm_in,
-                out_train=self.out_train,
                 norm_out=self.norm_out,
+                params_in=self.params_in,
+                params_out=self.params_out,
             )
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             attributes = dill.load(f)
@@ -349,15 +355,6 @@ class Trainor_class:
 
 
 class RRAE_Trainor_class(Trainor_class):
-    def train(self):
-        self.model.train()
-    
-    def eval(self):
-        if hasattr(self, "basis"):
-            self.model.eval(basis=self.basis)
-        else:
-            pass
-
     def fit(self, *args, training_key, **kwargs):
         print("Training RRAEs...")
 
@@ -388,7 +385,7 @@ class RRAE_Trainor_class(Trainor_class):
 
         basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
 
-        self.basis = basis[:, :self.model.k_max.attr]
+        self.basis = basis[:, : self.model.k_max.attr]
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(model, input, out, idx, basis):
@@ -431,7 +428,9 @@ class RRAE_Trainor_class(Trainor_class):
             assert (
                 p_test is not None
             ), "You should provide p_test if you provide p_train."
-            res = res | self.AE_interpolate(p_train, p_test, x_train_o, y_test_o, batch_size)
+            res = res | self.AE_interpolate(
+                p_train, p_test, x_train_o, y_test_o, batch_size
+            )
         return res
 
     def AE_interpolate(
@@ -502,9 +501,6 @@ class RRAE_Trainor_class(Trainor_class):
 class V_AE_Trainor_class(RRAE_Trainor_class):
     """ " Trainor class for variational batching."""
 
-    def old_fit(self, *args, **kwargs):
-        return super().fit(*args, **kwargs)
-
     def fit(
         self,
         input,
@@ -522,8 +518,7 @@ class V_AE_Trainor_class(RRAE_Trainor_class):
         *,
         training_key,
     ):
-        self.x_train = input
-        self.y_train = output
+
         output = self.model.norm_out(output)
 
         training_params = {

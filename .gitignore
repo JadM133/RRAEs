@@ -177,3 +177,5 @@ for_paper/MNIST
 *.csv
 *.asv
 *.png
+*.gz
+MNIST/*

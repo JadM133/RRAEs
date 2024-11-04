@@ -44,7 +44,6 @@ class BaseClass(eqx.Module):
         key,
         **kwargs,
     ):
-        # TODO: Test if this works with args and kwargs as intended
         idxs = []
         all_preds = []
 
@@ -654,5 +653,5 @@ class IRMAE_CNN(CNN_Autoencoder):
 
 
 class LoRAE_CNN(IRMAE_CNN):
-    def __init__(self, data, latent_size, *, key, **kwargs):
-        super().__init__(data, latent_size, linear_l=1, key=key, **kwargs)
+    def __init__(self, in_size, latent_size, *, key, **kwargs):
+        super().__init__(in_size, latent_size, linear_l=1, key=key, **kwargs)
