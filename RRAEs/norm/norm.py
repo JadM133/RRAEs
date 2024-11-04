@@ -119,8 +119,10 @@ class Norm(eqx.Module):
 
         self.norm_and_inv_func = norm_and_inv_func
 
-    def __call__(self, x, norm_in=True, inv_norm_out=True):
-        return self.norm_and_inv_func(self.model, norm_in, inv_norm_out)(x)
+    def __call__(self, x, norm_in=True, inv_norm_out=True, *args, **kwargs):
+        return self.norm_and_inv_func(self.model, norm_in, inv_norm_out)(
+            x, *args, **kwargs
+        )
 
     def __getattr__(self, name: str):
         if hasattr(self.model, "norm_funcs"):

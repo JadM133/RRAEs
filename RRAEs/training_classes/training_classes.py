@@ -11,10 +11,10 @@ from RRAEs.utilities import (
     v_print,
     remove_keys_from_dict,
     merge_dicts,
-    v_dataloader,
+    loss_generator,
 )
 from RRAEs.interpolation import Objects_Interpolator_nD
-from RRAEs.AE_classes import BaseClass, CNN_Autoencoder
+from RRAEs.AE_classes import BaseClass
 from RRAEs.norm import Norm
 import os
 import time
@@ -44,7 +44,6 @@ class Trainor_class:
                 norm_in=norm_in,
                 norm_out=norm_out,
             )
-
         self.all_kwargs = {
             "kwargs": kwargs,
             "in_train": in_train,
@@ -63,11 +62,18 @@ class Trainor_class:
         self.file = file
         self.fitted = False
 
+    def train(self):
+        pass
+
+    def eval(self):
+        pass
+
     def fit(
         self,
         input,
         output,
-        loss_func=None,
+        loss_type="default",  # should be string to use pre defined functions
+        loss=None,  # a function loss(pred, true) to differentiate in the model
         step_st=[3000, 3000],  # 000, 8000],
         lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
         print_every=20,
@@ -85,7 +91,7 @@ class Trainor_class:
         output = self.model.norm_out(output)
 
         training_params = {
-            "loss_func": loss_func,
+            "loss": loss,
             "step_st": step_st,
             "lr_st": lr_st,
             "print_every": print_every,
@@ -97,84 +103,19 @@ class Trainor_class:
             "loss_kwargs": loss_kwargs,
             "training_key": training_key,
         }
+
         self.all_kwargs = {**self.all_kwargs, **training_params}
         model = self.model
+
+        fn = lambda x: x if fn is None else fn
 
         if mul_lr is None:
             mul_lr = [1] * len(lr_st)
 
-        norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
-
-        if (loss_func == "Strong") or (loss_func is None) or (loss_func == "Vanilla"):
-
-            @eqx.filter_value_and_grad(has_aux=True)
-            def loss_fun(model, input, out, idx, **kwargs):
-                pred = model(input, inv_norm_out=False)
-                wv = jnp.array([1.0])
-                return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (
-                    pred,
-                )
-
-        elif loss_func == "Weak":
-
-            @eqx.filter_value_and_grad(has_aux=True)
-            def loss_fun(model, input, out, idx, norm_loss=None, **kwargs):
-                if norm_loss is None:
-                    norm_loss = norm_loss_
-                pred = model(input)
-                x = model.latent(input)
-                wv = jnp.array([1.0, 1.0])
-                return find_weighted_loss(
-                    [
-                        norm_loss(pred, out),
-                        jnp.linalg.norm(x - model.v_vt()[:, idx])
-                        / jnp.linalg.norm(x)
-                        * 100,
-                    ],
-                    weight_vals=wv,
-                ), (
-                    norm_loss(pred, out),
-                    jnp.linalg.norm(x - model.v_vt()[:, idx])
-                    / jnp.linalg.norm(x)
-                    * 100,
-                )
-
-        elif loss_func == "nuc":
-
-            @eqx.filter_value_and_grad(has_aux=True)
-            def loss_fun(model, input, out, idx, lambda_nuc, norm_loss=None, **kwargs):
-                if norm_loss is None:
-                    norm_loss = norm_loss_
-                pred = model(input)
-                wv = jnp.array([1.0, lambda_nuc])
-                if isinstance(model, CNN_Autoencoder):
-                    weight = model.encode.layers[1].weight
-                else:
-                    weight = model.encode.layers_l[0].weight
-                return find_weighted_loss(
-                    [
-                        norm_loss(pred, out),
-                        jnp.linalg.norm(weight, "nuc"),
-                    ],
-                    weight_vals=wv,
-                ), (pred,)
-
-        elif loss_func == "var":
-
-            @eqx.filter_value_and_grad(has_aux=True)
-            def loss_fun(model, input, out, idx, epsilon, **kwargs):
-                pred = model(input, epsilon=epsilon)
-                _, means, logvars = model.latent(input, epsilon=epsilon, ret=True)
-                wv = jnp.array([1.0, 0.1])
-                kl_loss = jnp.sum(
-                    -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
-                )
-                return find_weighted_loss(
-                    [norm_loss_(pred, out), kl_loss], weight_vals=wv
-                ), (
-                    norm_loss_(pred, out),
-                    kl_loss,
-                )
+        if callable(loss_type):
+            loss_fun = loss_type
+        else:
+            loss_fun = loss_generator(loss_type, loss)
 
         @eqx.filter_jit
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
@@ -182,8 +123,6 @@ class Trainor_class:
             updates, opt_state = optim.update(grads, opt_state)
             model = eqx.apply_updates(model, updates)
             return loss, model, opt_state, aux
-
-        v_print("Training the RRAE...", verbose)
 
         if mul_lr_func is not None:
             filter_spec = jtu.tree_map(lambda _: False, model)
@@ -232,11 +171,6 @@ class Trainor_class:
                 ):
                     start = time.perf_counter()
 
-                    if loss_func == "var":
-                        epsilon = model._sample.create_epsilon(
-                            counter, input_b.shape[0]
-                        )
-                        loss_kwargs["epsilon"] = epsilon
                     loss, model, opt_state, aux = make_step(
                         model,
                         input_b.T,
@@ -275,7 +209,7 @@ class Trainor_class:
         self.t_all = t_all
         return model
 
-    def post_process(
+    def evaluate(
         self,
         x_train_o,
         y_train_o,
@@ -304,11 +238,13 @@ class Trainor_class:
         """
         call_func = self.model if call_func is None else call_func
 
-        batch_size = self.batch_size if batch_size is None else batch_size
-        self.x_train_o = x_train_o
-        self.y_train_o = y_train_o
+        assert (
+            hasattr(self, "batch_size") or batch_size is not None
+        ), "You should either provide a batch_size or fit the model first."
 
-        self.y_pred_train_o = self.model.eval_with_batches(
+        batch_size = self.batch_size if batch_size is None else batch_size
+
+        y_pred_train_o = self.model.eval_with_batches(
             x_train_o,
             batch_size,
             call_func=call_func,
@@ -317,51 +253,54 @@ class Trainor_class:
         )
 
         self.error_train_o = (
-            jnp.linalg.norm(self.y_pred_train_o - self.y_train_o)
-            / jnp.linalg.norm(self.y_train_o)
+            jnp.linalg.norm(y_pred_train_o - y_train_o)
+            / jnp.linalg.norm(y_train_o)
             * 100
         )
         print("Train error on original output: ", self.error_train_o)
 
-        self.y_pred_train = self.model.norm_out(self.y_pred_train_o)
-        self.y_train = self.model.norm_out(self.y_train_o)
+        y_pred_train = self.model.norm_out(y_pred_train_o)
+        y_train = self.model.norm_out(y_train_o)
         self.error_train = (
-            jnp.linalg.norm(self.y_pred_train - self.y_train)
-            / jnp.linalg.norm(self.y_train)
-            * 100
+            jnp.linalg.norm(y_pred_train - y_train) / jnp.linalg.norm(y_train) * 100
         )
         print("Train error on normalized output: ", self.error_train)
 
         if x_test_o is not None:
-            self.x_test_o = x_test_o
-            self.y_pred_test_o = self.model.eval_with_batches(
+            y_pred_test_o = self.model.eval_with_batches(
                 x_test_o, batch_size, call_func=call_func, key=jrandom.key(0)
             )
-            self.y_test_o = y_test_o
             self.error_test_o = (
-                jnp.linalg.norm(self.y_pred_test_o - self.y_test_o)
-                / jnp.linalg.norm(self.y_test_o)
+                jnp.linalg.norm(y_pred_test_o - y_test_o)
+                / jnp.linalg.norm(y_test_o)
                 * 100
             )
             print("Test error on original output: ", self.error_test_o)
 
-            self.y_test = self.model.norm_out(self.y_test_o)
-            self.y_pred_test = self.model.norm_out(self.y_pred_test_o)
+            y_test = self.model.norm_out(y_test_o)
+            y_pred_test = self.model.norm_out(y_pred_test_o)
             self.error_test = (
-                jnp.linalg.norm(self.y_pred_test - self.y_test)
-                / jnp.linalg.norm(self.y_test)
-                * 100
+                jnp.linalg.norm(y_pred_test - y_test) / jnp.linalg.norm(y_test) * 100
             )
             print("Test error on normalized output: ", self.error_test)
 
         else:
             self.error_test = None
             self.error_test_o = None
-            self.y_pred_test = None
-            self.y_pred_test_o = None
+            y_pred_test_o = None
+            y_pred_test = None
 
         print("Total training time: ", self.t_all)
-        return self.error_train, self.error_test, self.error_train_o, self.error_test_o
+        return {
+            "error_train": self.error_train,
+            "error_test": self.error_test,
+            "error_train_o": self.error_train_o,
+            "error_test_o": self.error_test_o,
+            "y_pred_train_o": y_pred_train_o,
+            "y_pred_test_o": y_pred_test_o,
+            "y_pred_train": y_pred_train,
+            "y_pred_test": y_pred_test,
+        }
 
     def save(self, filename=None, erase=True, **kwargs):
         """Saves the trainor class."""
@@ -371,7 +310,7 @@ class Trainor_class:
                 shutil.rmtree(self.folder)
                 os.makedirs(self.folder)
 
-        with open(f"{filename}.pkl", "wb") as f:
+        with open(filename, "wb") as f:
             dill.dump(self.all_kwargs, f)
             eqx.tree_serialise_leaves(f, self.model)
             dill.dump(
@@ -381,10 +320,10 @@ class Trainor_class:
                 ),
                 f,
             )
-        print(f"Model saved in {filename}.pkl")
+        print(f"Model saved in {filename}")
 
     def load(self, filename, erase=False):
-        with open(f"{filename}.pkl", "rb") as f:
+        with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
             kwargs = self.all_kwargs["kwargs"]
@@ -406,11 +345,72 @@ class Trainor_class:
                 setattr(self, key, attributes[key])
             self.fitted = True
         if erase:
-            os.remove(f"{filename}.pkl")
+            os.remove(filename)
 
 
-class AE_Trainor_class(Trainor_class):
-    def post_process(
+class RRAE_Trainor_class(Trainor_class):
+    def train(self):
+        self.model.train()
+    
+    def eval(self):
+        if hasattr(self, "basis"):
+            self.model.eval(basis=self.basis)
+        else:
+            pass
+
+    def fit(self, *args, training_key, **kwargs):
+        print("Training RRAEs...")
+
+        if "training_kwargs" in kwargs:
+            training_kwargs = kwargs["training_kwargs"]
+        else:
+            training_kwargs = {}
+
+        key0, key1 = jrandom.split(training_key)
+
+        model = super().fit(*args, training_key=key0, **training_kwargs)
+        inp = args[0] if len(args) > 0 else kwargs["input"]
+
+        if "batch_size_st" in training_kwargs:
+            batch_size = training_kwargs["batch_size_st"][-1]
+        else:
+            batch_size = 16  # default value
+
+        all_bases = model.eval_with_batches(
+            inp,
+            batch_size,
+            call_func=lambda x: model.latent(x, get_svd=True)[0],
+            str="Finding train latent space...",
+            end_type="concat",
+            key=jrandom.key(0),
+        )
+        norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
+
+        basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
+
+        self.basis = basis[:, :self.model.k_max.attr]
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(model, input, out, idx, basis):
+            pred = model(input, apply_basis=self.basis, inv_norm_out=False)
+            return norm_loss_(pred, out), (pred,)
+
+        if "ft_kwargs" in kwargs:
+            ft_kwargs = kwargs["ft_kwargs"]
+        else:
+            ft_kwargs = {}
+
+        if "loss_type" in ft_kwargs:
+            raise ValueError(
+                "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
+            )
+        ft_kwargs["loss_type"] = loss_fun
+        ft_kwargs["loss_kwargs"] = {"basis": basis}
+
+        print("Fine tuning the basis found ...")
+        super().fit(*args, training_key=key1, **ft_kwargs)
+
+    def evaluate(
         self,
         x_train_o,
         y_train_o,
@@ -420,113 +420,86 @@ class AE_Trainor_class(Trainor_class):
         p_test=None,
         batch_size=None,
     ):
-        call_func = lambda x: self.model.decode(self.model.encode(x))
 
-        super().post_process(
+        call_func = lambda x: self.model(x, apply_basis=self.basis)
+
+        res = super().evaluate(
             x_train_o, y_train_o, x_test_o, y_test_o, batch_size, call_func=call_func
         )
-
-        batch_size = self.batch_size if batch_size is None else batch_size
-
-        self.latent_train = self.model.eval_with_batches(
-            self.x_train_o,
-            batch_size,
-            call_func=self.model.latent,
-            str="Finding train latent space...",
-            key=jrandom.key(0),
-        )
-
-        # self.basis = self.model.latent(self.x_train_o, get_basis=True)
-
-        if x_test_o is not None:
-        #     self.x_test_o = x_test_o
-        #     assert (
-        #         y_test_o is not None
-        #     ), "You should provide y_test_o if you provide x_test_o."
-        #     call_func = lambda x: self.model.latent(x, apply_basis=self.basis)
-            self.latent_test = self.model.eval_with_batches(
-                self.x_test_o,
-                batch_size,
-                call_func=call_func,
-                str="Finding test latent space...",
-                key=jrandom.key(0),
-            )
-        #     self.y_pred_test_o = self.model.eval_with_batches(
-        #         self.latent_test,
-        #         batch_size,
-        #         call_func=self.model.decode,
-        #         str="Finding test predictions...",
-        #         key=jrandom.key(0),
-        #     )
-
-        #     self.y_test_o = y_test_o
-        #     self.error_test_o = (
-        #         jnp.linalg.norm(self.y_pred_test_o - self.y_test_o)
-        #         / jnp.linalg.norm(self.y_test_o)
-        #         * 100
-        #     )
-        #     print("Test error on original output: ", self.error_test_o)
-
-        #     self.y_test = self.model.norm_out(self.y_test_o)
-        #     self.y_pred_test = self.model.norm_out(self.y_pred_test_o)
-        #     self.error_test = (
-        #         jnp.linalg.norm(self.y_pred_test - self.y_test)
-        #         / jnp.linalg.norm(self.y_test)
-        #         * 100
-        #     )
-        #     print("Test error on normalized output: ", self.error_test)
-        # else:
-        #     self.latent_test = None
 
         if p_train is not None:
             assert (
                 p_test is not None
             ), "You should provide p_test if you provide p_train."
-            self.AE_interpolate(p_train, p_test, batch_size)
+            res = res | self.AE_interpolate(p_train, p_test, x_train_o, y_test_o, batch_size)
+        return res
 
-    def AE_interpolate(self, p_train, p_test, batch_size=None):
+    def AE_interpolate(
+        self, p_train, p_test, x_train_o, y_test_o, y_test, batch_size=None
+    ):
         """Interpolates the latent space of the model and then decodes it to find the output."""
-
         batch_size = self.batch_size if batch_size is None else batch_size
 
-        try:
-            self.p_train = p_train
-            self.p_test = p_test
+        latent_train = self.model.eval_with_batches(
+            x_train_o,
+            batch_size,
+            call_func=lambda x: self.model.latent(x, apply_basis=self.basis),
+            str="Finding train latent space used for interpolation...",
+            key=jrandom.key(0),
+        )
 
-            interpolation = Objects_Interpolator_nD()
-            self.latent_test_interp = interpolation(
-                self.p_test, self.p_train, self.latent_train
-            )
+        interpolation = Objects_Interpolator_nD()
+        latent_test_interp = interpolation(p_test, p_train, latent_train)
 
-            self.y_pred_interp_test_o = self.model.decode(self.latent_test_interp)
-            self.error_interp_test_o = (
-                jnp.linalg.norm(self.y_pred_interp_test_o - self.y_test_o)
-                / jnp.linalg.norm(self.y_test_o)
-                * 100
-            )
-            print(
-                "Test (interpolation) error over original output: ",
-                self.error_interp_test_o,
-            )
+        y_pred_interp_test_o = self.model.eval_with_batches(
+            latent_test_interp,
+            batch_size,
+            call_func=lambda x: self.model.decode(x),
+            str="Decoding interpolated latent space ...",
+            key=jrandom.key(0),
+        )
 
-            self.y_pred_interp_test = self.model.norm_out(self.y_pred_interp_test_o)
-            self.error_interp_test = (
-                jnp.linalg.norm(self.y_pred_interp_test - self.y_test)
-                / jnp.linalg.norm(self.y_test)
-                * 100
-            )
-            print(
-                "Test (interpolation) error over normalized output: ",
-                self.error_interp_test,
-            )
-            return self.error_interp_test, self.error_interp_test_o
-        except AttributeError:
-            raise AttributeError(
-                "You should first call the post_process method before calling the AE_interpolate method."
-            )
+        self.error_interp_test_o = (
+            jnp.linalg.norm(y_pred_interp_test_o - y_test_o)
+            / jnp.linalg.norm(y_test_o)
+            * 100
+        )
+        print(
+            "Test (interpolation) error over original output: ",
+            self.error_interp_test_o,
+        )
+
+        y_pred_interp_test = self.model.eval_with_batches(
+            y_pred_interp_test_o,
+            batch_size,
+            call_func=lambda x: self.model.norm_out(x),
+            str="Finding Normalized pred of interpolated latent space ...",
+            key=jrandom.key(0),
+        )
+
+        y_test = self.model.eval_with_batches(
+            y_test_o,
+            batch_size,
+            call_func=lambda x: self.model.norm_out(x),
+            str="Finding Normalized output of interpolated latent space ...",
+            key=jrandom.key(0),
+        )
+        self.error_interp_test = (
+            jnp.linalg.norm(y_pred_interp_test - y_test) / jnp.linalg.norm(y_test) * 100
+        )
+        print(
+            "Test (interpolation) error over normalized output: ",
+            self.error_interp_test,
+        )
+        return {
+            "error_interp_test": self.error_interp_test,
+            "error_interp_test_o": self.error_interp_test_o,
+            "y_pred_interp_test_o": y_pred_interp_test_o,
+            "y_pred_interp_test": y_pred_interp_test,
+        }
 
 
-class V_AE_Trainor_class(AE_Trainor_class):
+class V_AE_Trainor_class(RRAE_Trainor_class):
     """ " Trainor class for variational batching."""
 
     def old_fit(self, *args, **kwargs):
@@ -536,7 +509,7 @@ class V_AE_Trainor_class(AE_Trainor_class):
         self,
         input,
         output,
-        loss_func=None,
+        loss_type=None,
         step_st=[3000, 3000],  # 000, 8000],
         lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
         print_every=20,
@@ -554,7 +527,7 @@ class V_AE_Trainor_class(AE_Trainor_class):
         output = self.model.norm_out(output)
 
         training_params = {
-            "loss_func": loss_func,
+            "loss_type": loss_type,
             "step_st": step_st,
             "lr_st": lr_st,
             "print_every": print_every,
@@ -642,7 +615,12 @@ class V_AE_Trainor_class(AE_Trainor_class):
                     start = time.perf_counter()
 
                     I = jnp.eye(batch_size)
-                    G = jrandom.uniform(jrandom.key(inc), (batch_size, batch_size), minval=-0.1, maxval=0.1)
+                    G = jrandom.uniform(
+                        jrandom.key(inc),
+                        (batch_size, batch_size),
+                        minval=-0.1,
+                        maxval=0.1,
+                    )
                     G = G.at[idx_batch, idx_batch].set(0)
 
                     loss, model, opt_state, aux = make_step(

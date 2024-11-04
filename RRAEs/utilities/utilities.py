@@ -24,8 +24,97 @@ import warnings
 from itertools import cycle
 import dill
 
+
 _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
+
+
+def loss_generator(which=None, norm_loss_=None):
+    if norm_loss_ is None:
+        norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
+
+    if (which == "Strong") or (which == "default") or (which == "Vanilla"):
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(model, input, out, idx, **kwargs):
+            pred = model(input, inv_norm_out=False)
+            wv = jnp.array([1.0])
+            return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (pred,)
+
+    elif which == "Weak":
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(model, input, out, idx, norm_loss=None, **kwargs):
+            if norm_loss is None:
+                norm_loss = norm_loss_
+            pred = model(input)
+            x = model.latent(input)
+            wv = jnp.array([1.0, 1.0])
+            return find_weighted_loss(
+                [
+                    norm_loss(pred, out),
+                    jnp.linalg.norm(x - model.v_vt()[:, idx])
+                    / jnp.linalg.norm(x)
+                    * 100,
+                ],
+                weight_vals=wv,
+            ), (
+                norm_loss(pred, out),
+                jnp.linalg.norm(x - model.v_vt()[:, idx]) / jnp.linalg.norm(x) * 100,
+            )
+
+    elif which == "nuc":
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(
+            model,
+            input,
+            out,
+            idx,
+            lambda_nuc,
+            norm_loss=None,
+            find_layer=None,
+            **kwargs,
+        ):
+            if norm_loss is None:
+                norm_loss = norm_loss_
+            pred = model(input)
+            wv = jnp.array([1.0, lambda_nuc])
+
+            if find_layer is None:
+                weight = model.encode.layers_l[0].weight  # 1 for CNN
+            else:
+                weight = find_layer(model)
+
+            return find_weighted_loss(
+                [
+                    norm_loss(pred, out),
+                    jnp.linalg.norm(weight, "nuc"),
+                ],
+                weight_vals=wv,
+            ), (pred,)
+
+    elif which == "var":
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(model, input, out, idx, epsilon, **kwargs):
+            pred = model(input, epsilon=epsilon)
+            _, means, logvars = model.latent(input, epsilon=epsilon, ret=True)
+            wv = jnp.array([1.0, 0.1])
+            kl_loss = jnp.sum(
+                -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
+            )
+            return find_weighted_loss(
+                [norm_loss_(pred, out), kl_loss], weight_vals=wv
+            ), (
+                norm_loss_(pred, out),
+                kl_loss,
+            )
+
+    else:
+        raise ValueError(f"{which} is an Unknown loss type")
+
+    return loss_fun
 
 
 def out_to_pic(out):
@@ -1056,7 +1145,7 @@ def v_dataloader(arrays, batch_size, p_vals=None, once=False, *, key, idx_change
             batch_perm = perm[start:end]
             I = all_zeros.at[batch_perm, idx_batch].set(1)
             i += 1
-            G = jrandom.normal(jrandom.key(i), (arrays[0].shape[0], batch_size))/1000
+            G = jrandom.normal(jrandom.key(i), (arrays[0].shape[0], batch_size)) / 1000
             G = jnp.zeros_like(G)
             X = I + G
             arrs = [(array.T @ X).T for array in arrays]

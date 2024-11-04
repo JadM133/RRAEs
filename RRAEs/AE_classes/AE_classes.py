@@ -22,17 +22,17 @@ _identity = doc_repr(lambda x, *args, **kwargs: x, "lambda x: x")
 class BaseClass(eqx.Module):
     map_axis: int
     model: eqx.Module
-    # norm_funcs: list
 
     def __init__(self, model, map_axis=None, *args, **kwargs):
         self.map_axis = map_axis
         self.model = model
 
-    def __call__(self, x):
+    def __call__(self, x, *args, **kwargs):
         if self.map_axis is None:
-            return self.model(x)
-        return jax.vmap(self.model, in_axes=[self.map_axis], out_axes=self.map_axis)(x)
-    
+            return self.model(x, *args, **kwargs)
+        fn = lambda x: self.model(x, *args, **kwargs)
+        return jax.vmap(fn, in_axes=[self.map_axis], out_axes=self.map_axis)(x)
+
     def eval_with_batches(
         self,
         x,
@@ -44,6 +44,7 @@ class BaseClass(eqx.Module):
         key,
         **kwargs,
     ):
+        # TODO: Test if this works with args and kwargs as intended
         idxs = []
         all_preds = []
 
@@ -52,26 +53,30 @@ class BaseClass(eqx.Module):
             fn = lambda x, *args, **kwargs: tqdm(x, *args, **kwargs)
         else:
             fn = lambda x, *args, **kwargs: x
-            
-        for _, (input_b, idx) in fn(zip(
-            itertools.count(start=0),
-            dataloader(
-                [x.T, jnp.arange(0, x.shape[-1], 1)],
-                batch_size,
-                key=key,
-                once=True,
+
+        for _, (input_b, idx) in fn(
+            zip(
+                itertools.count(start=0),
+                dataloader(
+                    [x.T, jnp.arange(0, x.shape[-1], 1)],
+                    batch_size,
+                    key=key,
+                    once=True,
+                ),
             ),
-        ), total=int(x.shape[-1] / batch_size)):
-            pred = call_func(input_b.T)
+            total=int(x.shape[-1] / batch_size),
+        ):
+            pred = call_func(input_b.T, *args, **kwargs)
             idxs.append(idx)
             all_preds.append(pred)
             if end_type == "first":
                 break
-
         idxs = jnp.concatenate(idxs)
         match end_type:
             case "concat_and_resort":
                 final_pred = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
+            case "concat":
+                final_pred = jnp.concatenate(all_preds, -1)
             case "mean":
                 final_pred = sum(all_preds) / len(all_preds)
             case "first":
@@ -199,7 +204,15 @@ class Autoencoder(eqx.Module):
         return self.perform_in_latent(self.encode(x), *args, **kwargs)
 
 
-def latent_func_strong_RRAE(y, k_max, apply_basis=None, get_basis=False, ret=False, *args, **kwargs):
+def latent_func_strong_RRAE(
+    y,
+    k_max,
+    apply_basis=None,
+    get_svd=False,
+    ret=False,
+    *args,
+    **kwargs,
+):
     """Performing the truncated SVD in the latent space.
 
     Parameters
@@ -215,18 +228,19 @@ def latent_func_strong_RRAE(y, k_max, apply_basis=None, get_basis=False, ret=Fal
     y_approx : jnp.array
         The latent space after the truncation.
     """
-    if get_basis:
+    if get_svd:
         if y.shape[-1] > y.shape[0]:
             new_y = y @ y.T
         else:
             new_y = y
         u, s, v = jnp.linalg.svd(new_y, full_matrices=False)
         u_now = u[:, :k_max]
-        return u_now
-    
+        coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+        return u_now, coeffs
+
     if apply_basis is not None:
         return apply_basis @ apply_basis.T @ y
-      
+
     if k_max != -1:
         u, s, v = jnp.linalg.svd(y, full_matrices=False)
         sigs = s[:k_max]
