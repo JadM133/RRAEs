@@ -306,6 +306,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
             ls = []
             if not google:
                 folder = folder
+                iterr = os.listdir(folder)
             else:
                 from google.cloud import storage
                 data_folder = "gs://celeba_013/img_align_celeba/"
@@ -319,9 +320,9 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 bucket = client.get_bucket(bucket_name)
             
                 # List all blobs in the specified folder
-                folder = bucket.list_blobs(prefix=folder_path)
+                iterr = bucket.list_blobs(prefix=folder_path)
                 
-            for i, file in enumerate(os.listdir(folder)):
+            for i, file in enumerate(iterr):
                 im = Image.open(os.path.join(folder, file))
                 im = im.convert("RGB")
                 im = np.asarray(im)
