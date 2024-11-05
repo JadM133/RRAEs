@@ -187,13 +187,20 @@ def divide_return(
     pod=False,
     test_end=0,
     eps=1,
+    pre_func_in=lambda x: x,
+    post_func_out=lambda x: x,
     args=(),
 ):
     """p_all of shape (P x N) and y_all of shape (T x N).
     The function divides into train/test according to the parameters
     to allow the test set to be interpolated linearly from the training set
     (if possible). If test_end is specified this is overwridden to only take
-    the lest test_end values for testing."""
+    the lest test_end values for testing.
+
+    NOTE: pre_func_in and pre_func_out are functions you want to apply over
+    the input and output but you can not do it on all the data since it is
+    too big (e.g. conversion to float). These functions will be applied on
+    batches during training/evaluation of the Network."""
 
     if test_end == 0:
         if p_all is not None:
@@ -249,6 +256,8 @@ def divide_return(
             p_test,
             output_train,
             output_test,
+            pre_func_in,
+            post_func_out,
             args,
         )
 
@@ -279,14 +288,54 @@ def divide_return(
         p_test,
         output_train,
         output_test,
+        pre_func_in,
+        post_func_out,
         args,
     )
 
 
-def get_data(problem, **kwargs):
+def get_data(problem, folder=None, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
+        case "CelebA":
+            data_res = 160
+            import os
+            from PIL import Image
+
+            ls = []
+
+            for i, file in enumerate(os.listdir(folder)):
+                im = Image.open(os.path.join(folder, file))
+                im = im.convert("RGB")
+                im = np.asarray(im)
+                im = jnp.array(im, dtype=jnp.uint8)
+                im = jax.image.resize(
+                    im, (data_res, data_res, 3), method="bilinear"
+                )
+                im = jnp.astype(im, jnp.uint8)
+                ls.append(im)
+                
+            data = jnp.stack(ls, axis=-1)
+            data = jnp.moveaxis(data, 2, 0)
+            x_train = data[..., :162770]
+            x_test = data[..., 182638:]
+            y_train = x_train
+            y_test = x_test
+            pre_func_in = lambda x: jnp.astype(x, jnp.float32) / 255.0
+            pre_func_out = lambda x: jnp.astype(x, jnp.float32) / 255.0
+            return (
+                x_train,
+                x_test,
+                None,
+                None,
+                y_train,
+                y_test,
+                pre_func_in,
+                pre_func_out,
+                (),
+            )
+
         case "skf_ft":
             import os
             import scipy.io
@@ -1043,8 +1092,7 @@ def get_data(problem, **kwargs):
                         jnp.squeeze(x_test),
                         jnp.array(y_now_t),
                     )  # [45000:]
-            x_all = x_all  # [..., 45000:]
-
+            x_all = jnp.expand_dims(x_all, 0)  # [..., 45000:]
             return divide_return(x_all, None, test_end=x_test.shape[-1])
         case _:
             raise ValueError(f"Problem {problem} not recognized")
@@ -1541,6 +1589,7 @@ class CNNs_with_linear(eqx.Module, strict=True):
         self,
         data_dim0,
         out,
+        channels=1,
         CNNs_num=4,
         CNN_widths=[32, 64, 128],
         kernel_conv=3,
@@ -1563,7 +1612,7 @@ class CNNs_with_linear(eqx.Module, strict=True):
             last_width = CNN_widths
 
         mlcnn = MLCNN(
-            1,
+            channels,
             last_width,
             stride,
             padding,
@@ -1575,14 +1624,12 @@ class CNNs_with_linear(eqx.Module, strict=True):
             final_activation=_relu,
             **kwargs_cnn,
         )
-
-        final_D = mlcnn(jnp.zeros((1, data_dim0, data_dim0))).shape[-1]
+        final_D = mlcnn(jnp.zeros((channels, data_dim0, data_dim0))).shape[-1]
         linear = Linear((final_D) ** 2 * last_width, out, key=key2)
         act = lambda x: final_activation(x)
         self.layers = tuple([mlcnn, linear, act])
 
     def __call__(self, x, *args, **kwargs):
-        x = jnp.expand_dims(x, 0)
         x = self.layers[0](x)
         x = jnp.expand_dims(jnp.ravel(x), -1)
         x = self.layers[1](jnp.squeeze(x))
@@ -1729,7 +1776,7 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         x = self.layers_[1](x)
         x = self.layers_[2](x)
         x = self.layers_[3](x)
-        return x[0]
+        return x
 
 
 class Sample(eqx.Module):

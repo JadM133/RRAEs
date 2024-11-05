@@ -34,8 +34,12 @@ class Trainor_class:
         out_train=None,
         norm_in="None",
         norm_out="None",
+        pre_func_inp=lambda x: x,
+        pre_func_out=lambda x: x,
         **kwargs,
     ):
+        self.pre_func_inp = pre_func_inp
+        self.pre_func_out = pre_func_out
         if model_cls is not None:
             self.model = Norm(
                 BaseClass(model_cls(**kwargs), map_axis=map_axis),
@@ -43,6 +47,8 @@ class Trainor_class:
                 out_train=out_train,
                 norm_in=norm_in,
                 norm_out=norm_out,
+                pre_func_inp=self.pre_func_inp,
+                pre_func_out=self.pre_func_out
             )
             params_in = self.model.params_in
             params_out = self.model.params_out
@@ -58,6 +64,8 @@ class Trainor_class:
             "norm_out": norm_out,
             "map_axis": map_axis,
             "model_cls": model_cls,
+            "pre_func_inp": pre_func_inp,
+            "pre_func_out": pre_func_out,
         }
 
         self.folder = folder
@@ -94,7 +102,7 @@ class Trainor_class:
     ):
         self.x_train = input
         self.y_train = output
-        output = self.model.norm_out(output)
+        output = self.model.norm_out(self.model.pre_func_out(output))
 
         training_params = {
             "loss": loss,
@@ -243,7 +251,7 @@ class Trainor_class:
             If anything other than False, the model as well as the results will be saved in f"{save}".pkl
         """
         call_func = self.model if call_func is None else call_func
-
+        y_train_o = self.model.pre_func_out(y_train_o)
         assert (
             hasattr(self, "batch_size") or batch_size is not None
         ), "You should either provide a batch_size or fit the model first."
@@ -273,6 +281,7 @@ class Trainor_class:
         print("Train error on normalized output: ", self.error_train)
 
         if x_test_o is not None:
+            y_test_o = self.model.pre_func_out(y_test_o)
             y_pred_test_o = self.model.eval_with_batches(
                 x_test_o, batch_size, call_func=call_func, key=jrandom.key(0)
             )
@@ -338,12 +347,16 @@ class Trainor_class:
             self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
+            self.pre_func_inp = self.all_kwargs["pre_func_inp"]
+            self.pre_func_out = self.all_kwargs["pre_func_out"]
             self.model = Norm(
                 BaseClass(self.model_cls(**kwargs), map_axis=self.map_axis),
                 norm_in=self.norm_in,
                 norm_out=self.norm_out,
                 params_in=self.params_in,
                 params_out=self.params_out,
+                pre_func_inp=self.pre_func_inp,
+                pre_func_out=self.pre_func_out
             )
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             attributes = dill.load(f)

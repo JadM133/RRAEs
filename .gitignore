@@ -179,3 +179,5 @@ for_paper/MNIST
 *.png
 *.gz
 MNIST/*
+img_align_celeba/*
+*.jpg

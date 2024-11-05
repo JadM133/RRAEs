@@ -38,6 +38,8 @@ class Norm(eqx.Module):
     norm_out: callable
     inv_norm_out: callable
     norm_and_inv_func: callable
+    pre_func_inp: callable
+    pre_func_out: callable
 
     def __init__(
         self,
@@ -47,16 +49,18 @@ class Norm(eqx.Module):
         norm_in="None",
         norm_out="None",
         params_in=None,
-        params_out=None, 
+        params_out=None,
+        pre_func_inp=lambda x: x,
+        pre_func_out=lambda x: x,
     ):
 
         assert (params_in is not None) or (
             in_train is not None
         ), "Either params or in_train must be provided to set norm parameters"
 
-        assert not (params_in is not None and in_train is not None), (
-            "Only one of params or in_train must be provided to set norm parameters"
-        )
+        assert not (
+            params_in is not None and in_train is not None
+        ), "Only one of params or in_train must be provided to set norm parameters"
 
         self.norm_in = norm_in
         self.norm_out = norm_out
@@ -69,7 +73,10 @@ class Norm(eqx.Module):
         match norm_in:
             case "minmax":
                 if params_in is None:
-                    self.params_in = {"min": jnp.min(in_train), "max": jnp.max(in_train)}
+                    self.params_in = {
+                        "min": jnp.min(in_train),
+                        "max": jnp.max(in_train),
+                    }
                 else:
                     self.params_in = params_in
                 self.norm_in = lambda x: (x - self.params_in["min"]) / (
@@ -81,7 +88,10 @@ class Norm(eqx.Module):
                 )
             case "meanstd":
                 if params_in is None:
-                    self.params_in = {"mean": jnp.mean(in_train), "std": jnp.std(in_train)}
+                    self.params_in = {
+                        "mean": jnp.mean(in_train),
+                        "std": jnp.std(in_train),
+                    }
                 else:
                     self.params_in = params_in
                 self.norm_in = (
@@ -103,7 +113,10 @@ class Norm(eqx.Module):
         match norm_out:
             case "minmax":
                 if params_out is None:
-                    self.params_out = {"min": jnp.min(out_train), "max": jnp.max(out_train)}
+                    self.params_out = {
+                        "min": jnp.min(out_train),
+                        "max": jnp.max(out_train),
+                    }
                 else:
                     self.params_out = params_out
                 self.norm_out = lambda x: (x - self.params_out["min"]) / (
@@ -134,20 +147,25 @@ class Norm(eqx.Module):
                     self.params_out = params_out
                 self.norm_out = lambda x: x
                 self.inv_norm_out = lambda x: x
+        self.pre_func_inp = pre_func_inp
+        self.pre_func_out = pre_func_out
 
         def norm_and_inv_func(
             func, norm_bool=True, inv_bool=True
         ):  # functions to be norm/inv_norl have to accept x as first arg
             if norm_bool and inv_bool:
                 return lambda x, *args, **kwargs: self.inv_norm_out(
-                    func(self.norm_in(x), *args, **kwargs)
+                    func(self.norm_in(self.pre_func_inp(x)), *args, **kwargs)
                 )
             if norm_bool:
-                return lambda x, *args, **kwargs: func(self.norm_in(x), *args, **kwargs)
+                return lambda x, *args, **kwargs: func(
+                    self.norm_in(self.pre_func_inp(x)), *args, **kwargs
+                )
             if inv_bool:
                 return lambda x, *args, **kwargs: self.inv_norm_out(
                     func(x), *args, **kwargs
                 )
+
             return lambda *args, **kwargs: func(*args, **kwargs)
 
         self.norm_and_inv_func = norm_and_inv_func

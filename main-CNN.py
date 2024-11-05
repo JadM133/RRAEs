@@ -13,7 +13,7 @@ import jax.nn as jnn
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "mnist_"
+    problem = "CelebA"
     (
         x_train,
         x_test,
@@ -21,10 +21,14 @@ if __name__ == "__main__":
         p_test,
         y_train,
         y_test,
-        args,
-    ) = get_data(problem)
+        pre_func_inp,
+        pre_func_out,
+        kwargs,
+    ) = get_data(problem, folder="img_align_celeba")
 
-    print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
+    # C is channels, D is the dimensions of the image (only same length and width
+    # are supported), and Ntr is the number of training samples.
+    print(f"Shape of data is {x_train.shape} (C x D x D x Ntr) and {x_test.shape}.")
 
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
     method = "Strong"
@@ -52,16 +56,19 @@ if __name__ == "__main__":
         x_train,
         model_cls,
         latent_size=latent_size,
-        in_size=x_train.shape[0],
+        data_size=x_train.shape[1],
+        channels=x_train.shape[0],
+        pre_func_inp=pre_func_inp,
+        pre_func_out=pre_func_out,
         k_max=k_max,
         folder=f"{problem}/{method}_{problem}/",
         file=f"{method}_{problem}.pkl",
-        norm_in="minmax",
-        norm_out="minmax",
+        norm_in="None",
+        norm_out="None",
         out_train=x_train,
         kwargs_dec={
-                "final_activation": jnn.sigmoid
-            },  # this is how you change the final activation
+            "final_activation": jnn.sigmoid
+        },  # this is how you change the final activation
         key=jrandom.PRNGKey(0),
     )
 
@@ -70,14 +77,14 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [5000, 5000],
+        "step_st": [5],
         "batch_size_st": [20, 20],
-        "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
-        "print_every": 10,
+        "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
+        "print_every": 1,
     }
 
     ft_kwargs = {
-        "step_st": [1000],
+        "step_st": [5],
         "batch_size_st": [64, 64],
         "lr_st": [1e-3, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -92,10 +99,8 @@ if __name__ == "__main__":
         ft_kwargs=ft_kwargs,
     )
     preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test)
-    trainor.save()
+    trainor.save(kwargs=kwargs)
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
     # pdb.set_trace()
-
-
