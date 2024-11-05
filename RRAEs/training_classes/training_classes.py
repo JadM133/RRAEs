@@ -91,6 +91,7 @@ class Trainor_class:
         step_st=[3000, 3000],  # 000, 8000],
         lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
         print_every=20,
+        save_every=50,
         batch_size_st=[16, 16, 16, 16, 32],
         mul_lr=None,
         mul_lr_func=None,  #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
@@ -210,6 +211,9 @@ class Trainor_class:
                             )
                         t_all += t_t
                         t_t = 0
+                    if (step % save_every) == 0:
+                        self.model = model
+                        self.save()
                     if jnp.isnan(loss):
                         print("Loss is nan, stopping training...")
                         break
