@@ -294,7 +294,7 @@ def divide_return(
     )
 
 
-def get_data(problem, folder=None, **kwargs):
+def get_data(problem, folder=None, google=True, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
@@ -304,7 +304,23 @@ def get_data(problem, folder=None, **kwargs):
             from PIL import Image
 
             ls = []
-
+            if not google:
+                folder = folder
+            else:
+                from google.cloud import storage
+                data_folder = "gs://celeba_013/img_align_celeba/"
+                client = storage.Client()
+    
+                # Extract bucket name and folder from the provided path
+                bucket_name = data_folder.split('/')[2]  # Extract bucket name
+                folder_path = '/'.join(data_folder.split('/')[3:])  # Remaining path is the folder
+            
+                # Reference the bucket
+                bucket = client.get_bucket(bucket_name)
+            
+                # List all blobs in the specified folder
+                folder = bucket.list_blobs(prefix=folder_path)
+                
             for i, file in enumerate(os.listdir(folder)):
                 im = Image.open(os.path.join(folder, file))
                 im = im.convert("RGB")
