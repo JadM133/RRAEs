@@ -21,6 +21,8 @@ if __name__ == "__main__":
         p_test,
         y_train,
         y_test,
+        pre_func_inp,
+        pre_func_out,
         args,
     ) = get_data(problem)
 
