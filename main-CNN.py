@@ -13,6 +13,7 @@ import jax.nn as jnn
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
+    print("GOT TO MAIN!!!")
     problem = "CelebA"
     (
         x_train,
