@@ -1,3 +1,4 @@
+print("GOT TO IMPORT")
 from RRAEs.AE_classes import (
     Strong_RRAE_CNN,
     Weak_RRAE_CNN,
@@ -26,7 +27,7 @@ if __name__ == "__main__":
         pre_func_out,
         kwargs,
     ) = get_data(problem, folder="img_align_celeba")
-
+    print("GOT AFTER DATA")
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
     print(f"Shape of data is {x_train.shape} (C x D x D x Ntr) and {x_test.shape}.")
