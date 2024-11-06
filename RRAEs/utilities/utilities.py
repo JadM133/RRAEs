@@ -307,34 +307,50 @@ def get_data(problem, folder=None, google=True, **kwargs):
             if not google:
                 folder = folder
                 iterr = os.listdir(folder)
+                for i, file in enumerate(iterr):
+                    im = Image.open(os.path.join(folder, file))
+                    im = im.convert("RGB")
+                    im = np.asarray(im)
+                    im = jnp.array(im, dtype=jnp.uint8)
+                    im = jax.image.resize(
+                        im, (data_res, data_res, 3), method="bilinear"
+                    )
+                    im = jnp.astype(im, jnp.uint8)
+                    ls.append(im)
             else:
                 from google.cloud import storage
+                import io
+
                 data_folder = "gs://celeba_013/img_align_celeba/"
                 client = storage.Client()
-    
+
                 # Extract bucket name and folder from the provided path
-                bucket_name = data_folder.split('/')[2]  # Extract bucket name
-                folder_path = '/'.join(data_folder.split('/')[3:])  # Remaining path is the folder
-            
+                bucket_name = data_folder.split("/")[2]  # Extract bucket name
+                folder_path = "/".join(data_folder.split("/")[3:])
+
                 # Reference the bucket
-                bucket = client.get_bucket(bucket_name)
-            
+                bucket = client.get_bucket(bucket_name)  # 85091 -> 89666 to remove
+
                 # List all blobs in the specified folder
-                iterr = bucket.list_blobs(prefix=folder_path)
-                
-            for i, file in enumerate(iterr):
-                im = Image.open(os.path.join(folder, file))
-                im = im.convert("RGB")
-                im = np.asarray(im)
-                im = jnp.array(im, dtype=jnp.uint8)
-                im = jax.image.resize(
-                    im, (data_res, data_res, 3), method="bilinear"
-                )
-                im = jnp.astype(im, jnp.uint8)
-                ls.append(im)
-                
+                iterr = list(bucket.list_blobs(prefix=folder_path))
+                for i, blob in enumerate(iterr):
+                    if 85091 <= i <= 89666:
+                        continue
+                    # Download the blob as a string and convert it to a numpy array
+                    image = blob.download_as_bytes()
+                    im = Image.open(io.BytesIO(image))
+                    im = im.convert("RGB")
+                    im = np.asarray(im)
+                    im = jnp.array(im, dtype=jnp.uint8)
+                    im = jax.image.resize(
+                        im, (data_res, data_res, 3), method="bilinear"
+                    )
+                    im = jnp.astype(im, jnp.uint8)
+                    ls.append(im)
+
             data = jnp.stack(ls, axis=-1)
             data = jnp.moveaxis(data, 2, 0)
+            print("Data shape: ", data.shape)
             x_train = data[..., :162770]
             x_test = data[..., 182638:]
             y_train = x_train
