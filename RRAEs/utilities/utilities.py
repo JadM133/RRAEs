@@ -305,6 +305,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
             import os
             from PIL import Image
             import numpy as np
+            import cv2
             
             if os.path.exists(f"../celeba_data_{data_res}.npy"):
                 print("Loading data from file")
@@ -312,8 +313,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
             else:
                 print("Loading data and processing...")
                 data = np.load("../celeba_data.npy")
-                celeb_transform = lambda im: jnp.astype(jax.image.resize(
-                            jnp.array(im, dtype=jnp.uint8), (jnp.array(im).shape[0], data_res, data_res, 3), method="bilinear"), jnp.uint8
+                celeb_transform = lambda im: np.astype(cv2.resize(
+                            im, (np.array(im).shape[0], data_res, data_res, 3), interpolation=cv2.INTER_LINEAR), np.uint8
                         )
                 all_data = []
                 for i in tqdm(range(data.shape[0] // 100 + 1)):
@@ -326,9 +327,9 @@ def get_data(problem, folder=None, google=True, **kwargs):
                         )
                         data = data[100:]
 
-                final_data = jnp.array((np.concatenate(data, axis=0)))
+                final_data = np.array((np.concatenate(data, axis=0)))
                 np.save(final_data, f"../celeba_data_{data_res}.npy")
-
+            pdb.set_trace()
             data = jnp.moveaxis(data, 2, 0)
             print("Data shape: ", data.shape)
             x_train = data[..., :162770]
