@@ -171,7 +171,7 @@ class Trainor_class:
 
                 if (batch_size > input.shape[-1]) or batch_size == -1:
                     batch_size = input.shape[-1]
-
+                pdb.set_trace()
                 for step, (input_b, out, idx) in zip(
                     range(steps),
                     dataloader(
