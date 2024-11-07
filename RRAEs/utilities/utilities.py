@@ -321,7 +321,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 for i in tqdm(range(data.shape[0])):
                     all_data.append(celeb_transform(data[i:i+1]))
 
-                final_data = np.array((np.concatenate(data, axis=0)))
+                final_data = np.concatenate(data, axis=0)
+                pdb.set_trace()
                 np.save(final_data, f"../celeba_data_{data_res}.npy")
             pdb.set_trace()
             data = jnp.moveaxis(data, 2, 0)
