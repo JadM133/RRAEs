@@ -314,6 +314,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 print("Loading data and processing...")
                 data = np.load("../celeba_data.npy")
                 data = data[:10]
+                pdb.set_trace()
                 celeb_transform = lambda im: np.astype(resize(
                             im, (data_res, data_res, 3), order=1, anti_aliasing=True), np.uint8
                         )
@@ -324,7 +325,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 data = np.stack(all_data, axis=0)
                 data = jnp.swapaxes(data, 0, 3)
                 np.save(f"../celeba_data_{data_res}.npy", data)
-            
+            pdb.set_trace()
             print("Data shape: ", data.shape)
             x_train = data[..., :162770]
             x_test = data[..., 182638:]
