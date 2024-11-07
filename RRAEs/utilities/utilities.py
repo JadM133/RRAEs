@@ -314,7 +314,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 data = np.load("../celeba_data.npy")
                 pdb.set_trace()
                 celeb_transform = lambda im: jnp.astype(jax.image.resize(
-                            jnp.array(im, dtype=jnp.uint8), (jnp.array(im).shape[0], data_res, data_res, 3), method="bilinear"), dtype=jnp.uint8
+                            jnp.array(im, dtype=jnp.uint8), (jnp.array(im).shape[0], data_res, data_res, 3), method="bilinear"), jnp.uint8
                         )
                 all_data = []
                 for i in tqdm(range(data.shape[0] // 100 + 1)):
