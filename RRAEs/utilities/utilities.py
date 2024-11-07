@@ -315,11 +315,11 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 data = np.load("../celeba_data.npy")
                 data = data[:10]
                 celeb_transform = lambda im: np.astype(resize(
-                            im, (np.array(im).shape[0], data_res, data_res, 3), order=1, anti_aliasing=True), np.uint8
+                            im, (data_res, data_res, 3), order=1, anti_aliasing=True), np.uint8
                         )
                 all_data = []
                 for i in tqdm(range(data.shape[0])):
-                    all_data.append(celeb_transform(data[i:i+1]))
+                    all_data.append(celeb_transform(data[i]))
 
                 data = np.concatenate(all_data, axis=0)
                 data = jnp.swapaxes(data, 0, 3)
