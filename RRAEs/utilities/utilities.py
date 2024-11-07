@@ -304,55 +304,30 @@ def get_data(problem, folder=None, google=True, **kwargs):
             data_res = 160
             import os
             from PIL import Image
-
-            ls = []
-            if not google:
-                folder = folder
-                iterr = os.listdir(folder)
-                for i, file in enumerate(iterr):
-                    im = Image.open(os.path.join(folder, file))
-                    im = im.convert("RGB")
-                    im = np.asarray(im)
-                    im = jnp.array(im, dtype=jnp.uint8)
-                    im = jax.image.resize(
-                        im, (data_res, data_res, 3), method="bilinear"
-                    )
-                    im = jnp.astype(im, jnp.uint8)
-                    ls.append(im)
+            import numpy as np
+            
+            if os.path.exists(f"celeba_data_{data_res}.npy"):
+                print("Loading data from file")
+                data = np.load(f"celeba_data_{data_res}.npy")
             else:
-                print("Entered GOOGLE")
-                from google.cloud import storage
-                import io
+                print("Loading data and processing...")
+                data = np.load("celeba_data.npy")
+                pdb.set_trace()
+                celeb_transform = lambda im: jnp.astype(jax.image.resize(
+                            jnp.array(im, dtype=jnp.uint8), (data_res, data_res, 3), method="bilinear"), dtype=jnp.uint8
+                        )
+                all_data = []
+                for i in tqdm(range(data.shape[0] // 100 + 1)):
+                    if i == data.shape[0] // 100:
+                        all_data.append(celeb_transform(data[i * 100 :]))
+                    else:
+                        all_data.append(
+                            celeb_transform(data[i * 100 : (i + 1) * 100])
+                        )
 
-                data_folder = "gs://celeba_013/img_align_celeba/"
-                client = storage.Client()
+                final_data = jnp.array((np.concatenate(all_data, axis=0)))
+                np.save(final_data, f"celeba_data_{data_res}.npy")
 
-                # Extract bucket name and folder from the provided path
-                bucket_name = data_folder.split("/")[2]  # Extract bucket name
-                folder_path = "/".join(data_folder.split("/")[3:])
-
-                # Reference the bucket
-                bucket = client.get_bucket(bucket_name)  # 85091 -> 89666 to remove
-
-                # List all blobs in the specified folder
-                iterr = list(bucket.list_blobs(prefix=folder_path))
-                print("Got tp the loop")
-                for i, blob in tqdm(enumerate(iterr)):
-                    if 85091 <= i <= 89666:
-                        continue
-                    # Download the blob as a string and convert it to a numpy array
-                    image = blob.download_as_bytes()
-                    im = Image.open(io.BytesIO(image))
-                    im = im.convert("RGB")
-                    im = np.asarray(im)
-                    im = jnp.array(im, dtype=jnp.uint8)
-                    im = jax.image.resize(
-                        im, (data_res, data_res, 3), method="bilinear"
-                    )
-                    im = jnp.astype(im, jnp.uint8)
-                    ls.append(im)
-
-            data = jnp.stack(ls, axis=-1)
             data = jnp.moveaxis(data, 2, 0)
             print("Data shape: ", data.shape)
             x_train = data[..., :162770]
