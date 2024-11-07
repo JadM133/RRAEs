@@ -336,8 +336,9 @@ class Trainor_class:
                 os.makedirs(self.folder)
         else:
             if not os.path.exists(filename):
-                with open(filename, 'a'):
-                    os.utime(filename, None)
+                with open(filename, 'a') as temp_file:
+                    pass
+                os.utime(filename, None)
             
         with open(filename, "wb") as f:
             dill.dump(self.all_kwargs, f)
