@@ -208,7 +208,6 @@ class Trainor_class:
                         t_all += t_t
                         t_t = 0
                     if (step % save_every) == 0:
-                        pdb.set_trace()
                         self.model = model
                         checkpoint_filename = f"checkpoint_{step}_0.pkl"
                         if os.path.exists(checkpoint_filename):
