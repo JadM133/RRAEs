@@ -324,7 +324,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                         all_data.append(
                             celeb_transform(data[:100])
                         )
-                        data = np.delete(data, [:100])
+                        data = data[100:]
 
                 final_data = jnp.array((np.concatenate(data, axis=0)))
                 np.save(final_data, f"../celeba_data_{data_res}.npy")
