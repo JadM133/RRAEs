@@ -306,12 +306,12 @@ def get_data(problem, folder=None, google=True, **kwargs):
             from PIL import Image
             import numpy as np
             
-            if os.path.exists(f"~/celeba_data_{data_res}.npy"):
+            if os.path.exists(f"../celeba_data_{data_res}.npy"):
                 print("Loading data from file")
-                data = np.load(f"~/celeba_data_{data_res}.npy")
+                data = np.load(f"../celeba_data_{data_res}.npy")
             else:
                 print("Loading data and processing...")
-                data = np.load("~/celeba_data.npy")
+                data = np.load("../celeba_data.npy")
                 pdb.set_trace()
                 celeb_transform = lambda im: jnp.astype(jax.image.resize(
                             jnp.array(im, dtype=jnp.uint8), (data_res, data_res, 3), method="bilinear"), dtype=jnp.uint8
@@ -326,7 +326,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                         )
 
                 final_data = jnp.array((np.concatenate(all_data, axis=0)))
-                np.save(final_data, f"~/celeba_data_{data_res}.npy")
+                np.save(final_data, f"../celeba_data_{data_res}.npy")
 
             data = jnp.moveaxis(data, 2, 0)
             print("Data shape: ", data.shape)
