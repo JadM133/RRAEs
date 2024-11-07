@@ -313,6 +313,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
             else:
                 print("Loading data and processing...")
                 data = np.load("../celeba_data.npy")
+                data = data[:10]
                 celeb_transform = lambda im: np.astype(resize(
                             im, (np.array(im).shape[0], data_res, data_res, 3), order=1, anti_aliasing=True), np.uint8
                         )
