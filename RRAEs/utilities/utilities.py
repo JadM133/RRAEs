@@ -23,6 +23,7 @@ import numpy as np
 import warnings
 from itertools import cycle
 import dill
+from tqdm import tqdm
 
 
 _identity = doc_repr(lambda x: x, "lambda x: x")
@@ -299,6 +300,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
     match problem:
         case "CelebA":
+            print("GOT INSIDE DATA")
             data_res = 160
             import os
             from PIL import Image
@@ -318,6 +320,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                     im = jnp.astype(im, jnp.uint8)
                     ls.append(im)
             else:
+                print("Entered GOOGLE")
                 from google.cloud import storage
                 import io
 
@@ -333,7 +336,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
                 # List all blobs in the specified folder
                 iterr = list(bucket.list_blobs(prefix=folder_path))
-                for i, blob in enumerate(iterr):
+                print("Got tp the loop")
+                for i, blob in tqdm(enumerate(iterr)):
                     if 85091 <= i <= 89666:
                         continue
                     # Download the blob as a string and convert it to a numpy array
