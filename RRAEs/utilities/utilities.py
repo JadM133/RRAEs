@@ -322,10 +322,9 @@ def get_data(problem, folder=None, google=True, **kwargs):
                     all_data.append(celeb_transform(data[i:i+1]))
 
                 data = np.concatenate(all_data, axis=0)
-                pdb.set_trace()
+                data = jnp.swapaxes(data, 0, 3)
                 np.save(data, f"../celeba_data_{data_res}.npy")
-            pdb.set_trace()
-            data = jnp.moveaxis(data, 0, 3)
+            
             print("Data shape: ", data.shape)
             x_train = data[..., :162770]
             x_test = data[..., 182638:]
