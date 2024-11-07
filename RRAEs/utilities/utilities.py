@@ -316,7 +316,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 data = data[:10]
                 pdb.set_trace()
                 celeb_transform = lambda im: np.astype(resize(
-                            im, (data_res, data_res, 3), order=1, anti_aliasing=True), np.uint8
+                            im, (data_res, data_res, 3), order=1, anti_aliasing=True)*255.0, np.uint8
                         )
                 all_data = []
                 for i in tqdm(range(data.shape[0])):
