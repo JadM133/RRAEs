@@ -48,7 +48,7 @@ class Trainor_class:
                 norm_in=norm_in,
                 norm_out=norm_out,
                 pre_func_inp=self.pre_func_inp,
-                pre_func_out=self.pre_func_out
+                pre_func_out=self.pre_func_out,
             )
             params_in = self.model.params_in
             params_out = self.model.params_out
@@ -101,10 +101,6 @@ class Trainor_class:
         *,
         training_key,
     ):
-        self.x_train = input
-        self.y_train = output
-        output = self.model.norm_out(self.model.pre_func_out(output))
-
         training_params = {
             "loss": loss,
             "step_st": step_st,
@@ -185,7 +181,7 @@ class Trainor_class:
                     ),
                 ):
                     start = time.perf_counter()
-
+                    out = self.model.norm_out(self.model.pre_func_out(out))
                     loss, model, opt_state, aux = make_step(
                         model,
                         input_b.T,
@@ -360,7 +356,7 @@ class Trainor_class:
                 params_in=self.params_in,
                 params_out=self.params_out,
                 pre_func_inp=self.pre_func_inp,
-                pre_func_out=self.pre_func_out
+                pre_func_out=self.pre_func_out,
             )
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             attributes = dill.load(f)
