@@ -305,7 +305,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
             import os
             from PIL import Image
             import numpy as np
-            import cv2
+            from skimage.transform import resize
             
             if os.path.exists(f"../celeba_data_{data_res}.npy"):
                 print("Loading data from file")
@@ -313,8 +313,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
             else:
                 print("Loading data and processing...")
                 data = np.load("../celeba_data.npy")
-                celeb_transform = lambda im: np.astype(cv2.resize(
-                            im, (np.array(im).shape[0], data_res, data_res, 3), interpolation=cv2.INTER_LINEAR), np.uint8
+                celeb_transform = lambda im: np.astype(resize(
+                            im, (np.array(im).shape[0], data_res, data_res, 3), order=1, anti_aliasing=True), np.uint8
                         )
                 all_data = []
                 for i in tqdm(range(data.shape[0] // 100 + 1)):
