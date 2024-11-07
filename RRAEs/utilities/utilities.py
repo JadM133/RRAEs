@@ -317,15 +317,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
                             im, (np.array(im).shape[0], data_res, data_res, 3), order=1, anti_aliasing=True), np.uint8
                         )
                 all_data = []
-                for i in tqdm(range(data.shape[0] // 100 + 1)):
-                    if i == data.shape[0] // 100:
-                        all_data.append(celeb_transform(data))
-                        del data
-                    else:
-                        all_data.append(
-                            celeb_transform(data[:100])
-                        )
-                        data = data[100:]
+                for i in tqdm(range(data.shape[0])):
+                    all_data.append(celeb_transform(data[i:i+1]))
 
                 final_data = np.array((np.concatenate(data, axis=0)))
                 np.save(final_data, f"../celeba_data_{data_res}.npy")
