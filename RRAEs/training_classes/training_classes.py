@@ -171,7 +171,7 @@ class Trainor_class:
 
                 if (batch_size > input.shape[-1]) or batch_size == -1:
                     batch_size = input.shape[-1]
-                pdb.set_trace()
+
                 for step, (input_b, out, idx) in zip(
                     range(steps),
                     dataloader(
@@ -209,7 +209,16 @@ class Trainor_class:
                         t_t = 0
                     if (step % save_every) == 0:
                         self.model = model
-                        self.save()
+                        checkpoint_filename = f"checkpoint_{step}_0.pkl"
+                        if os.path.exists(checkpoint_filename):
+                            i = 1
+                            new_filename = f"checkpoint_{step}_{i}.pkl"
+                            while os.path.exists(new_filename):
+                                i += 1
+                                new_filename = f"checkpoint_{step}_{i}.pkl"
+                            checkpoint_filename = new_filename
+                        self.save(checkpoint_filename)
+
                     if jnp.isnan(loss):
                         print("Loss is nan, stopping training...")
                         break
@@ -324,7 +333,10 @@ class Trainor_class:
             if erase:
                 shutil.rmtree(self.folder)
                 os.makedirs(self.folder)
-
+        else:
+            if not os.path.exists(filename):
+                os.makedirs(os.path.dirname(filename), exist_ok=True)
+                
         with open(filename, "wb") as f:
             dill.dump(self.all_kwargs, f)
             eqx.tree_serialise_leaves(f, self.model)

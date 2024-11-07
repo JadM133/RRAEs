@@ -83,6 +83,7 @@ if __name__ == "__main__":
         "batch_size_st": [256, 256],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 789,
+        "save_every": 789,
     }
 
     ft_kwargs = {
@@ -90,6 +91,7 @@ if __name__ == "__main__":
         "batch_size_st": [256, 256],
         "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 789,
+        "save_every": 789,
     }
 
     # Step 6: Train the model and get the predictions.
