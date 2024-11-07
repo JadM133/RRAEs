@@ -208,6 +208,7 @@ class Trainor_class:
                         t_all += t_t
                         t_t = 0
                     if (step % save_every) == 0:
+                        pdb.set_trace()
                         self.model = model
                         checkpoint_filename = f"checkpoint_{step}_0.pkl"
                         if os.path.exists(checkpoint_filename):
@@ -335,8 +336,9 @@ class Trainor_class:
                 os.makedirs(self.folder)
         else:
             if not os.path.exists(filename):
-                os.makedirs(os.path.dirname(filename), exist_ok=True)
-                
+                with open(filename, 'a'):
+                    os.utime(filename, None)
+            
         with open(filename, "wb") as f:
             dill.dump(self.all_kwargs, f)
             eqx.tree_serialise_leaves(f, self.model)
