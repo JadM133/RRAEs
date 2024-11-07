@@ -312,23 +312,22 @@ def get_data(problem, folder=None, google=True, **kwargs):
             else:
                 print("Loading data and processing...")
                 data = np.load("../celeba_data.npy")
-                chunks = 2
-                for chunk in range(chunks):
-                    act_data = data[chunk*int(data.shape[0]/chunks):int((chunk+1)*data.shape[0]/chunks)]
-                    celeb_transform = lambda im: jnp.astype(jax.image.resize(
-                                jnp.array(im, dtype=jnp.uint8), (jnp.array(im).shape[0], data_res, data_res, 3), method="bilinear"), jnp.uint8
-                            )
-                    all_data = []
-                    for i in tqdm(range(act_data.shape[0] // 100 + 1)):
-                        if i == data.shape[0] // 100:
-                            all_data.append(celeb_transform(act_data[i * 100 :]))
-                        else:
-                            all_data.append(
-                                celeb_transform(act_data[i * 100 : (i + 1) * 100])
-                            )
-    
-                    final_data = jnp.array((np.concatenate(all_data, axis=0)))
-                    np.save(final_data, f"../celeba_data_{data_res}_{chunk}.npy")
+                celeb_transform = lambda im: jnp.astype(jax.image.resize(
+                            jnp.array(im, dtype=jnp.uint8), (jnp.array(im).shape[0], data_res, data_res, 3), method="bilinear"), jnp.uint8
+                        )
+                all_data = []
+                for i in tqdm(range(data.shape[0] // 100 + 1)):
+                    if i == data.shape[0] // 100:
+                        all_data.append(celeb_transform(data))
+                        del data
+                    else:
+                        all_data.append(
+                            celeb_transform(data[:100])
+                        )
+                        data = np.delete(data, [:100])
+
+                final_data = jnp.array((np.concatenate(data, axis=0)))
+                np.save(final_data, f"../celeba_data_{data_res}.npy")
 
             data = jnp.moveaxis(data, 2, 0)
             print("Data shape: ", data.shape)
