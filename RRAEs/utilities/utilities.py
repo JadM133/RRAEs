@@ -321,7 +321,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 for i in tqdm(range(data.shape[0])):
                     all_data.append(celeb_transform(data[i]))
 
-                data = np.concatenate(all_data, axis=0)
+                data = np.stack(all_data, axis=0)
                 data = jnp.swapaxes(data, 0, 3)
                 np.save(f"../celeba_data_{data_res}.npy", data)
             
