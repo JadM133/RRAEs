@@ -323,7 +323,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
                 data = np.concatenate(all_data, axis=0)
                 data = jnp.swapaxes(data, 0, 3)
-                np.save(data, f"../celeba_data_{data_res}.npy")
+                np.save(f"../celeba_data_{data_res}.npy", data)
             
             print("Data shape: ", data.shape)
             x_train = data[..., :162770]
