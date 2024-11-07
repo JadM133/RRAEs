@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     # Step 3: Specify the archietectures' parameters:
     latent_size = 5000  # latent space dimension
-    k_max = 15  # number of features in the latent space (after the truncated SVD).
+    k_max = 128  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
@@ -79,17 +79,17 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [5],
-        "batch_size_st": [20, 20],
+        "step_st": [23670, 23670], # aprox 30 epoch (30*202000/256)
+        "batch_size_st": [256, 256],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
-        "print_every": 1,
+        "print_every": 789,
     }
 
     ft_kwargs = {
-        "step_st": [5],
-        "batch_size_st": [64, 64],
-        "lr_st": [1e-3, 1e-5, 1e-6, 1e-7, 1e-8],
-        "print_every": 100,
+        "step_st": [11800, 11800],
+        "batch_size_st": [256, 256],
+        "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
+        "print_every": 789,
     }
 
     # Step 6: Train the model and get the predictions.
