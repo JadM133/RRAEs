@@ -82,7 +82,7 @@ if __name__ == "__main__":
         "step_st": [23670, 23670], # aprox 30 epoch (30*202000/256)
         "batch_size_st": [256, 256],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
-        "print_every": 789,
+        "print_every": 20,
         "save_every": 789,
     }
 
@@ -90,7 +90,7 @@ if __name__ == "__main__":
         "step_st": [11800, 11800],
         "batch_size_st": [256, 256],
         "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
-        "print_every": 789,
+        "print_every": 20,
         "save_every": 789,
     }
 

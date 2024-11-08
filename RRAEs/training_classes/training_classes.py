@@ -20,6 +20,7 @@ import os
 import time
 import dill
 import shutil
+import copy
 
 
 class Trainor_class:
@@ -145,7 +146,6 @@ class Trainor_class:
             is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
 
         t_all = 0
-
         try:
             counter = 0
             for steps, lr, batch_size, mul_l in zip(
@@ -182,6 +182,7 @@ class Trainor_class:
                 ):
                     start = time.perf_counter()
                     out = self.model.norm_out(self.model.pre_func_out(out))
+                    old_model = copy.deepcopy(model)
                     loss, model, opt_state, aux = make_step(
                         model,
                         input_b.T,
@@ -207,15 +208,21 @@ class Trainor_class:
                             )
                         t_all += t_t
                         t_t = 0
-                    if (step % save_every) == 0:
+                    if ((step % save_every) == 0) or jnp.isnan(loss):
+                        model = copy.deepcopy(old_model)
                         self.model = model
-                        checkpoint_filename = f"checkpoint_{step}_0.pkl"
+                        orig = (
+                            f"checkpoint_{step}"
+                            if not jnp.isnan(loss)
+                            else "checkpoint_bf_nan"
+                        )
+                        checkpoint_filename = f"{orig}_0.pkl"
                         if os.path.exists(checkpoint_filename):
                             i = 1
-                            new_filename = f"checkpoint_{step}_{i}.pkl"
+                            new_filename = f"{orig}_{i}.pkl"
                             while os.path.exists(new_filename):
                                 i += 1
-                                new_filename = f"checkpoint_{step}_{i}.pkl"
+                                new_filename = f"{orig}_{i}.pkl"
                             checkpoint_filename = new_filename
                         self.save(checkpoint_filename)
 
@@ -335,10 +342,10 @@ class Trainor_class:
                 os.makedirs(self.folder)
         else:
             if not os.path.exists(filename):
-                with open(filename, 'a') as temp_file:
+                with open(filename, "a") as temp_file:
                     pass
                 os.utime(filename, None)
-            
+
         with open(filename, "wb") as f:
             dill.dump(self.all_kwargs, f)
             eqx.tree_serialise_leaves(f, self.model)
