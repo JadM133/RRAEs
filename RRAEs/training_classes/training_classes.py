@@ -182,7 +182,7 @@ class Trainor_class:
                 ):
                     start = time.perf_counter()
                     out = self.model.norm_out(self.model.pre_func_out(out))
-                    old_model = copy.deepcopy(model)
+                    old_model = model
                     loss, model, opt_state, aux = make_step(
                         model,
                         input_b.T,
@@ -209,7 +209,7 @@ class Trainor_class:
                         t_all += t_t
                         t_t = 0
                     if ((step % save_every) == 0) or jnp.isnan(loss):
-                        model = copy.deepcopy(old_model)
+                        model = old_model
                         self.model = model
                         orig = (
                             f"checkpoint_{step}"
