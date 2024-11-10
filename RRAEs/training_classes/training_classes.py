@@ -133,8 +133,8 @@ class Trainor_class:
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
             (loss, aux), grads = loss_fun(model, input, out, idx, **loss_kwargs)
             updates, opt_state = optim.update(grads, opt_state)
-            model = eqx.apply_updates(model, updates)
-            return loss, model, opt_state, aux
+            new_model = eqx.apply_updates(model, updates)
+            return loss, new_model, opt_state, aux, model
 
         if mul_lr_func is not None:
             filter_spec = jtu.tree_map(lambda _: False, model)
@@ -182,8 +182,7 @@ class Trainor_class:
                 ):
                     start = time.perf_counter()
                     out = self.model.norm_out(self.model.pre_func_out(out))
-                    old_model = model
-                    loss, model, opt_state, aux = make_step(
+                    loss, model, opt_state, aux, old_model = make_step(
                         model,
                         input_b.T,
                         out.T,
@@ -209,8 +208,9 @@ class Trainor_class:
                         t_all += t_t
                         t_t = 0
                     if ((step % save_every) == 0) or jnp.isnan(loss):
-                        model = old_model
-                        self.model = model
+                        if jnp.isnan(loss):
+                            import pdb; pdb.set_trace()
+                        self.model = old_model
                         orig = (
                             f"checkpoint_{step}"
                             if not jnp.isnan(loss)
