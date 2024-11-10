@@ -65,8 +65,6 @@ class Trainor_class:
             "norm_out": norm_out,
             "map_axis": map_axis,
             "model_cls": model_cls,
-            "pre_func_inp": pre_func_inp,
-            "pre_func_out": pre_func_out,
         }
 
         self.folder = folder
@@ -358,7 +356,7 @@ class Trainor_class:
             )
         print(f"Model saved in {filename}")
 
-    def load(self, filename, erase=False):
+    def load(self, filename, erase=False, pre_func_inp=lambda x:x, pre_func_out=lambda x:x):
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
@@ -368,8 +366,8 @@ class Trainor_class:
             self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
-            self.pre_func_inp = self.all_kwargs["pre_func_inp"]
-            self.pre_func_out = self.all_kwargs["pre_func_out"]
+            self.pre_func_inp = pre_func_inp
+            self.pre_func_out = pre_func_out
             self.model = Norm(
                 BaseClass(self.model_cls(**kwargs), map_axis=self.map_axis),
                 norm_in=self.norm_in,
