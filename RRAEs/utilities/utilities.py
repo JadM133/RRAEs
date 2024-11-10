@@ -307,12 +307,12 @@ def get_data(problem, folder=None, google=True, **kwargs):
             import numpy as np
             from skimage.transform import resize
             
-            if os.path.exists(f"../../celeba_data_{data_res}.npy"):
+            if os.path.exists(f"../celeba_data_{data_res}.npy"):
                 print("Loading data from file")
-                data = np.load(f"../../celeba_data_{data_res}.npy")
+                data = np.load(f"../celeba_data_{data_res}.npy")
             else:
                 print("Loading data and processing...")
-                data = np.load("../../celeba_data.npy")
+                data = np.load("../celeba_data.npy")
                 celeb_transform = lambda im: np.astype(resize(
                             im, (data_res, data_res, 3), order=1, anti_aliasing=True)*255.0, np.uint8
                         )
@@ -322,7 +322,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
                 data = np.stack(all_data, axis=0)
                 data = jnp.swapaxes(data, 0, 3)
-                np.save(f"../../celeba_data_{data_res}.npy", data)
+                np.save(f"../celeba_data_{data_res}.npy", data)
 
             print("Data shape: ", data.shape)
             x_train = data[..., :162770]
@@ -1598,7 +1598,7 @@ class CNNs_with_linear(eqx.Module, strict=True):
         out,
         channels=1,
         CNNs_num=4,
-        CNN_widths=[32, 64, 128],
+        CNN_widths=[32, 64, 128, 256],
         kernel_conv=3,
         stride=2,
         padding=1,
@@ -1706,8 +1706,8 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         data_dim0,
         inp,
         out_after_mlp=32,
-        CNNs_num=3,
-        width_CNNs=[128, 64, 32],
+        CNNs_num=4,
+        width_CNNs=[256, 128, 64, 32],
         kernel_conv=3,
         stride=2,
         padding=1,
