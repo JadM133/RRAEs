@@ -8,8 +8,8 @@ from RRAEs.utilities import find_weighted_loss
 import jax.tree_util as jtu
 import jax
 
-def test_fitting(): # Only to test if saving/loading is causing a problem
-    data = jrandom.normal(jrandom.key(0), (28, 28, 1))
+def test_save(): # Only to test if saving/loading is causing a problem
+    data = jrandom.normal(jrandom.key(0), (1, 28, 28, 1))
     model_cls = Strong_RRAE_CNN
 
     trainor = RRAE_Trainor_class(
@@ -25,3 +25,8 @@ def test_fitting(): # Only to test if saving/loading is causing a problem
     trainor.save("test_")
     new_trainor = RRAE_Trainor_class()
     new_trainor.load("test_", erase=True)
+    try:
+        pr = new_trainor(x_data[..., 0:1])
+    except:
+        raise ValueError("Save FAILED")
+
