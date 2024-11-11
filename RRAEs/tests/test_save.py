@@ -15,10 +15,10 @@ def test_save(): # Only to test if saving/loading is causing a problem
     trainor = RRAE_Trainor_class(
         data,
         model_cls,
-        in_size=data.shape[0],
-        latent_size=200,
+        latent_size=100,
+        data_size=data.shape[1],
+        channels=data.shape[0],
         k_max=2,
-        norm_type="minmax",
         key=jrandom.PRNGKey(0),
     )
 
@@ -26,7 +26,7 @@ def test_save(): # Only to test if saving/loading is causing a problem
     new_trainor = RRAE_Trainor_class()
     new_trainor.load("test_", erase=True)
     try:
-        pr = new_trainor(x_data[..., 0:1])
+        pr = new_trainor(data[..., 0:1])
     except:
         raise ValueError("Save FAILED")
 
