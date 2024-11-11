@@ -306,16 +306,18 @@ def get_data(problem, folder=None, google=True, **kwargs):
             from PIL import Image
             import numpy as np
             from skimage.transform import resize
-            
+
             if os.path.exists(f"../../celeba_data_{data_res}.npy"):
                 print("Loading data from file")
                 data = np.load(f"../../celeba_data_{data_res}.npy")
             else:
                 print("Loading data and processing...")
                 data = np.load("../../celeba_data.npy")
-                celeb_transform = lambda im: np.astype(resize(
-                            im, (data_res, data_res, 3), order=1, anti_aliasing=True)*255.0, np.uint8
-                        )
+                celeb_transform = lambda im: np.astype(
+                    resize(im, (data_res, data_res, 3), order=1, anti_aliasing=True)
+                    * 255.0,
+                    np.uint8,
+                )
                 all_data = []
                 for i in tqdm(range(data.shape[0])):
                     all_data.append(celeb_transform(data[i]))
@@ -1610,7 +1612,7 @@ class CNNs_with_linear(eqx.Module, strict=True):
         **kwargs,
     ):
         super().__init__()
-
+        assert CNNs_num == len(CNN_widths)
         key1, key2 = jax.random.split(key, 2)
 
         try:
@@ -1705,6 +1707,7 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         self,
         data_dim0,
         inp,
+        channels,
         out_after_mlp=32,
         CNNs_num=4,
         width_CNNs=[256, 128, 64, 32],
@@ -1720,7 +1723,7 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         **kwargs,
     ):
         super().__init__()
-
+        assert CNNs_num == len(width_CNNs)
         first_D = prev_D_CNN_trans(
             data_dim0,
             padding,
@@ -1746,7 +1749,7 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         key1, key2 = jax.random.split(key, 2)
         mlcnn_ = MLCNN(
             out_after_mlp,
-            1,
+            width_CNNs[-1],
             stride,
             padding,
             kernel_conv,
@@ -1763,7 +1766,7 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         linear = Linear(inp, out_after_mlp * first_D**2, key=key2)
         final_conv = Conv2d(
             width_CNNs[-1],
-            1,
+            channels,
             kernel_size=1 + (final_D - data_dim0),
             stride=1,
             padding=0,
