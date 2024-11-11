@@ -18,6 +18,8 @@ def test_save(): # Only to test if saving/loading is causing a problem
         latent_size=100,
         data_size=data.shape[1],
         channels=data.shape[0],
+        pre_func_inp=lambda x: x*2/17,
+        pre_func_out=lambda x: x/2,
         k_max=2,
         key=jrandom.PRNGKey(0),
     )
@@ -26,7 +28,7 @@ def test_save(): # Only to test if saving/loading is causing a problem
     new_trainor = RRAE_Trainor_class()
     new_trainor.load("test_", erase=True)
     try:
-        pr = new_trainor(data[..., 0:1])
-    except:
-        raise ValueError("Save FAILED")
+        pr = new_trainor.model(data[..., 0:1])
+    except Exception as e:
+        raise ValueError(f"Failed with following exception {e}")
 

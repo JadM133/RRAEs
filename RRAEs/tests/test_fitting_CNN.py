@@ -15,10 +15,10 @@ from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
 @pytest.mark.parametrize(
     "model_cls, sh, lf",
     [
-        (Vanilla_AE_CNN, (2, 2, 10), "default"),
-        (Weak_RRAE_CNN, (12, 12, 10), "Weak"),
-        (IRMAE_CNN, (5, 5, 5), "default"),
-        (LoRAE_CNN, (16, 16, 10), "nuc"),
+        (Vanilla_AE_CNN, (1, 2, 2, 10), "default"),
+        (Weak_RRAE_CNN, (3, 12, 12, 10), "Weak"),
+        (IRMAE_CNN, (5, 5, 5, 5), "default"),
+        (LoRAE_CNN, (6, 16, 16, 10), "nuc"),
     ],
 )
 def test_fitting(model_cls, sh, lf):
@@ -26,9 +26,10 @@ def test_fitting(model_cls, sh, lf):
     trainor = Trainor_class(
         x,
         model_cls,
-        in_size=x.shape[0],
-        data_size=x.shape[-1],  # only required for the Weak
-        latent_size=2000,
+        latent_size=100,
+        data_size=x.shape[1],
+        channels=x.shape[0],
+        samples=x.shape[-1], # Only for weak
         k_max=2,
         key=jrandom.PRNGKey(0),
     )
@@ -50,14 +51,15 @@ def test_fitting(model_cls, sh, lf):
 
 
 def test_Strong_fitting():
-    sh = (20, 20, 10)
+    sh = (1, 20, 20, 10)
     model_cls = Strong_RRAE_CNN
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
     trainor = RRAE_Trainor_class(
         x,
         model_cls,
-        in_size=x.shape[0],
-        latent_size=2000,
+        latent_size=100,
+        data_size=x.shape[1],
+        channels=x.shape[0],
         k_max=2,
         key=jrandom.PRNGKey(0),
     )

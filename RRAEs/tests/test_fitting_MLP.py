@@ -28,6 +28,7 @@ def test_fitting(model_cls, sh, lf):
         model_cls,
         in_size=x.shape[0],
         data_size=x.shape[-1],
+        samples=x.shape[-1],  # Only for weak
         norm_in="meanstd",
         norm_out="minmax",
         out_train=x,

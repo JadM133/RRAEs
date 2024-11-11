@@ -17,12 +17,12 @@ def test_fitting(norm_in, norm_out):
     trainor = RRAE_Trainor_class(
         data,
         model_cls,
-        in_size=data.shape[0],
-        latent_size=200,
+        latent_size=100,
+        data_size=data.shape[1],
+        channels=data.shape[0],
         k_max=2,
         norm_in=norm_in,
         norm_out=norm_out,
-        out_train=data,
         key=jrandom.PRNGKey(0),
     )
 
