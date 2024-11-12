@@ -49,7 +49,7 @@ if __name__ == "__main__":
     loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
-    latent_size = 1000  # latent space dimension
+    latent_size = 5000  # latent space dimension
     k_max = 128  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
@@ -63,8 +63,8 @@ if __name__ == "__main__":
         pre_func_inp=pre_func_inp,
         pre_func_out=pre_func_out,
         k_max=k_max,
-        folder=f"test",
-        file=f"{method}_{problem}_test.pkl",
+        folder=f"{problem}/{method}_{problem}/",
+        file=f"{method}_{problem}.pkl",
         norm_in="None",
         norm_out="None",
         out_train=x_train,
@@ -79,16 +79,16 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [23670,], # aprox 30 epoch (30*202000/256)
-        "batch_size_st": [256],
+        "step_st": [23670, 23670], # aprox 30 epoch (30*202000/256)
+        "batch_size_st": [256, 256],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 20,
         "save_every": 789,
     }
 
     ft_kwargs = {
-        "step_st": [23670,],
-        "batch_size_st": [256],
+        "step_st": [11800, 11800],
+        "batch_size_st": [256, 256],
         "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 20,
         "save_every": 789,
@@ -102,7 +102,7 @@ if __name__ == "__main__":
         training_kwargs=training_kwargs,
         ft_kwargs=ft_kwargs,
     )
-    # preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test)
+    preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test)
     trainor.save(kwargs=kwargs)
 
     # Uncomment the following line if you want to hold the session to check your

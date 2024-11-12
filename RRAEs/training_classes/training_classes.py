@@ -206,6 +206,8 @@ class Trainor_class:
                         t_all += t_t
                         t_t = 0
                     if ((step % save_every) == 0) or jnp.isnan(loss):
+                        if jnp.isnan(loss):
+                            import pdb; pdb.set_trace()
                         self.model = old_model
                         orig = (
                             f"checkpoint_{step}"

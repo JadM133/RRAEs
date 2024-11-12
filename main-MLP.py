@@ -21,6 +21,8 @@ if __name__ == "__main__":
         p_test,
         y_train,
         y_test,
+        pre_func_inp,
+        pre_func_out,
         args,
     ) = get_data(problem)
 
@@ -53,6 +55,8 @@ if __name__ == "__main__":
         model_cls,
         latent_size=latent_size,
         in_size=x_train.shape[0],
+        pre_func_inp=pre_func_inp,
+        pre_func_out=pre_func_out,
         k_max=k_max,
         folder=f"{problem}/{method}_{problem}/",
         file=f"{method}_{problem}.pkl",
