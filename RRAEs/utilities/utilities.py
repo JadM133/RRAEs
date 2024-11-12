@@ -23,6 +23,7 @@ import numpy as np
 import warnings
 from itertools import cycle
 import dill
+from tqdm import tqdm
 
 
 _identity = doc_repr(lambda x: x, "lambda x: x")
@@ -294,30 +295,38 @@ def divide_return(
     )
 
 
-def get_data(problem, folder=None, **kwargs):
+def get_data(problem, folder="..", google=True, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
         case "CelebA":
+            print("GOT INSIDE DATA")
             data_res = 160
             import os
             from PIL import Image
+            import numpy as np
+            from skimage.transform import resize
 
-            ls = []
-
-            for i, file in enumerate(os.listdir(folder)):
-                im = Image.open(os.path.join(folder, file))
-                im = im.convert("RGB")
-                im = np.asarray(im)
-                im = jnp.array(im, dtype=jnp.uint8)
-                im = jax.image.resize(
-                    im, (data_res, data_res, 3), method="bilinear"
+            if os.path.exists(f"{folder}/celeba_data_{data_res}.npy"):
+                print("Loading data from file")
+                data = np.load(f"{folder}/celeba_data_{data_res}.npy")
+            else:
+                print("Loading data and processing...")
+                data = np.load(f"{folder}/celeba_data.npy")
+                celeb_transform = lambda im: np.astype(
+                    resize(im, (data_res, data_res, 3), order=1, anti_aliasing=True)
+                    * 255.0,
+                    np.uint8,
                 )
-                im = jnp.astype(im, jnp.uint8)
-                ls.append(im)
-                
-            data = jnp.stack(ls, axis=-1)
-            data = jnp.moveaxis(data, 2, 0)
+                all_data = []
+                for i in tqdm(range(data.shape[0])):
+                    all_data.append(celeb_transform(data[i]))
+
+                data = np.stack(all_data, axis=0)
+                data = jnp.swapaxes(data, 0, 3)
+                np.save(f"{folder}/celeba_data_{data_res}.npy", data)
+
+            print("Data shape: ", data.shape)
             x_train = data[..., :162770]
             x_test = data[..., 182638:]
             y_train = x_train
@@ -1235,7 +1244,7 @@ def dataloader(arrays, batch_size, p_vals=None, once=False, *, key):
                 itemgetter(*batch_perm)(array) for array in arrays
             )  # Works for lists and arrays
             if batch_size != 1:
-                yield [None if None in arr else jnp.array(arr) for arr in arrs]
+                yield [jnp.array(arr) for arr in arrs]
             else:
                 yield [
                     [arr] if arr is None else jnp.expand_dims(jnp.array(arr), axis=0)
@@ -1591,7 +1600,7 @@ class CNNs_with_linear(eqx.Module, strict=True):
         out,
         channels=1,
         CNNs_num=4,
-        CNN_widths=[32, 64, 128],
+        CNN_widths=[32, 64, 128, 256],
         kernel_conv=3,
         stride=2,
         padding=1,
@@ -1603,7 +1612,7 @@ class CNNs_with_linear(eqx.Module, strict=True):
         **kwargs,
     ):
         super().__init__()
-
+        assert CNNs_num == len(CNN_widths)
         key1, key2 = jax.random.split(key, 2)
 
         try:
@@ -1693,14 +1702,16 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
     start_dim: int
     first_D: int
     out_after_mlp: int
+    final_act: Callable
 
     def __init__(
         self,
         data_dim0,
         inp,
+        channels,
         out_after_mlp=32,
-        CNNs_num=3,
-        width_CNNs=[128, 64, 32],
+        CNNs_num=4,
+        width_CNNs=[256, 128, 64, 32],
         kernel_conv=3,
         stride=2,
         padding=1,
@@ -1713,7 +1724,7 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         **kwargs,
     ):
         super().__init__()
-
+        assert CNNs_num == len(width_CNNs)
         first_D = prev_D_CNN_trans(
             data_dim0,
             padding,
@@ -1739,7 +1750,7 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         key1, key2 = jax.random.split(key, 2)
         mlcnn_ = MLCNN(
             out_after_mlp,
-            1,
+            width_CNNs[-1],
             stride,
             padding,
             kernel_conv,
@@ -1756,7 +1767,7 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         linear = Linear(inp, out_after_mlp * first_D**2, key=key2)
         final_conv = Conv2d(
             width_CNNs[-1],
-            1,
+            channels,
             kernel_size=1 + (final_D - data_dim0),
             stride=1,
             padding=0,
@@ -1766,8 +1777,8 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
 
         self.start_dim = inp
         self.first_D = first_D
-        act = lambda x: final_activation(x)
-        self.layers_ = tuple([linear, mlcnn_, final_conv, act])
+        self.final_act = doc_repr(lambda x: final_activation(x), "lambda x: final_activation(x)")
+        self.layers_ = tuple([linear, mlcnn_, final_conv, self.final_act])
         self.out_after_mlp = out_after_mlp
 
     def __call__(self, x, *args, **kwargs):

@@ -518,6 +518,7 @@ class CNN_Autoencoder(Autoencoder):
         decode = Linear_with_CNNs_trans(
             data_dim0=data_size,
             inp=latent_size_after,
+            channels=channels,
             key=key2,
             **kwargs_dec,
         )

@@ -24,7 +24,7 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         kwargs,
-    ) = get_data(problem, folder="img_align_celeba")
+    ) = get_data(problem, folder="C:\\Users\\jadmo\\Desktop\\VAE\\VAE\\CelebA")
 
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
@@ -61,8 +61,8 @@ if __name__ == "__main__":
         pre_func_inp=pre_func_inp,
         pre_func_out=pre_func_out,
         k_max=k_max,
-        folder=f"{problem}/{method}_{problem}/",
-        file=f"{method}_{problem}.pkl",
+        folder=f"test",
+        file=f"{method}_{problem}_test.pkl",
         norm_in="None",
         norm_out="None",
         out_train=x_train,
@@ -77,14 +77,14 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [5],
+        "step_st": [1],
         "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
     }
 
     ft_kwargs = {
-        "step_st": [5],
+        "step_st": [1],
         "batch_size_st": [64, 64],
         "lr_st": [1e-3, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         training_kwargs=training_kwargs,
         ft_kwargs=ft_kwargs,
     )
-    preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test)
+    # preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test)
     trainor.save(kwargs=kwargs)
 
     # Uncomment the following line if you want to hold the session to check your

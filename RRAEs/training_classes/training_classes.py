@@ -20,6 +20,7 @@ import os
 import time
 import dill
 import shutil
+import copy
 
 
 class Trainor_class:
@@ -48,7 +49,7 @@ class Trainor_class:
                 norm_in=norm_in,
                 norm_out=norm_out,
                 pre_func_inp=self.pre_func_inp,
-                pre_func_out=self.pre_func_out
+                pre_func_out=self.pre_func_out,
             )
             params_in = self.model.params_in
             params_out = self.model.params_out
@@ -64,8 +65,6 @@ class Trainor_class:
             "norm_out": norm_out,
             "map_axis": map_axis,
             "model_cls": model_cls,
-            "pre_func_inp": pre_func_inp,
-            "pre_func_out": pre_func_out,
         }
 
         self.folder = folder
@@ -90,7 +89,8 @@ class Trainor_class:
         loss=None,  # a function loss(pred, true) to differentiate in the model
         step_st=[3000, 3000],  # 000, 8000],
         lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
-        print_every=20,
+        print_every=jnp.nan,
+        save_every=jnp.nan,
         batch_size_st=[16, 16, 16, 16, 32],
         mul_lr=None,
         mul_lr_func=None,  #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
@@ -100,10 +100,6 @@ class Trainor_class:
         *,
         training_key,
     ):
-        self.x_train = input
-        self.y_train = output
-        output = self.model.norm_out(self.model.pre_func_out(output))
-
         training_params = {
             "loss": loss,
             "step_st": step_st,
@@ -135,8 +131,8 @@ class Trainor_class:
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
             (loss, aux), grads = loss_fun(model, input, out, idx, **loss_kwargs)
             updates, opt_state = optim.update(grads, opt_state)
-            model = eqx.apply_updates(model, updates)
-            return loss, model, opt_state, aux
+            new_model = eqx.apply_updates(model, updates)
+            return loss, new_model, opt_state, aux, model
 
         if mul_lr_func is not None:
             filter_spec = jtu.tree_map(lambda _: False, model)
@@ -148,7 +144,6 @@ class Trainor_class:
             is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
 
         t_all = 0
-
         try:
             counter = 0
             for steps, lr, batch_size, mul_l in zip(
@@ -184,8 +179,8 @@ class Trainor_class:
                     ),
                 ):
                     start = time.perf_counter()
-
-                    loss, model, opt_state, aux = make_step(
+                    out = self.model.norm_out(self.model.pre_func_out(out))
+                    loss, model, opt_state, aux, old_model = make_step(
                         model,
                         input_b.T,
                         out.T,
@@ -210,6 +205,23 @@ class Trainor_class:
                             )
                         t_all += t_t
                         t_t = 0
+                    if ((step % save_every) == 0) or jnp.isnan(loss):
+                        self.model = old_model
+                        orig = (
+                            f"checkpoint_{step}"
+                            if not jnp.isnan(loss)
+                            else "checkpoint_bf_nan"
+                        )
+                        checkpoint_filename = f"{orig}_0.pkl"
+                        if os.path.exists(checkpoint_filename):
+                            i = 1
+                            new_filename = f"{orig}_{i}.pkl"
+                            while os.path.exists(new_filename):
+                                i += 1
+                                new_filename = f"{orig}_{i}.pkl"
+                            checkpoint_filename = new_filename
+                        self.save(checkpoint_filename)
+
                     if jnp.isnan(loss):
                         print("Loss is nan, stopping training...")
                         break
@@ -324,6 +336,11 @@ class Trainor_class:
             if erase:
                 shutil.rmtree(self.folder)
                 os.makedirs(self.folder)
+        else:
+            if not os.path.exists(filename):
+                with open(filename, "a") as temp_file:
+                    pass
+                os.utime(filename, None)
 
         with open(filename, "wb") as f:
             dill.dump(self.all_kwargs, f)
@@ -337,7 +354,7 @@ class Trainor_class:
             )
         print(f"Model saved in {filename}")
 
-    def load(self, filename, erase=False):
+    def load(self, filename, erase=False, pre_func_inp=lambda x:x, pre_func_out=lambda x:x):
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
@@ -347,8 +364,8 @@ class Trainor_class:
             self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
-            self.pre_func_inp = self.all_kwargs["pre_func_inp"]
-            self.pre_func_out = self.all_kwargs["pre_func_out"]
+            self.pre_func_inp = pre_func_inp
+            self.pre_func_out = pre_func_out
             self.model = Norm(
                 BaseClass(self.model_cls(**kwargs), map_axis=self.map_axis),
                 norm_in=self.norm_in,
@@ -356,7 +373,7 @@ class Trainor_class:
                 params_in=self.params_in,
                 params_out=self.params_out,
                 pre_func_inp=self.pre_func_inp,
-                pre_func_out=self.pre_func_out
+                pre_func_out=self.pre_func_out,
             )
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             attributes = dill.load(f)
