@@ -207,7 +207,12 @@ class Trainor_class:
                         t_t = 0
                     if ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
-                            import pdb; pdb.set_trace()
+                            print(
+                                "Starting pdb since loss is nan, type exit to continue or use pdb session to debug."
+                            )
+                            import pdb
+
+                            pdb.set_trace()
                         self.model = old_model
                         orig = (
                             f"checkpoint_{step}"
@@ -236,7 +241,7 @@ class Trainor_class:
         self.batch_size = batch_size
         self.t_all = t_all
         return model
-    
+
     def evaluate_no_preds(
         self,
         x_train_o,
@@ -250,7 +255,7 @@ class Trainor_class:
         """Performs post-processing to find the relative error of the RRAE model."""
         # TODO: Same as evaluate but without finding preds for large data
         raise NotImplementedError("This method is not implemented yet.")
-    
+
     def evaluate(
         self,
         x_train_o,
@@ -370,7 +375,9 @@ class Trainor_class:
             )
         print(f"Model saved in {filename}")
 
-    def load(self, filename, erase=False, pre_func_inp=lambda x:x, pre_func_out=lambda x:x):
+    def load(
+        self, filename, erase=False, pre_func_inp=lambda x: x, pre_func_out=lambda x: x
+    ):
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
