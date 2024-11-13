@@ -300,19 +300,18 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
     match problem:
         case "CelebA":
-            print("GOT INSIDE DATA")
             data_res = 160
             import os
             from PIL import Image
             import numpy as np
             from skimage.transform import resize
 
-            if os.path.exists(f"../../celeba_data_{data_res}.npy"):
+            if os.path.exists(f"{folder}/celeba_data_{data_res}.npy"):
                 print("Loading data from file")
-                data = np.load(f"../../celeba_data_{data_res}.npy")
+                data = np.load(f"{folder}/celeba_data_{data_res}.npy")
             else:
                 print("Loading data and processing...")
-                data = np.load("../../celeba_data.npy")
+                data = np.load(f"{folder}/celeba_data.npy")
                 celeb_transform = lambda im: np.astype(
                     resize(im, (data_res, data_res, 3), order=1, anti_aliasing=True)
                     * 255.0,
@@ -324,7 +323,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
                 data = np.stack(all_data, axis=0)
                 data = jnp.swapaxes(data, 0, 3)
-                np.save(f"../../celeba_data_{data_res}.npy", data)
+                np.save(f"{folder}/celeba_data_{data_res}.npy", data)
 
             print("Data shape: ", data.shape)
             x_train = data[..., :162770]
@@ -868,7 +867,6 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 | (p_test <= jnp.min(p_vals, 0)),
                 1,
             )
-            print(y_test.shape)
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
 

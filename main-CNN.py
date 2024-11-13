@@ -14,7 +14,6 @@ import jax.nn as jnn
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    print("GOT TO MAIN!!!")
     problem = "CelebA"
     (
         x_train,
@@ -26,8 +25,8 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         kwargs,
-    ) = get_data(problem, folder="img_align_celeba")
-    print("GOT AFTER DATA")
+    ) = get_data(problem, folder="../")
+    
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
     print(f"Shape of data is {x_train.shape} (C x D x D x Ntr) and {x_test.shape}.")
@@ -79,7 +78,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [23670,], # aprox 30 epoch (30*202000/256)
+        "step_st": [1,], # aprox 30 epoch (30*202000/256)
         "batch_size_st": [256],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 20,
@@ -87,7 +86,7 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [23670,],
+        "step_st": [1,],
         "batch_size_st": [256],
         "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 20,

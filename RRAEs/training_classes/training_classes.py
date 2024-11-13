@@ -236,7 +236,21 @@ class Trainor_class:
         self.batch_size = batch_size
         self.t_all = t_all
         return model
-
+    
+    def evaluate_no_preds(
+        self,
+        x_train_o,
+        y_train_o,
+        x_test_o=None,
+        y_test_o=None,
+        batch_size=None,
+        call_func=None,
+        **kwargs,
+    ):
+        """Performs post-processing to find the relative error of the RRAE model."""
+        # TODO: Same as evaluate but without finding preds for large data
+        raise NotImplementedError("This method is not implemented yet.")
+    
     def evaluate(
         self,
         x_train_o,

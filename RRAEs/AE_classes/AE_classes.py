@@ -44,6 +44,7 @@ class BaseClass(eqx.Module):
         key,
         **kwargs,
     ):
+        """Works for array input with data as final dim."""
         idxs = []
         all_preds = []
 
