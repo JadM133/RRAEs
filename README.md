@@ -26,6 +26,10 @@ Since most of the lab doesn't use Python, we provide this section to clarify how
 If all the tests pass, you're good to go!
 6. Give it a try, the best place to start is the [jupyter notebook](tutorial.ipynb).
 
+# Using the Library in MATLAB
+
+The library is not coded in MATLAB, so we highly recommend that you use the python codes. However, if you would like to simply get predictions using RRAEs in MATLAB, you can run [MATLAB_runner.m](MATLAB_runner.m) and follow the instructions there.
+
 
 
 
