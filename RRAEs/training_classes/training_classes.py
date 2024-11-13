@@ -31,7 +31,6 @@ class Trainor_class:
         map_axis=None,
         folder=None,
         file=None,
-        ts=None,
         out_train=None,
         norm_in="None",
         norm_out="None",
@@ -71,9 +70,7 @@ class Trainor_class:
         if folder is not None:
             if not os.path.exists(folder):
                 os.makedirs(folder)
-        self.ts = ts
         self.file = file
-        self.fitted = False
 
     def train(self):
         pass
@@ -362,17 +359,21 @@ class Trainor_class:
                 with open(filename, "a") as temp_file:
                     pass
                 os.utime(filename, None)
-
+        attr = merge_dicts(
+            remove_keys_from_dict(self.__dict__, ("model", "all_kwargs")),
+            kwargs,
+        )
+        print([type(v) for _, v in attr.items()])
+        print(type(attr))
+        print(attr)
         with open(filename, "wb") as f:
+            print("Got to save")
             dill.dump(self.all_kwargs, f)
+            print("Save 1")
             eqx.tree_serialise_leaves(f, self.model)
-            dill.dump(
-                merge_dicts(
-                    remove_keys_from_dict(self.__dict__, ("model", "all_kwargs")),
-                    kwargs,
-                ),
-                f,
-            )
+            print("Save 2")
+            dill.dump(attr, f)
+            print("Save 3")
         print(f"Model saved in {filename}")
 
     def load(
@@ -402,7 +403,6 @@ class Trainor_class:
             attributes = dill.load(f)
             for key in attributes:
                 setattr(self, key, attributes[key])
-            self.fitted = True
         if erase:
             os.remove(filename)
 
