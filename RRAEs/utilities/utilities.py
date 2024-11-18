@@ -24,10 +24,70 @@ import warnings
 from itertools import cycle
 import dill
 from tqdm import tqdm
+import jax.lax as lax
+from jax._src.lax import lax as lax_internal
+from jax import custom_jvp
 
 
 _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
+
+
+def _extract_diagonal(s: Array) -> Array:
+    """Extract the diagonal from a batched matrix"""
+    i = lax.iota("int32", min(s.shape[-2], s.shape[-1]))
+    return s[..., i, i]
+
+
+def _construct_diagonal(s: Array) -> Array:
+    """Construct a (batched) diagonal matrix"""
+    i = lax.iota("int32", s.shape[-1])
+    return lax.full((*s.shape, s.shape[-1]), 0, s.dtype).at[..., i, i].set(s)
+
+
+def _H(x: Array) -> Array:
+    return _T(x).conj()
+
+
+def _T(x: Array) -> Array:
+    return lax.transpose(x, (*range(x.ndim - 2), x.ndim - 1, x.ndim - 2))
+
+
+@custom_jvp
+def stable_SVD(x):
+    return jnp.linalg.svd(x, full_matrices=False)
+
+
+@stable_SVD.defjvp
+def stable_SVD_jvp(primals, tangents):
+    (A,) = primals
+    (dA,) = tangents
+    U, s, Vt = jnp.linalg.svd(A, full_matrices=False)
+    Ut, V = _H(U), _H(Vt)
+    s_dim = s[..., None, :]
+    dS = Ut @ dA @ V
+    ds = _extract_diagonal(dS.real)
+    s_diffs = (s_dim + _T(s_dim)) * (s_dim - _T(s_dim))
+    s_diffs = s_diffs + jnp.ones_like(s_diffs) * 1e-12
+    s_diffs_zeros = lax_internal._eye(s.dtype, (s.shape[-1], s.shape[-1]))
+    s_diffs_zeros = lax.expand_dims(s_diffs_zeros, range(s_diffs.ndim - 2))
+    F = 1 / (s_diffs + s_diffs_zeros) - s_diffs_zeros
+    dSS = s_dim.astype(A.dtype) * dS
+    SdS = _T(s_dim.astype(A.dtype)) * dS
+    s_zeros = (s == 0).astype(s.dtype)
+    s_inv = 1 / (s + s_zeros) - s_zeros
+    s_inv_mat = _construct_diagonal(s_inv)
+    dUdV_diag = 0.5 * (dS - _H(dS)) * s_inv_mat.astype(A.dtype)
+    dU = U @ (F.astype(A.dtype) * (dSS + _H(dSS)) + dUdV_diag)
+    dV = V @ (F.astype(A.dtype) * (SdS + _H(SdS)))
+    m, n = A.shape[-2:]
+    if m > n:
+        dAV = dA @ V
+        dU = dU + (dAV - U @ (Ut @ dAV)) / s_dim.astype(A.dtype)
+    if n > m:
+        dAHU = _H(dA) @ U
+        dV = dV + (dAHU - V @ (Vt @ dAHU)) / s_dim.astype(A.dtype)
+    return (s, U, Vt), (ds, dU, _H(dV))
 
 
 def loss_generator(which=None, norm_loss_=None):
@@ -101,7 +161,7 @@ def loss_generator(which=None, norm_loss_=None):
         def loss_fun(model, input, out, idx, epsilon, **kwargs):
             pred = model(input, epsilon=epsilon)
             _, means, logvars = model.latent(input, epsilon=epsilon, ret=True)
-            wv = jnp.array([1.0, 0.1])
+            wv = jnp.array([1.0, 1.0])
             kl_loss = jnp.sum(
                 -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
             )
@@ -1775,7 +1835,9 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
 
         self.start_dim = inp
         self.first_D = first_D
-        self.final_act = doc_repr(lambda x: final_activation(x), "lambda x: final_activation(x)")
+        self.final_act = doc_repr(
+            lambda x: final_activation(x), "lambda x: final_activation(x)"
+        )
         self.layers_ = tuple([linear, mlcnn_, final_conv, self.final_act])
         self.out_after_mlp = out_after_mlp
 

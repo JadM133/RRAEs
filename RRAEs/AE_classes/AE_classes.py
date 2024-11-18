@@ -8,6 +8,7 @@ from RRAEs.utilities import (
     Linear_with_CNNs_trans,
     dataloader,
     MLP_with_linear,
+    stable_SVD,
 )
 import itertools
 import equinox as eqx
@@ -233,7 +234,8 @@ def latent_func_strong_RRAE(
             new_y = y @ y.T
         else:
             new_y = y
-        u, s, v = jnp.linalg.svd(new_y, full_matrices=False)
+        u, s, v = stable_SVD(new_y)
+        print("A")
         u_now = u[:, :k_max]
         coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
         return u_now, coeffs
@@ -397,7 +399,7 @@ class Weak_RRAE_MLP(Autoencoder):
         self.v_vt = v_vt_class(latent_size, samples, k_max, key=key)
 
 
-def sample(y, sample_cls, epsilon=None, *args, **kwargs):
+def sample(y, sample_cls, k_max, epsilon=None, *args, **kwargs):
     if epsilon is None:
         new_perform_sample = lambda x: sample_cls(x, *args, **kwargs)
         return jax.vmap(new_perform_sample, in_axes=[-1], out_axes=-1)(y)
@@ -422,13 +424,14 @@ class VAR_AE_MLP(Autoencoder):
 
         self._sample = Sample(sample_dim=latent_size)
 
+        def perform_in_latent(y, *args, **kwargs):
+            return (sample(y, self._sample, *args, **kwargs),)
+
         super().__init__(
             in_size,
             latent_size=latent_size * 2,
             latent_size_after=latent_size,
-            _perform_in_latent=lambda y, *args, **kwargs: sample(
-                y, self._sample, *args, **kwargs
-            ),  # Note: can not define sample as calss method to maintain tree structure
+            perform_in_latent=perform_in_latent,  # Note: can not define sample as calss method to maintain tree structure
             map_latent=False,
             key=key,
             kwargs_enc=kwargs_enc,
@@ -624,7 +627,9 @@ class Weak_RRAE_CNN(CNN_Autoencoder):
         formulation.
     """
 
-    def __init__(self, data_size, channels, latent_size, k_max, samples, *, key, **kwargs):
+    def __init__(
+        self, data_size, channels, latent_size, k_max, samples, *, key, **kwargs
+    ):
         if "linear_l" in kwargs.keys():
             warnings.warn("linear_l can not be specified for Vanilla_CNN")
             kwargs.pop("linear_l")
@@ -662,4 +667,6 @@ class IRMAE_CNN(CNN_Autoencoder):
 
 class LoRAE_CNN(IRMAE_CNN):
     def __init__(self, data_size, channels, latent_size, *, key, **kwargs):
-        super().__init__(data_size, channels, latent_size, linear_l=1, key=key, **kwargs)
+        super().__init__(
+            data_size, channels, latent_size, linear_l=1, key=key, **kwargs
+        )
