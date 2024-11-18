@@ -52,11 +52,9 @@ def _H(x: Array) -> Array:
 def _T(x: Array) -> Array:
     return lax.transpose(x, (*range(x.ndim - 2), x.ndim - 1, x.ndim - 2))
 
-
 @custom_jvp
 def stable_SVD(x):
     return jnp.linalg.svd(x, full_matrices=False)
-
 
 @stable_SVD.defjvp
 def stable_SVD_jvp(primals, tangents):
@@ -87,7 +85,7 @@ def stable_SVD_jvp(primals, tangents):
     if n > m:
         dAHU = _H(dA) @ U
         dV = dV + (dAHU - V @ (Vt @ dAHU)) / s_dim.astype(A.dtype)
-    return (s, U, Vt), (ds, dU, _H(dV))
+    return (U, s, Vt), (dU, ds, _H(dV))
 
 
 def loss_generator(which=None, norm_loss_=None):
