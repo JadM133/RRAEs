@@ -244,7 +244,7 @@ def latent_func_strong_RRAE(
         return apply_basis @ apply_basis.T @ y
 
     if k_max != -1:
-        u, s, v = stable_SVD(y)
+        s, u, v = stable_SVD(y)
         sigs = s[:k_max]
         v_now = v[:k_max, :]
         u_now = u[:, :k_max]
