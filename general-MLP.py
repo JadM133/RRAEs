@@ -1,7 +1,7 @@
 """ This script contains an example of how to use a Trainor class for any equinox model. Specifically,
 The MLP."""
 
-from RRAEs.utilities import MLP_with_linear
+from equinox.nn import MLP
 from RRAEs.training_classes import Trainor_class
 import jax.random as jrandom
 import pdb
@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     # Step 2: Specify the model to use, do not declare an instance of the class.
     # i.e. do not open/close parenthesis.
-    model_cls = MLP_with_linear
+    model_cls = MLP
 
     loss_type = "Strong"  # Specify the loss type, this uses the norm in %.
 
@@ -39,7 +39,7 @@ if __name__ == "__main__":
         file=f"saved_model.pkl",
         norm_in="None",
         norm_out="None",
-        map_axis=-1,
+        map_axis=-1, # The dimension of your data, to parallelize over.
         key=jrandom.PRNGKey(0),
     )
 
