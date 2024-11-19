@@ -66,7 +66,8 @@ def stable_SVD_jvp(primals, tangents):
     dS = Ut @ dA @ V
     ds = _extract_diagonal(dS.real)
     s_diffs = (s_dim + _T(s_dim)) * (s_dim - _T(s_dim))
-    s_diffs = s_diffs + jnp.ones_like(s_diffs) * 1e-12
+    bl = jnp.abs(s_diffs) < 1e-12
+    s_diffs = s_diffs + (jnp.ones_like(s_diffs) * 1e-12) * bl
     s_diffs_zeros = lax_internal._eye(s.dtype, (s.shape[-1], s.shape[-1]))
     s_diffs_zeros = lax.expand_dims(s_diffs_zeros, range(s_diffs.ndim - 2))
     F = 1 / (s_diffs + s_diffs_zeros) - s_diffs_zeros
