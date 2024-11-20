@@ -210,6 +210,7 @@ def latent_func_strong_RRAE(
     k_max,
     apply_basis=None,
     get_svd=False,
+    get_coeffs=False,
     ret=False,
     *args,
     **kwargs,
@@ -229,15 +230,16 @@ def latent_func_strong_RRAE(
     y_approx : jnp.array
         The latent space after the truncation.
     """
-    if get_svd:
+    if get_svd or get_coeffs:
         if y.shape[-1] > y.shape[0]:
             new_y = y @ y.T
         else:
             new_y = y
         u, s, v = stable_SVD(new_y)
-        print("A")
         u_now = u[:, :k_max]
         coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+        if get_coeffs:
+            return coeffs
         return u_now, coeffs
 
     if apply_basis is not None:

@@ -8,7 +8,6 @@ import optax
 from RRAEs.utilities import (
     dataloader,
     find_weighted_loss,
-    v_print,
     remove_keys_from_dict,
     merge_dicts,
     loss_generator,
@@ -21,6 +20,7 @@ import time
 import dill
 import shutil
 import copy
+from functools import partial
 
 
 class Trainor_class:
@@ -94,9 +94,17 @@ class Trainor_class:
         regression=False,
         verbose=True,
         loss_kwargs={},
+        flush=False,
         *,
         training_key,
     ):
+        from RRAEs.utilities import v_print
+
+        if flush:
+            v_print = partial(v_print, f=True)
+        else:
+            v_print = partial(v_print, f=False)
+
         training_params = {
             "loss": loss,
             "step_st": step_st,
@@ -227,7 +235,7 @@ class Trainor_class:
                         self.save(checkpoint_filename)
 
                     if jnp.isnan(loss):
-                        print("Loss is nan, stopping training...")
+                        v_print("Loss is nan, stopping training...", verbose)
                         break
         except (Exception, KeyboardInterrupt) as e:
             print(e)
@@ -449,7 +457,9 @@ class VAR_AE_Trainor_class(Trainor_class):
 
         @eqx.filter_jit
         def make_step(model, input, out, opt_state, idx, epsilon, **loss_kwargs):
-            (loss, aux), grads = loss_fun(model, input, out, idx, epsilon, **loss_kwargs)
+            (loss, aux), grads = loss_fun(
+                model, input, out, idx, epsilon, **loss_kwargs
+            )
             updates, opt_state = optim.update(grads, opt_state)
             new_model = eqx.apply_updates(model, updates)
             return loss, new_model, opt_state, aux, model
@@ -466,9 +476,7 @@ class VAR_AE_Trainor_class(Trainor_class):
         t_all = 0
         # try:
         counter = 0
-        for steps, lr, batch_size, mul_l in zip(
-            step_st, lr_st, batch_size_st, mul_lr
-        ):
+        for steps, lr, batch_size, mul_l in zip(step_st, lr_st, batch_size_st, mul_lr):
             t_t = 0
 
             if mul_lr_func is not None:
@@ -500,9 +508,7 @@ class VAR_AE_Trainor_class(Trainor_class):
             ):
                 start = time.perf_counter()
                 out = self.model.norm_out(self.model.pre_func_out(out))
-                epsilon = model._sample.create_epsilon(
-                    counter, input_b.shape[0]
-                )
+                epsilon = model._sample.create_epsilon(counter, input_b.shape[0])
                 loss, model, opt_state, aux, old_model = make_step(
                     model,
                     input_b.T,
@@ -709,13 +715,14 @@ class RRAE_Trainor_class(Trainor_class):
             "y_pred_interp_test_o": y_pred_interp_test_o,
             "y_pred_interp_test": y_pred_interp_test,
         }
-    
+
 
 class V_AE_Trainor_class(RRAE_Trainor_class):
     """ " Trainor class for variational batching."""
+
     def __init__(self, *args, **kwargs):
         raise NotImplementedError("This class is not implemented yet.")
-    
+
     def fit(
         self,
         input,

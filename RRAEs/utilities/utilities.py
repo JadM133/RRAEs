@@ -52,9 +52,11 @@ def _H(x: Array) -> Array:
 def _T(x: Array) -> Array:
     return lax.transpose(x, (*range(x.ndim - 2), x.ndim - 1, x.ndim - 2))
 
+
 @custom_jvp
 def stable_SVD(x):
     return jnp.linalg.svd(x, full_matrices=False)
+
 
 @stable_SVD.defjvp
 def stable_SVD_jvp(primals, tangents):
@@ -68,7 +70,7 @@ def stable_SVD_jvp(primals, tangents):
     s_diffs = (s_dim + _T(s_dim)) * (s_dim - _T(s_dim))
     bl = jnp.abs(s_diffs) < 1e-12
     s_diffs = s_diffs + (jnp.ones_like(s_diffs) * 1e-12) * bl
-    s_diffs_zeros = lax_internal._eye(s.dtype, (s.shape[-1], s.shape[-1]))
+    s_diffs_zeros = lax_internal._eye(s.dtype, (s.shape[-1], s.shape[-1]), 0)
     s_diffs_zeros = lax.expand_dims(s_diffs_zeros, range(s_diffs.ndim - 2))
     F = 1 / (s_diffs + s_diffs_zeros) - s_diffs_zeros
     dSS = s_dim.astype(A.dtype) * dS
@@ -196,9 +198,9 @@ def merge_dicts(d1, d2):
     return {**d1, **d2}
 
 
-def v_print(s, v):
+def v_print(s, v, f=False):
     if v:
-        print(s)
+        print(s, flush=f)
 
 
 def countList(lst1, lst2):
