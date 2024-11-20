@@ -4,10 +4,10 @@
 % Finally the latent space is decoded to find the reconstructed
 % solution.
 
-f.folder_mlp = "mlp_solution/";
+f.folder_mlp = "mlp_model/";
 f.file_mlp = "model.pkl";
 
-f.folder_rrae = "solution/";
+f.folder_rrae = "rrae_model/";
 f.file_rrae = "model.pkl";
 
 f.p_test = rand(3, 10); % New values of p to test
@@ -16,8 +16,7 @@ f = filter_strings(f);
 
 save("f.mat", "f")
 
-pyenv("Version", "C:\Users\jadmo\Desktop\RRAE_MATLAB\.venv\Scripts\python")
-[status, res] = system("python M_final_processing.py f.mat");
+[status, res] = system("C:\Users\jadmo\Desktop\RRAE_MATLAB\.venv\Scripts\python M_final_processing.py f.mat");
 res = filter_python_res_to_matrix(res);
 save("final_preds.mat", "res")
 

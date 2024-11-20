@@ -3,7 +3,7 @@
 clc
 clearvars
 
-st.folder = "solution/"; % folder where model is saved
+st.folder = "rrae_model/"; % folder where model is saved
 st.file = "model.pkl"; % file in folder where model is saved
 st.in = rand(100, 20); % input to the function you cant to give
 st.function = "latent"; % the name of the function
@@ -14,14 +14,10 @@ st.method = "Strong"; % Type of the model
 
 st = filter_strings(st);
 save("st.mat", "st")
-pyenv("Version", "C:\Users\jadmo\Desktop\RRAE_MATLAB\.venv\Scripts\python")
 
 % The results will be stored in res, and saved in .mat file.
-[status, res] = system("python M_post_proc_model.py st.mat");
-%res = str2double(strsplit(regexprep(res, '[\[\]]', '')));
-%res(:, size(res, 2)) = [];
-res = filter_python_res_to_matrix(res);
-save("coeffs.mat", "res")
+system("C:\Users\jadmo\Desktop\bugs_rraes\.venv\Scripts\python M_post_proc_model.py st.mat");
+fprintf("Coeffs are saved in coeffs.mat\n")
 
 function [S] = filter_strings(S) 
     fields = fieldnames(S); % Get all field names
@@ -31,13 +27,4 @@ function [S] = filter_strings(S)
             S.(field) = cellstr(S.(field)); % Convert string to cell
         end
     end
-end
-
-function [res] = filter_python_res_to_matrix(py_res)
-    cleaned_res = regexprep(py_res,'\n+','');
-    cleaned_res = cleaned_res(2:end);
-    cleaned_res = " " + cleaned_res;
-    rows = strsplit(cleaned_res, ']');
-    matrix = cellfun(@(row) str2double(strsplit(erase(strtrim(row), "["))), rows(1:end-1), 'UniformOutput', false);
-    res = vertcat(matrix{:});
 end

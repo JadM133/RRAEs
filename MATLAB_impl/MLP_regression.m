@@ -4,7 +4,7 @@
 % First we find the coeffs from the SVD in the latent space,
 % which will be our outputs.
 coeffs = load("coeffs.mat");
-coeffs = coeffs.res;
+coeffs = coeffs.coeffs;
 
 % The size should be k_max x D, with k_max the number of features
 % chosen previously in the latent space, and D the number of data
@@ -42,7 +42,7 @@ mlp.input_train = p_train;
 mlp.output_test = coeffs_test;
 mlp.input_test = p_test;
 mlp.loss_type = "Strong";
-mlp.folder = "mlp_solution/";
+mlp.folder = "mlp_model/";
 mlp.file = "model.pkl";
 mlp.norm_in = "minmax";
 mlp.norm_out = "minmax";
@@ -52,8 +52,7 @@ mlp = filter_strings(mlp);
 
 save("mlp.mat", "mlp")
 
-pyenv("Version", "C:\Users\jadmo\Desktop\RRAE_MATLAB\.venv\Scripts\python")
-system("python M_MLP_regression.py mlp.mat");
+system("C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python M_MLP_regression.py mlp.mat");
 
 function [S] = filter_strings(S) 
     fields = fieldnames(S); % Get all field names

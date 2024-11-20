@@ -39,7 +39,7 @@ inp.latent_size = 5000; % Latent space length L
 inp.k_max = 1; % Number of parameters in the SVD
 
 % The solution will be saved in folder/file
-inp.folder = "solution/";
+inp.folder = "rrae_model/";
 inp.file = "model.pkl";
 
 % Specify normalization ("minmax" or "meanstd" or "None")
@@ -51,8 +51,8 @@ inp.find_preds = 1;
 inp = filter_strings(inp);
 save("inp.mat", "inp")
 
-pyenv("Version", "C:\Users\jadmo\Desktop\RRAE_MATLAB\.venv\Scripts\python")
-system("python M_RRAE_training.py inp.mat");
+% pyenv("Version", "C:\Users\jadmo\Desktop\RRAE_MATLAB\.venv\Scripts\python")
+system("C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python M_RRAE_training.py inp.mat");
 
 function [S] = filter_strings(S) 
     fields = fieldnames(S); % Get all field names

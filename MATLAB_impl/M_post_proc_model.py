@@ -57,4 +57,4 @@ if __name__ == "__main__":
     kwargs = from_void_to_dict(inp["kwargs"])
     kwargs = {k: update_val_from_matlab(k, v) for k, v in kwargs.items()}
     res = getattr(trainor.model, func)(inpt, **kwargs)
-    print(res)
+    sio.savemat("coeffs.mat", {"coeffs": res})
