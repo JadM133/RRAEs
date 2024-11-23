@@ -1646,7 +1646,7 @@ class MLCNN(Module, strict=True):
         return x
 
 
-class CNNs_with_linear(eqx.Module, strict=True):
+class CNNs_with_MLP(eqx.Module, strict=True):
     """Class mainly for creating encoders with CNNs.
     The encoder is composed of multiple CNNs followed by an MLP.
     """
@@ -1664,6 +1664,8 @@ class CNNs_with_linear(eqx.Module, strict=True):
         stride=2,
         padding=1,
         dilation=1,
+        width_size=64,
+        depth=2,
         final_activation=_identity,
         *,
         key,
@@ -1693,7 +1695,9 @@ class CNNs_with_linear(eqx.Module, strict=True):
             **kwargs_cnn,
         )
         final_D = mlcnn(jnp.zeros((channels, data_dim0, data_dim0))).shape[-1]
-        linear = Linear((final_D) ** 2 * last_width, out, key=key2)
+        linear = MLP_with_linear(
+            (final_D) ** 2 * last_width, out, width_size, depth, key=key2
+        )
         act = lambda x: final_activation(x)
         self.layers = tuple([mlcnn, linear, act])
 
@@ -1752,7 +1756,7 @@ def is_convT_valid(D, data_dim0, pad, ker, st, dil, outpad, nums):
     return final_D == data_dim0, final_D
 
 
-class Linear_with_CNNs_trans(eqx.Module, strict=True):
+class MLP_with_CNNs_trans(eqx.Module, strict=True):
     """Class mainly for creating encoders with CNNs.
     The encoder is composed of multiple CNNs followed by an MLP.
     """
@@ -1769,13 +1773,15 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
         inp,
         channels,
         out_after_mlp=32,
-        CNNs_num=4,
-        width_CNNs=[256, 128, 64, 32],
+        CNNs_num=2,
+        width_CNNs=[8, 1],
         kernel_conv=3,
         stride=2,
         padding=1,
         dilation=1,
         output_padding=1,
+        width=64,
+        depth=2,
         final_activation=_identity,
         *,
         key,
@@ -1823,7 +1829,9 @@ class Linear_with_CNNs_trans(eqx.Module, strict=True):
             **kwargs_cnn,
         )
 
-        linear = Linear(inp, out_after_mlp * first_D**2, key=key2)
+        linear = MLP_with_linear(
+            inp, out_after_mlp * first_D**2, width, depth, key=key2
+        )
         final_conv = Conv2d(
             width_CNNs[-1],
             channels,

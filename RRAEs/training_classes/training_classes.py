@@ -12,6 +12,7 @@ from RRAEs.utilities import (
     merge_dicts,
     loss_generator,
 )
+from RRAEs.utilities import v_print
 from RRAEs.interpolation import Objects_Interpolator_nD
 from RRAEs.AE_classes import BaseClass
 from RRAEs.norm import Norm
@@ -34,12 +35,8 @@ class Trainor_class:
         out_train=None,
         norm_in="None",
         norm_out="None",
-        pre_func_inp=lambda x: x,
-        pre_func_out=lambda x: x,
         **kwargs,
     ):
-        self.pre_func_inp = pre_func_inp
-        self.pre_func_out = pre_func_out
         if model_cls is not None:
             self.model = Norm(
                 BaseClass(model_cls(**kwargs), map_axis=map_axis),
@@ -47,8 +44,6 @@ class Trainor_class:
                 out_train=out_train,
                 norm_in=norm_in,
                 norm_out=norm_out,
-                pre_func_inp=self.pre_func_inp,
-                pre_func_out=self.pre_func_out,
             )
             params_in = self.model.params_in
             params_out = self.model.params_out
@@ -95,6 +90,8 @@ class Trainor_class:
         verbose=True,
         loss_kwargs={},
         flush=False,
+        pre_func_inp=lambda x: x,
+        pre_func_out=lambda x: x,
         *,
         training_key,
     ):
@@ -184,7 +181,8 @@ class Trainor_class:
                     ),
                 ):
                     start = time.perf_counter()
-                    out = self.model.norm_out(self.model.pre_func_out(out))
+                    out = self.model.norm_out(pre_func_out(out))
+                    input_b = pre_func_inp(input_b)
                     loss, model, opt_state, aux, old_model = make_step(
                         model,
                         input_b.T,
@@ -269,6 +267,8 @@ class Trainor_class:
         y_test_o=None,
         batch_size=None,
         call_func=None,
+        pre_func_inp=lambda x: x,
+        pre_func_out=lambda x: x,
         **kwargs,
     ):
         """Performs post-processing to find the relative error of the RRAE model.
@@ -288,7 +288,10 @@ class Trainor_class:
         save: bool
             If anything other than False, the model as well as the results will be saved in f"{save}".pkl
         """
-        call_func = self.model if call_func is None else call_func
+        assert NotImplementedError("Evaluate is under construction.")
+        call_func = lambda x: (
+            self.model(pre_func_inp(x)) if call_func is None else call_func
+        )
         y_train_o = self.model.pre_func_out(y_train_o)
         assert (
             hasattr(self, "batch_size") or batch_size is not None
@@ -579,11 +582,19 @@ class RRAE_Trainor_class(Trainor_class):
 
         if "training_kwargs" in kwargs:
             training_kwargs = kwargs["training_kwargs"]
+            kwargs.pop("training_kwargs")
         else:
             training_kwargs = {}
 
+        if "ft_kwargs" in kwargs:
+            ft_kwargs = kwargs["ft_kwargs"]
+            kwargs.pop("ft_kwargs")
+        else:
+            ft_kwargs = {}
+
         key0, key1 = jrandom.split(training_key)
 
+        training_kwargs = {**kwargs, **training_kwargs}
         model = super().fit(*args, training_key=key0, **training_kwargs)
         inp = args[0] if len(args) > 0 else kwargs["input"]
 
@@ -611,10 +622,6 @@ class RRAE_Trainor_class(Trainor_class):
             pred = model(input, apply_basis=self.basis, inv_norm_out=False)
             return norm_loss_(pred, out), (pred,)
 
-        if "ft_kwargs" in kwargs:
-            ft_kwargs = kwargs["ft_kwargs"]
-        else:
-            ft_kwargs = {}
 
         if "loss_type" in ft_kwargs:
             raise ValueError(
@@ -622,7 +629,7 @@ class RRAE_Trainor_class(Trainor_class):
             )
         ft_kwargs["loss_type"] = loss_fun
         ft_kwargs["loss_kwargs"] = {"basis": basis}
-
+        ft_kwargs = {**kwargs, **ft_kwargs}
         print("Fine tuning the basis found ...")
         super().fit(*args, training_key=key1, **ft_kwargs)
 

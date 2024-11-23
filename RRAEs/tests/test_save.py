@@ -45,8 +45,6 @@ def test_save_with_final_act():
         latent_size=100,
         data_size=data.shape[1],
         channels=data.shape[0],
-        pre_func_inp=lambda x: x * 2 / 17,
-        pre_func_out=lambda x: x / 2,
         kwargs_dec={"final_activation": jnn.sigmoid},
         k_max=2,
         key=jrandom.PRNGKey(0),
@@ -57,5 +55,7 @@ def test_save_with_final_act():
     new_trainor.load("test_", erase=True)
     try:
         pr = new_trainor.model(data[..., 0:1])
+        assert jnp.max(pr) <= 1.0, "Final activation not working"
+        assert jnp.min(pr) >= 0.0, "Final activation not working"
     except Exception as e:
         raise ValueError(f"Failed with following exception {e}")

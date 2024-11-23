@@ -4,8 +4,8 @@ import pdb
 from RRAEs.utilities import (
     Sample,
     v_vt_class,
-    CNNs_with_linear,
-    Linear_with_CNNs_trans,
+    CNNs_with_MLP,
+    MLP_with_CNNs_trans,
     dataloader,
     MLP_with_linear,
     stable_SVD,
@@ -512,7 +512,7 @@ class CNN_Autoencoder(Autoencoder):
         )
         key1, key2, key3 = jrandom.split(key, 3)
 
-        encode = CNNs_with_linear(
+        encode = CNNs_with_MLP(
             data_dim0=data_size,
             channels=channels,
             out=latent_size,
@@ -521,7 +521,7 @@ class CNN_Autoencoder(Autoencoder):
         )
         _encode = BaseClass(encode, -1)
 
-        decode = Linear_with_CNNs_trans(
+        decode = MLP_with_CNNs_trans(
             data_dim0=data_size,
             inp=latent_size_after,
             channels=channels,
