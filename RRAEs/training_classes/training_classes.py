@@ -380,9 +380,7 @@ class Trainor_class:
             dill.dump(attr, f)
         print(f"Model saved in {filename}")
 
-    def load(
-        self, filename, erase=False, pre_func_inp=lambda x: x, pre_func_out=lambda x: x
-    ):
+    def load(self, filename, erase=False):
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
@@ -392,16 +390,12 @@ class Trainor_class:
             self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
-            self.pre_func_inp = pre_func_inp
-            self.pre_func_out = pre_func_out
             self.model = Norm(
                 BaseClass(self.model_cls(**kwargs), map_axis=self.map_axis),
                 norm_in=self.norm_in,
                 norm_out=self.norm_out,
                 params_in=self.params_in,
                 params_out=self.params_out,
-                pre_func_inp=self.pre_func_inp,
-                pre_func_out=self.pre_func_out,
             )
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             attributes = dill.load(f)
@@ -621,7 +615,6 @@ class RRAE_Trainor_class(Trainor_class):
         def loss_fun(model, input, out, idx, basis):
             pred = model(input, apply_basis=self.basis, inv_norm_out=False)
             return norm_loss_(pred, out), (pred,)
-
 
         if "loss_type" in ft_kwargs:
             raise ValueError(
