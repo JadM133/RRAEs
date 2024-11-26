@@ -15,8 +15,14 @@ f.p_test = rand(3, 10); % New values of p to test
 f = filter_strings(f);
 
 save("f.mat", "f")
+% Here you should specify where your python is for MATLAB to know. If you don't know where
+% it is, just run python (or python3) on a terminal and execute the following two commands:
+% import sys
+% print(sys.executable)
+% Then copy the output of this and put it in the following variable:
+python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python"
 
-[status, res] = system("C:\Users\jadmo\Desktop\RRAE_MATLAB\.venv\Scripts\python M_final_processing.py f.mat");
+[status, res] = system(strcat(python_loc," M_final_processing.py f.mat"));
 res = filter_python_res_to_matrix(res);
 save("final_preds.mat", "res")
 
