@@ -52,8 +52,13 @@ inp.find_preds = 1;
 inp = filter_strings(inp);
 save("inp.mat", "inp")
 
-% pyenv("Version", "C:\Users\jadmo\Desktop\RRAE_MATLAB\.venv\Scripts\python")
-system("C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python M_RRAE_training.py inp.mat");
+% Here you should specify where your python is for MATLAB to know. If you don't know where
+% it is, just run python (or python3) on a terminal and execute the following two commands:
+% import sys
+% print(sys.executable)
+% Then copy the output of this and put it in the following variable:
+python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python"
+system(strcat(python_loc," M_RRAE_training.py inp.mat"));
 
 function [S] = filter_strings(S) 
     fields = fieldnames(S); % Get all field names
