@@ -73,6 +73,7 @@ python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python";
 system(strcat(python_loc," M_RRAE_training.py inp.mat"));
 
 % You can access the results in MATLAB as follows
+format long
 res = load("res.mat");
 % Acces variables by res.preds (it is a structure)
 

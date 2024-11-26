@@ -1,4 +1,5 @@
 import numpy as np
+import jax.numpy as jnp
 
 
 def match_k(k):
@@ -40,6 +41,13 @@ def n(arg, none_val=None):
         category = np.array(arg)
     return category
 
+
 def prep_struct(st):
     st = from_void_to_dict(st)
     return {k: update_val_from_matlab(k, v) for k, v in st.items()}
+
+
+def dict_to_double(d):
+    for k, v in d.items():
+        if isinstance(v, jnp.array):
+            d[k] = jnp.astype(v, jnp.double)

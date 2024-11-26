@@ -25,6 +25,7 @@ python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python";
 system(strcat(python_loc," M_final_processing.py f.mat"));
 
 % You can access the final prediction by final_prd.result
+format long
 final_pred = load("final_pred.mat");
 
 %save("final_preds.mat", "res")

@@ -60,6 +60,10 @@ save("mlp.mat", "mlp")
 python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python";
 system(strcat(python_loc," M_MLP_regression.py mlp.mat"));
 
+% To access the results, use MLP_preds.preds:
+format long
+MLP_preds = load("MLP_preds.mat");
+
 function [S] = filter_strings(S) 
     fields = fieldnames(S); % Get all field names
     for i = 1:numel(fields)
