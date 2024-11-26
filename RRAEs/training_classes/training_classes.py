@@ -288,17 +288,13 @@ class Trainor_class:
         save: bool
             If anything other than False, the model as well as the results will be saved in f"{save}".pkl
         """
-        assert NotImplementedError("Evaluate is under construction.")
-        call_func = lambda x: (
-            self.model(pre_func_inp(x)) if call_func is None else call_func
-        )
+        call_func = (lambda x: self.model(pre_func_inp(x))) if call_func is None else call_func
         y_train_o = self.model.pre_func_out(y_train_o)
         assert (
             hasattr(self, "batch_size") or batch_size is not None
         ), "You should either provide a batch_size or fit the model first."
 
         batch_size = self.batch_size if batch_size is None else batch_size
-
         y_pred_train_o = self.model.eval_with_batches(
             x_train_o,
             batch_size,

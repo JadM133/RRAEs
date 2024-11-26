@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def match_k(k):
     if (k == "step_st") or k == ("batch_size_st") or (k == "lr_st"):
         return "list"
@@ -38,3 +39,7 @@ def n(arg, none_val=None):
     else:
         category = np.array(arg)
     return category
+
+def prep_struct(st):
+    st = from_void_to_dict(st)
+    return {k: update_val_from_matlab(k, v) for k, v in st.items()}

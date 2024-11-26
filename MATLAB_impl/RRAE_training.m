@@ -3,18 +3,27 @@ clc
 clearvars
 
 % Here define training parameters
-tr_kwargs.step_st = [2000, 2000,]; % Steps to make (how many bath passes), 0 to skip stage
+tr_kwargs.step_st = [1, 0,]; % Steps to make (how many bath passes), 0 to skip stage
 tr_kwargs.batch_size_st = [20, 20]; % Batch size
-tr_kwargs.lr_st = [1e-2, 1e-3]; % Learning rate (usually use smaller in second stage)
+tr_kwargs.lr_st = [1e-3, 1e-4]; % Learning rate (usually use smaller in second stage)
 tr_kwargs.print_every = 100;
 inp.training_kwargs = tr_kwargs;
 
 % Here define fine-tuning parameters
-ft_kwargs.step_st = [4000, 0]; % Two zeros will skip fine tuning
+ft_kwargs.step_st = [1, 0]; % Two zeros will skip fine tuning
 ft_kwargs.batch_size_st = [20, 20];
-ft_kwargs.lr_st = [1e-3, 1e-5];
+ft_kwargs.lr_st = [1e-4, 1e-5];
 ft_kwargs.print_every = 100;
 inp.ft_kwargs = ft_kwargs;
+
+% Here define the model, encoder/decoder arguments
+kwargs_enc.width_size = 64;
+kwargs_enc.depth = 2;
+inp.kwargs_enc = kwargs_enc;
+
+kwargs_dec.width_size = 64;
+kwargs_dec.depth = 6;
+inp.kwargs_dec = kwargs_dec;
 
 % THIS IS WHERE YOU SHOULD ADD YOUR DATA
 inp.run_type = "MLP"; % Choose MLP or CNN
@@ -49,6 +58,9 @@ inp.norm_in = "minmax";
 % Wether to get predictions in the end, 1 yes or 0 no
 inp.find_preds = 1;
 
+% Activation function for the final layer, can be "tanh", "sigmoid", "relu" or "None"
+inp.final_activation = "sigmoid";
+
 inp = filter_strings(inp);
 save("inp.mat", "inp")
 
@@ -57,7 +69,7 @@ save("inp.mat", "inp")
 % import sys
 % print(sys.executable)
 % Then copy the output of this and put it in the following variable:
-python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python"
+python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python";
 system(strcat(python_loc," M_RRAE_training.py inp.mat"));
 
 function [S] = filter_strings(S) 

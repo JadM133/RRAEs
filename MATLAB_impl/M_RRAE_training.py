@@ -11,6 +11,7 @@ import time
 import warnings
 from functools import partial
 from utilities_for_MATLAB import *
+import jax.nn as jnn
 
 print = partial(print, flush=True)
 
@@ -26,6 +27,18 @@ if __name__ == "__main__":
     y_test = x_test
 
     assert s(inp["run_type"]) in ["MLP", "CNN"], "Invalid run type, choose MLP or CNN."
+
+    final_acc = n(s(inp["final_activation"]))
+
+    match final_acc:
+        case "sigmoid":
+            final_activation = jnn.sigmoid
+        case "tanh":
+            final_activation = jnn.tanh
+        case "relu":
+            final_activation = jnn.relu
+        case "None":
+            final_activation = lambda x: x
 
     if s(inp["run_type"]) == "MLP":
         print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
@@ -77,6 +90,11 @@ if __name__ == "__main__":
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
+
+    kwargs_enc = prep_struct(inp["kwargs_enc"])
+    kwargs_dec = prep_struct(inp["kwargs_dec"])
+    kwargs_dec["final_activation"] = final_activation
+
     trainor = RRAE_Trainor_class(
         x_train,
         model_cls,
@@ -88,6 +106,8 @@ if __name__ == "__main__":
         norm_in=s(inp["norm_in"]),
         norm_out=s(inp["norm_in"]),
         out_train=x_train,
+        kwargs_dec=kwargs_dec,
+        kwargs_enc=kwargs_enc,
         key=jrandom.PRNGKey(0),
     )
 
@@ -95,19 +115,14 @@ if __name__ == "__main__":
     # you need to specify training kw arguments (first stage of training with SVD to
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
-    training_kwargs = from_void_to_dict(inp["training_kwargs"])
+    training_kwargs = prep_struct(inp["training_kwargs"])
 
-    ft_kwargs = from_void_to_dict(inp["ft_kwargs"])
-
-    # Step 6: Train the model and get the predictions.
-    training_kwargs = {
-        k: update_val_from_matlab(k, v) for k, v in training_kwargs.items()
-    }
-    ft_kwargs = {k: update_val_from_matlab(k, v) for k, v in ft_kwargs.items()}
+    ft_kwargs = prep_struct(inp["ft_kwargs"])
 
     training_kwargs["flush"] = True
     ft_kwargs["flush"] = True
 
+    # Step 6: Train the model and get the predictions.
     trainor.fit(
         x_train,
         y_train,

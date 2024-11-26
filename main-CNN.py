@@ -17,19 +17,29 @@ import numpy as np
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "mnist_"
-    (
-        x_train,
-        x_test,
-        p_train,
-        p_test,
-        y_train,
-        y_test,
-        pre_func_inp,
-        pre_func_out,
-        kwargs,
-    ) = get_data(problem, folder="../")
-
+    # problem = "mnist_"
+    # (
+    #     x_train,
+    #     x_test,
+    #     p_train,
+    #     p_test,
+    #     y_train,
+    #     y_test,
+    #     pre_func_inp,
+    #     pre_func_out,
+    #     kwargs,
+    # ) = get_data(problem, folder="../")
+    with open("Inputs_One_Circle_Regular/Inputs_One_Circle_Regular.pickle", "rb") as f:
+        all_data = np.expand_dims(pkl.load(f), 0)
+    x_train = all_data
+    x_test = all_data
+    p_train = None
+    p_test = p_train
+    pre_func_inp = lambda x:x
+    pre_func_out = lambda x:x
+    kwargs = {}
+    y_train = x_train
+    problem = "circle"
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
     print(f"Shape of data is {x_train.shape} (C x D x D x Ntr) and {x_test.shape}.")
@@ -72,16 +82,17 @@ if __name__ == "__main__":
         # },  # this is how you change the final activation
         key=jrandom.PRNGKey(0),
     )
+    pdb.set_trace()
 
     # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
     # you need to specify training kw arguments (first stage of training with SVD to
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [1],  # aprox 30 epoch (30*202000/256)
-        "batch_size_st": [20],
+        "step_st": [10],  # aprox 30 epoch (30*202000/256)
+        "batch_size_st": [-1],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
-        "print_every": 20,
+        "print_every": 1,
         # "save_every": 789,
         "loss_type": loss_type,
     }
