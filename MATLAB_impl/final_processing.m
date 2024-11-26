@@ -20,11 +20,12 @@ save("f.mat", "f")
 % import sys
 % print(sys.executable)
 % Then copy the output of this and put it in the following variable:
-python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python"
+python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python";
 
-[status, res] = system(strcat(python_loc," M_final_processing.py f.mat"));
-res = filter_python_res_to_matrix(res);
-save("final_preds.mat", "res")
+system(strcat(python_loc," M_final_processing.py f.mat"));
+
+% You can access the final prediction by final_prd.result
+final_pred = load("final_pred.mat");
 
 %save("final_preds.mat", "res")
 function [S] = filter_strings(S) 
@@ -35,13 +36,4 @@ function [S] = filter_strings(S)
             S.(field) = cellstr(S.(field)); % Convert string to cell
         end
     end
-end
-
-function [res] = filter_python_res_to_matrix(py_res)
-    cleaned_res = regexprep(py_res,'\n+','');
-    cleaned_res = cleaned_res(2:end);
-    cleaned_res = " " + cleaned_res;
-    rows = strsplit(cleaned_res, ']');
-    matrix = cellfun(@(row) str2double(strsplit(erase(strtrim(row), "["))), rows(1:end-1), 'UniformOutput', false);
-    res = vertcat(matrix{:});
 end

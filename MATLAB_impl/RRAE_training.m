@@ -72,6 +72,10 @@ save("inp.mat", "inp")
 python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python";
 system(strcat(python_loc," M_RRAE_training.py inp.mat"));
 
+% You can access the results in MATLAB as follows
+res = load("res.mat");
+% Acces variables by res.preds (it is a structure)
+
 function [S] = filter_strings(S) 
     fields = fieldnames(S); % Get all field names
     for i = 1:numel(fields)

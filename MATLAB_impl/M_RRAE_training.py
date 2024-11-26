@@ -137,7 +137,7 @@ if __name__ == "__main__":
         print("Finding preds is disabled.")
         preds = "None"
     trainor.save()
-    print(preds)
+    sio.savemat("res.mat", {"preds": preds})
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.

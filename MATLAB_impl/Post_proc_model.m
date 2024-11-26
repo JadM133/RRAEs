@@ -2,10 +2,15 @@
 % Run RRAE_training script before.
 clc
 clearvars
+% This is where you specify your input data, to get the corresponding 
+% SVD coefficient in the latent space.
+st.in = rand(9990, 20); % input to the function you want to give
 
+% The folder and file should be the same as the ones specified for
+% training.
 st.folder = "rrae_model/"; % folder where model is saved
 st.file = "model.pkl"; % file in folder where model is saved
-st.in = rand(100, 20); % input to the function you cant to give
+
 st.function = "latent"; % the name of the function
 kwargs.get_coeffs = 1; % arguments for the function
 st.kwargs = kwargs;
@@ -20,7 +25,7 @@ save("st.mat", "st")
 % import sys
 % print(sys.executable)
 % Then copy the output of this and put it in the following variable:
-python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python"
+python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python";
 system(strcat(python_loc," M_post_proc_model.py st.mat"));
 % The results will be stored in res, and saved in .mat file.
 fprintf("Coeffs are saved in coeffs.mat\n")

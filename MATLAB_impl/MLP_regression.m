@@ -57,7 +57,7 @@ save("mlp.mat", "mlp")
 % import sys
 % print(sys.executable)
 % Then copy the output of this and put it in the following variable:
-python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python"
+python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python";
 system(strcat(python_loc," M_MLP_regression.py mlp.mat"));
 
 function [S] = filter_strings(S) 
