@@ -52,7 +52,13 @@ mlp = filter_strings(mlp);
 
 save("mlp.mat", "mlp")
 
-system("C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python M_MLP_regression.py mlp.mat");
+% Here you should specify where your python is for MATLAB to know. If you don't know where
+% it is, just run python (or python3) on a terminal and execute the following two commands:
+% import sys
+% print(sys.executable)
+% Then copy the output of this and put it in the following variable:
+python_loc = "C:\Users\jadmo\Desktop\bugs_RRAEs\.venv\Scripts\python"
+system(strcat(python_loc," M_MLP_regression.py mlp.mat"));
 
 function [S] = filter_strings(S) 
     fields = fieldnames(S); % Get all field names
