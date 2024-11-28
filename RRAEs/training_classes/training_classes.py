@@ -376,7 +376,10 @@ class Trainor_class:
             dill.dump(attr, f)
         print(f"Model saved in {filename}")
 
-    def load(self, filename, erase=False):
+    def load(self, filename, erase=False, **fn_kwargs):
+        """NOTE: fn_kwargs defines the functions of the model
+        (e.g. final_activation, inner activation), if
+        needed to be saved/loaded on different devices/OS."""
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
@@ -386,6 +389,7 @@ class Trainor_class:
             self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
+            kwargs.update(fn_kwargs)
             self.model = Norm(
                 BaseClass(self.model_cls(**kwargs), map_axis=self.map_axis),
                 norm_in=self.norm_in,
