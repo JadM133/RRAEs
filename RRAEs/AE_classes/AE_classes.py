@@ -230,6 +230,13 @@ def latent_func_strong_RRAE(
     y_approx : jnp.array
         The latent space after the truncation.
     """
+    if apply_basis is not None:
+        if get_svd:
+            raise ValueError("Can not get SVD and apply basis at the same time.")
+        if get_coeffs:
+            return apply_basis.T @ y
+        return apply_basis @ apply_basis.T @ y
+    
     if get_svd or get_coeffs:
         if y.shape[-1] > y.shape[0]:
             new_y = y @ y.T
@@ -242,26 +249,13 @@ def latent_func_strong_RRAE(
             return coeffs
         return u_now, coeffs
 
-    if apply_basis is not None:
-        return apply_basis @ apply_basis.T @ y
-
     if k_max != -1:
         u, s, v = stable_SVD(y)
-        sigs = s[:k_max]
-        v_now = v[:k_max, :]
-        u_now = u[:, :k_max]
-
-        coeffs = jnp.multiply(v_now, jnp.expand_dims(sigs, -1))
-        y_approx = jnp.sum(
-            jax.vmap(lambda u, v: jnp.outer(u, v), in_axes=[-1, 0], out_axes=-1)(
-                u_now, coeffs
-            ),
-            axis=-1,
-        )
+        y_approx = (u[..., :k_max]*s[:k_max]) @ v[:k_max]
     else:
         y_approx = y
         u_now = None
-        v_now = None
+        coeffs = None
         sigs = None
     if ret:
         return u_now, coeffs, sigs
