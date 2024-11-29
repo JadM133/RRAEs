@@ -22,11 +22,7 @@ if __name__ == "__main__":
 
     loss_type = "Strong"  # Specify the loss type, this uses the norm in %.
 
-    # Step 3: Specify the archietectures' parameters:
-    latent_size = 5000  # latent space dimension
-    k_max = 1  # number of features in the latent space (after the truncated SVD).
-
-    # Step 4: Define your trainor, with the model, data, and parameters.
+    # Step 3: Define your trainor, with the model, data, and parameters.
     # Use Trainor_class. It has some slight differences compared to RRAE_Trainor_class.
     trainor = Trainor_class(
         inp,
@@ -43,7 +39,7 @@ if __name__ == "__main__":
         key=jrandom.PRNGKey(0),
     )
 
-    # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
+    # Step 4: Define the kw arguments for training. When using the Strong RRAE formulation,
     # you need to specify training kw arguments (first stage of training with SVD to
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
@@ -55,7 +51,7 @@ if __name__ == "__main__":
         "loss_type": loss_type,
     }
 
-    # Step 6: Train the model and get the predictions.
+    # Step 5: Train the model and get the predictions.
     trainor.fit(
         inp,
         out,
