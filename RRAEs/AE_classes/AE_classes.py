@@ -54,20 +54,25 @@ class BaseClass(eqx.Module):
             fn = lambda x, *args, **kwargs: tqdm(x, *args, **kwargs)
         else:
             fn = lambda x, *args, **kwargs: x
-
-        for _, (input_b, idx) in fn(
+        x = [el.T for el in x]
+        for _, inputs in fn(
             zip(
                 itertools.count(start=0),
                 dataloader(
-                    [x.T, jnp.arange(0, x.shape[-1], 1)],
+                    [*x, jnp.arange(0, x[0].shape[-1], 1)],
                     batch_size,
                     key=key,
                     once=True,
                 ),
             ),
-            total=int(x.shape[-1] / batch_size),
+            total=int(x[0].shape[-1] / batch_size),
         ):
-            pred = call_func(input_b.T, *args, **kwargs)
+            input_b = inputs[:-1]
+            idx = inputs[-1]
+
+            input_b = [el.T for el in input_b]
+
+            pred = call_func(*input_b, *args, **kwargs)
             idxs.append(idx)
             all_preds.append(pred)
             if end_type == "first":
@@ -80,6 +85,8 @@ class BaseClass(eqx.Module):
                 final_pred = jnp.concatenate(all_preds, -1)
             case "mean":
                 final_pred = sum(all_preds) / len(all_preds)
+            case "sum":
+                final_pred = sum(all_preds)
             case "first":
                 final_pred = all_preds[0]
             case _:
