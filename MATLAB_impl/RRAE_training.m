@@ -53,13 +53,13 @@ inp.folder = "rrae_model/";
 inp.file = "model.pkl";
 
 % Specify normalization ("minmax" or "meanstd" or "None")
-inp.norm_in = "minmax";
+inp.norm_in = "None";
 
 % Wether to get predictions in the end, 1 yes or 0 no
 inp.find_preds = 1;
 
 % Activation function for the final layer, can be "tanh", "sigmoid", "relu" or "None"
-inp.final_activation = "sigmoid";
+inp.final_activation = "None";
 
 inp = filter_strings(inp);
 save("inp.mat", "inp")

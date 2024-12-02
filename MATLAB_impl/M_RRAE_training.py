@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     assert s(inp["run_type"]) in ["MLP", "CNN"], "Invalid run type, choose MLP or CNN."
 
-    final_acc = n(s(inp["final_activation"]))
+    final_acc = s(inp["final_activation"])
 
     match final_acc:
         case "sigmoid":
@@ -39,6 +39,8 @@ if __name__ == "__main__":
             final_activation = jnn.relu
         case "None":
             final_activation = lambda x: x
+        case _:
+            raise ValueError("Invalid final activation")
 
     if s(inp["run_type"]) == "MLP":
         print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
