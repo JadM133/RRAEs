@@ -11,6 +11,7 @@ from RRAEs.utilities import (
     remove_keys_from_dict,
     merge_dicts,
     loss_generator,
+    tree_map
 )
 from RRAEs.utilities import v_print
 from RRAEs.interpolation import Objects_Interpolator_nD
@@ -128,25 +129,18 @@ class Trainor_class:
             diff_model, static_model = eqx.partition(model, filter_spec)
             (loss, aux), grads = loss_fun(diff_model, static_model, input, out, idx, **loss_kwargs)
             updates, opt_state = optim.update(grads, opt_state)
-            model = eqx.apply_updates(model, updates)
+            diff_model = eqx.apply_updates(diff_model, updates)
+            model = eqx.combine(diff_model, static_model)
             return loss, model, opt_state, aux
+                    
+        filtered_filter_spec = tree_map(lambda _: True, model)        
+        new_filt = jtu.tree_map(lambda _: False, fix_comp(filtered_filter_spec))
+        filter_spec = jtu.tree_map(lambda _: True, model) 
+        filter_spec = eqx.tree_at(fix_comp, filter_spec, replace=new_filt)
 
-        def f(leaf):
-            if callable(leaf):
-                return leaf
-            else:
-                return True
-            
-        filter_spec = jtu.tree_map(f, model)
+        diff_model, _ = eqx.partition(model, filter_spec)
+        filtered_model = eqx.filter(diff_model, eqx.is_inexact_array)
 
-        pdb.set_trace()
-        def f(x):
-            return False
-        
-        new_filt = jtu.tree_map(f, filter_spec.encode)
-        # last_filt = jtu.tree_map(last_f, filter_spec, new_filt)
-        pdb.set_trace()
-        filter_spec = eqx.tree_at(lambda pt: pt.encode, filter_spec, replace=new_filt)
         t_all = 0
         
         counter = 0
@@ -154,7 +148,6 @@ class Trainor_class:
             try:
                 t_t = 0
                 optim = optax.adabelief(lr)
-                filtered_model = eqx.filter(model, eqx.is_inexact_array)
                 opt_state = optim.init(filtered_model)
 
                 if (batch_size > input.shape[-1]) or batch_size == -1:
@@ -518,12 +511,7 @@ class VAR_AE_Trainor_class(Trainor_class):
                     t_t = 0
                 if ((step % save_every) == 0) or jnp.isnan(loss):
                     if jnp.isnan(loss):
-                        print(
-                            "Starting pdb since loss is nan, type exit to continue or use pdb session to debug."
-                        )
-                        import pdb
-
-                        pdb.set_trace()
+                        raise ValueError("Loss is nan, stopping training...")
                     self.model = old_model
                     orig = (
                         f"checkpoint_{step}"
@@ -610,7 +598,7 @@ class RRAE_Trainor_class(Trainor_class):
         ft_kwargs["loss_type"] = loss_fun
         ft_kwargs["loss_kwargs"] = {"basis": basis}
         ft_kwargs = {**kwargs, **ft_kwargs}
-        fix_comp = lambda model: model.encode
+        fix_comp = lambda model: model.encode.model
         print("Fine tuning the basis found ...")
         super().fit(*args, training_key=key1, fix_comp=fix_comp, **ft_kwargs)
 

@@ -165,8 +165,7 @@ class Norm(eqx.Module):
                 return lambda x, *args, **kwargs: self.inv_norm_out(
                     func(x), *args, **kwargs
                 )
-
-            return lambda *args, **kwargs: func(*args, **kwargs)
+            raise ValueError("Either norm_bool or inv_bool must be True")
 
         self.norm_and_inv_func = norm_and_inv_func
 
@@ -186,5 +185,13 @@ class Norm(eqx.Module):
             inv_bool = False
 
         attr = getattr(self.model, name)
-        call_func = self.norm_and_inv_func(attr, norm_bool, inv_bool)
+
+        if attr is None:
+            return None
+        
+        if not (norm_bool or inv_bool):
+            call_func = lambda *args, **kwargs: attr(*args, **kwargs)
+        else:
+            call_func = self.norm_and_inv_func(attr, norm_bool, inv_bool)
+
         return Attribute_Class(attr, call_func)

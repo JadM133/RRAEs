@@ -27,10 +27,24 @@ from tqdm import tqdm
 import jax.lax as lax
 from jax._src.lax import lax as lax_internal
 from jax import custom_jvp
-
+import jax.tree_util as jtu
 
 _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
+
+
+def tree_map(f, tree, *rest, is_leaf=None):
+    def filtered_f(leaf):
+        if (
+            callable(leaf)
+            or (isinstance(leaf, int) and not isinstance(leaf, bool))
+            or (leaf is None)
+        ):
+            return leaf
+        else:
+            return f(leaf)
+
+    return jtu.tree_map(filtered_f, tree, *rest, is_leaf=is_leaf)
 
 
 def _extract_diagonal(s: Array) -> Array:
@@ -161,12 +175,12 @@ def loss_generator(which=None, norm_loss_=None):
                     "To use LoRAE, you should specify how to find the layer for "
                     "which we add the nuclear norm in the loss. To do so, give the path "
                     "to the layer as loss kwargs to the trainor: "
-                    "e.g.: \n\"loss_kwargs\": {\"find_layer\": lambda model: model.encode.layers_l[1].weight} (for predefined CNN AE) \n"
-                    "\"loss_kwargs\": {\"find_layer\": lambda model: model.encode.layers_l[0].weight} (for predefined MLP AE)."
+                    'e.g.: \n"loss_kwargs": {"find_layer": lambda model: model.encode.layers_l[1].weight} (for predefined CNN AE) \n'
+                    '"loss_kwargs": {"find_layer": lambda model: model.encode.layers_l[0].weight} (for predefined MLP AE).'
                 )
             else:
                 weight = find_layer(model)
-                
+
             pdb.set_trace()
             return find_weighted_loss(
                 [
