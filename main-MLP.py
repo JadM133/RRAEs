@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [1000],
+        "step_st": [1000, 100],
         "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,

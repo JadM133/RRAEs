@@ -84,8 +84,6 @@ class Trainor_class:
         print_every=jnp.nan,
         save_every=jnp.nan,
         batch_size_st=[16, 16, 16, 16, 32],
-        mul_lr=None,
-        mul_lr_func=None,  #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
         regression=False,
         verbose=True,
         loss_kwargs={},
@@ -108,8 +106,6 @@ class Trainor_class:
             "lr_st": lr_st,
             "print_every": print_every,
             "batch_size_st": batch_size_st,
-            "mul_lr": mul_lr,
-            "mul_lr_func": mul_lr_func,
             "regression": regression,
             "verbose": verbose,
             "loss_kwargs": loss_kwargs,
@@ -120,9 +116,6 @@ class Trainor_class:
         model = self.model
 
         fn = lambda x: x if fn is None else fn
-
-        if mul_lr is None:
-            mul_lr = [1] * len(lr_st)
 
         if callable(loss_type):
             loss_fun = loss_type
@@ -136,38 +129,15 @@ class Trainor_class:
             new_model = eqx.apply_updates(model, updates)
             return loss, new_model, opt_state, aux, model
 
-        if mul_lr_func is not None:
-            filter_spec = jtu.tree_map(lambda _: False, model)
-            is_acc = eqx.tree_at(
-                mul_lr_func,
-                filter_spec,
-                replace=(True,) * len(mul_lr_func(model)),
-            )
-            is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
-
         t_all = 0
-        try:
-            counter = 0
-            for steps, lr, batch_size, mul_l in zip(
-                step_st, lr_st, batch_size_st, mul_lr
-            ):
+        
+        counter = 0
+        for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
+            try:
                 t_t = 0
-
-                if mul_lr_func is not None:
-                    optim = optax.chain(
-                        optax.masked(optax.adabelief(lr), is_not_acc),
-                        optax.masked(optax.adabelief(mul_l * lr), is_acc),
-                    )
-                else:
-                    optim = optax.adabelief(lr)
-
+                optim = optax.adabelief(lr)
                 filtered_model = eqx.filter(model, eqx.is_inexact_array)
-                try:
-                    opt_state = optim.init(filtered_model)
-                except ValueError:
-                    raise ValueError(
-                        "Optax has a bug! Send a message to Jad so he can fix it to you..."
-                    )
+                opt_state = optim.init(filtered_model)
 
                 if (batch_size > input.shape[-1]) or batch_size == -1:
                     batch_size = input.shape[-1]
@@ -196,9 +166,11 @@ class Trainor_class:
                     t_t += end - start
 
                     if (step % print_every) == 0 or step == steps - 1:
-                        if len(aux) == 2:
+                        if len(aux) > 1:
+                            to_print = ["loss {i}: {aux[i]}" for i in range(len(aux))]
+                            to_print = ", ".join(to_print)
                             v_print(
-                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
+                                f"Step: {step}, Total loss: {loss}, " + to_print,
                                 verbose,
                             )
                         else:
@@ -210,12 +182,7 @@ class Trainor_class:
                         t_t = 0
                     if ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
-                            print(
-                                "Starting pdb since loss is nan, type exit to continue or use pdb session to debug."
-                            )
-                            import pdb
-
-                            pdb.set_trace()
+                            raise ValueError("Loss is nan, stopping training...")
                         self.model = old_model
                         orig = (
                             f"checkpoint_{step}"
@@ -231,13 +198,8 @@ class Trainor_class:
                                 new_filename = f"{orig}_{i}.pkl"
                             checkpoint_filename = new_filename
                         self.save(checkpoint_filename)
-
-                    if jnp.isnan(loss):
-                        v_print("Loss is nan, stopping training...", verbose)
-                        break
-        except (Exception, KeyboardInterrupt) as e:
-            print(e)
-            pass
+            except KeyboardInterrupt:
+                pass
 
         model = eqx.nn.inference_mode(model)
         self.model = model
@@ -288,7 +250,9 @@ class Trainor_class:
         save: bool
             If anything other than False, the model as well as the results will be saved in f"{save}".pkl
         """
-        call_func = (lambda x: self.model(pre_func_inp(x))) if call_func is None else call_func
+        call_func = (
+            (lambda x: self.model(pre_func_inp(x))) if call_func is None else call_func
+        )
         y_train_o = self.model.pre_func_out(y_train_o)
         assert (
             hasattr(self, "batch_size") or batch_size is not None
@@ -607,10 +571,11 @@ class RRAE_Trainor_class(Trainor_class):
         )
         norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
 
-        basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
+        basis, sings = jnp.linalg.svd(all_bases, full_matrices=False)[0:2]
 
         self.basis = basis[:, : self.model.k_max.attr]
-
+        self.sings_of_all_bases = sings
+        
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(model, input, out, idx, basis):
             pred = model(input, apply_basis=self.basis, inv_norm_out=False)
