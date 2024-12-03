@@ -1,4 +1,9 @@
 % Example code for training RRAEs.
+%If you oonly want to test if it is running, create 
+% dummy data in command Window as follows:
+% data = rand(50, 2000);
+% save("Data.mat", "data");
+
 clc
 clearvars
 
