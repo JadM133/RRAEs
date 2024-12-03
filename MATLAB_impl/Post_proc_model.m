@@ -4,7 +4,8 @@ clc
 clearvars
 % This is where you specify your input data, to get the corresponding 
 % SVD coefficient in the latent space.
-st.in = rand(9990, 20); % input to the function you want to give
+load("Data.mat")
+st.in = data; % input to the function you want to give
 
 % The folder and file should be the same as the ones specified for
 % training.

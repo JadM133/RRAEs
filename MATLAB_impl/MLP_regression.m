@@ -14,7 +14,7 @@ size(coeffs)
 %Then we define the physical parameters, these should be of shape 
 % P x D, where P is the dimension of the physical parametric space
 % and D is the number of data.
-p_vals = rand(3, 20);
+p_vals = rand(3, size(coeffs, ndims(coeffs)));
 
 % We can divide these between train and test
 % NOTE: it is recommended to shuffle when splitting the data.

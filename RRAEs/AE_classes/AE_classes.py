@@ -16,6 +16,7 @@ import jax.random as jrandom
 from equinox._doc_utils import doc_repr
 import warnings
 from tqdm import tqdm
+import numpy as np
 
 _identity = doc_repr(lambda x, *args, **kwargs: x, "lambda x: x")
 
@@ -55,7 +56,7 @@ class BaseClass(eqx.Module):
         else:
             fn = lambda x, *args, **kwargs: x
 
-        if isinstance(x, jnp.ndarray):
+        if isinstance(x, jnp.ndarray) or isinstance(x, np.ndarray):
             x = [x]
         x = [el.T for el in x]
 
@@ -247,7 +248,7 @@ def latent_func_strong_RRAE(
         if get_coeffs:
             return apply_basis.T @ y
         return apply_basis @ apply_basis.T @ y
-    
+
     if get_basis_coeffs or get_coeffs:
         if y.shape[-1] > y.shape[0]:
             new_y = y @ y.T
@@ -262,7 +263,7 @@ def latent_func_strong_RRAE(
 
     if k_max != -1:
         u, s, v = stable_SVD(y)
-        y_approx = (u[..., :k_max]*s[:k_max]) @ v[:k_max]
+        y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
     else:
         y_approx = y
         u_now = None
