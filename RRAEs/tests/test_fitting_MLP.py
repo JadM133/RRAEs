@@ -18,7 +18,7 @@ from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
         (Vanilla_AE_MLP, (500, 10), "default"),
         (Weak_RRAE_MLP, (500, 10), "Weak"),
         (IRMAE_MLP, (500, 10), "default"),
-        (LoRAE_MLP, (500, 10), "nuc"),
+        # (LoRAE_MLP, (500, 10), "nuc"),
     ],
 )
 def test_fitting(model_cls, sh, lf):

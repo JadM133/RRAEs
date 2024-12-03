@@ -54,7 +54,11 @@ class BaseClass(eqx.Module):
             fn = lambda x, *args, **kwargs: tqdm(x, *args, **kwargs)
         else:
             fn = lambda x, *args, **kwargs: x
+
+        if isinstance(x, jnp.ndarray):
+            x = [x]
         x = [el.T for el in x]
+
         for _, inputs in fn(
             zip(
                 itertools.count(start=0),
@@ -216,7 +220,7 @@ def latent_func_strong_RRAE(
     y,
     k_max,
     apply_basis=None,
-    get_svd=False,
+    get_basis_coeffs=False,
     get_coeffs=False,
     ret=False,
     *args,
@@ -238,13 +242,13 @@ def latent_func_strong_RRAE(
         The latent space after the truncation.
     """
     if apply_basis is not None:
-        if get_svd:
+        if get_basis_coeffs:
             raise ValueError("Can not get SVD and apply basis at the same time.")
         if get_coeffs:
             return apply_basis.T @ y
         return apply_basis @ apply_basis.T @ y
     
-    if get_svd or get_coeffs:
+    if get_basis_coeffs or get_coeffs:
         if y.shape[-1] > y.shape[0]:
             new_y = y @ y.T
         else:

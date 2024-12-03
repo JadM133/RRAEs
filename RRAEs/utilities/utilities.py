@@ -57,10 +57,11 @@ def _T(x: Array) -> Array:
 def stable_SVD(x):
     return jnp.linalg.svd(x, full_matrices=False)
 
+
 @stable_SVD.defjvp
 def _svd_jvp_rule(primals, tangents):
-    A, = primals
-    dA, = tangents
+    (A,) = primals
+    (dA,) = tangents
     U, s_orig, Vt = jnp.linalg.svd(A, full_matrices=False)
 
     s = (s_orig / s_orig[0] * 100 >= 1e-9) * s_orig
@@ -71,7 +72,9 @@ def _svd_jvp_rule(primals, tangents):
     ds = _extract_diagonal(dS.real)
 
     s_diffs = (s_dim + _T(s_dim)) * (s_dim - _T(s_dim))
-    s_diffs_zeros = lax_internal._eye(s.dtype, (s.shape[-1], s.shape[-1]))  # jnp.ones((), dtype=A.dtype) * (s_diffs == 0.)  # is 1. where s_diffs is 0. and is 0. everywhere else
+    s_diffs_zeros = lax_internal._eye(
+        s.dtype, (s.shape[-1], s.shape[-1])
+    )  # jnp.ones((), dtype=A.dtype) * (s_diffs == 0.)  # is 1. where s_diffs is 0. and is 0. everywhere else
     s_diffs_zeros = lax.expand_dims(s_diffs_zeros, range(s_diffs.ndim - 2))
     F = 1 / (s_diffs + s_diffs_zeros) - s_diffs_zeros
     dSS = s_dim.astype(A.dtype) * dS  # dS.dot(jnp.diag(s))
@@ -80,7 +83,7 @@ def _svd_jvp_rule(primals, tangents):
     s_zeros = (s == 0).astype(s.dtype)
     s_inv = 1 / (s + s_zeros) - s_zeros
     s_inv_mat = _construct_diagonal(s_inv)
-    dUdV_diag = .5 * (dS - _H(dS)) * s_inv_mat.astype(A.dtype)
+    dUdV_diag = 0.5 * (dS - _H(dS)) * s_inv_mat.astype(A.dtype)
     dU = U @ (F.astype(A.dtype) * (dSS + _H(dSS)) + dUdV_diag)
     dV = V @ (F.astype(A.dtype) * (SdS + _H(SdS)))
 
@@ -102,7 +105,8 @@ def loss_generator(which=None, norm_loss_=None):
     if (which == "Strong") or (which == "default") or (which == "Vanilla"):
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(model, input, out, idx, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, idx, **kwargs):
+            model = eqx.combine(diff_model, static_model)
             pred = model(input, inv_norm_out=False)
             wv = jnp.array([1.0])
             return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (pred,)
@@ -110,7 +114,10 @@ def loss_generator(which=None, norm_loss_=None):
     elif which == "Weak":
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(model, input, out, idx, norm_loss=None, **kwargs):
+        def loss_fun(
+            diff_model, static_model, input, out, idx, norm_loss=None, **kwargs
+        ):
+            model = eqx.combine(diff_model, static_model)
             if norm_loss is None:
                 norm_loss = norm_loss_
             pred = model(input)
@@ -133,25 +140,34 @@ def loss_generator(which=None, norm_loss_=None):
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(
-            model,
+            diff_model,
+            static_model,
             input,
             out,
             idx,
-            lambda_nuc,
+            lambda_nuc=0.001,
             norm_loss=None,
             find_layer=None,
             **kwargs,
         ):
+            model = eqx.combine(diff_model, static_model)
             if norm_loss is None:
                 norm_loss = norm_loss_
             pred = model(input)
             wv = jnp.array([1.0, lambda_nuc])
 
             if find_layer is None:
-                weight = model.encode.layers_l[0].weight  # 1 for CNN
+                raise ValueError(
+                    "To use LoRAE, you should specify how to find the layer for "
+                    "which we add the nuclear norm in the loss. To do so, give the path "
+                    "to the layer as loss kwargs to the trainor: "
+                    "e.g.: \n\"loss_kwargs\": {\"find_layer\": lambda model: model.encode.layers_l[1].weight} (for predefined CNN AE) \n"
+                    "\"loss_kwargs\": {\"find_layer\": lambda model: model.encode.layers_l[0].weight} (for predefined MLP AE)."
+                )
             else:
                 weight = find_layer(model)
-
+                
+            pdb.set_trace()
             return find_weighted_loss(
                 [
                     norm_loss(pred, out),
@@ -163,7 +179,8 @@ def loss_generator(which=None, norm_loss_=None):
     elif which == "var":
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(model, input, out, idx, epsilon, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, **kwargs):
+            model = eqx.combine(diff_model, static_model)
             pred = model(input, epsilon=epsilon)
             _, means, logvars = model.latent(input, epsilon=epsilon, ret=True)
             wv = jnp.array([1.0, 1.0])

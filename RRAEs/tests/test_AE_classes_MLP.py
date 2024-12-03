@@ -97,7 +97,7 @@ class Test_width:
 def test_getting_SVD_coeffs():
     data = jrandom.uniform(jrandom.key(0), (500, 15))
     model_s = Strong_RRAE_MLP(data.shape[0], 200, 3, key=jrandom.PRNGKey(0))
-    basis, coeffs, sigs = model_s.latent(data, ret=True)
+    basis, coeffs = model_s.latent(data, get_basis_coeffs=True)
     model_w = Weak_RRAE_MLP(data.shape[0], 200, 3, data.shape[-1], key=jrandom.PRNGKey(0))
     basis = model_w.v_vt.v
     coeffs = model_w.v_vt.vt

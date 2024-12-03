@@ -90,6 +90,7 @@ class Trainor_class:
         flush=False,
         pre_func_inp=lambda x: x,
         pre_func_out=lambda x: x,
+        fix_comp=lambda _: (),
         *,
         training_key,
     ):
@@ -124,11 +125,28 @@ class Trainor_class:
 
         @eqx.filter_jit
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
-            (loss, aux), grads = loss_fun(model, input, out, idx, **loss_kwargs)
+            diff_model, static_model = eqx.partition(model, filter_spec)
+            (loss, aux), grads = loss_fun(diff_model, static_model, input, out, idx, **loss_kwargs)
             updates, opt_state = optim.update(grads, opt_state)
-            new_model = eqx.apply_updates(model, updates)
-            return loss, new_model, opt_state, aux, model
+            model = eqx.apply_updates(model, updates)
+            return loss, model, opt_state, aux
 
+        def f(leaf):
+            if callable(leaf):
+                return leaf
+            else:
+                return True
+            
+        filter_spec = jtu.tree_map(f, model)
+
+        pdb.set_trace()
+        def f(x):
+            return False
+        
+        new_filt = jtu.tree_map(f, filter_spec.encode)
+        # last_filt = jtu.tree_map(last_f, filter_spec, new_filt)
+        pdb.set_trace()
+        filter_spec = eqx.tree_at(lambda pt: pt.encode, filter_spec, replace=new_filt)
         t_all = 0
         
         counter = 0
@@ -153,7 +171,7 @@ class Trainor_class:
                     start = time.perf_counter()
                     out = self.model.norm_out(pre_func_out(out))
                     input_b = pre_func_inp(input_b)
-                    loss, model, opt_state, aux, old_model = make_step(
+                    loss, model, opt_state, aux = make_step(
                         model,
                         input_b.T,
                         out.T,
@@ -183,7 +201,7 @@ class Trainor_class:
                     if ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
                             raise ValueError("Loss is nan, stopping training...")
-                        self.model = old_model
+                        self.model = model
                         orig = (
                             f"checkpoint_{step}"
                             if not jnp.isnan(loss)
@@ -321,6 +339,8 @@ class Trainor_class:
     def save(self, filename=None, erase=True, **kwargs):
         """Saves the trainor class."""
         if filename is None:
+            if (self.folder is None) or (self.file is None):
+                raise ValueError("You should provide a filename to save")
             filename = os.path.join(self.folder, self.file)
             if erase:
                 shutil.rmtree(self.folder)
@@ -564,7 +584,7 @@ class RRAE_Trainor_class(Trainor_class):
         all_bases = model.eval_with_batches(
             inp,
             batch_size,
-            call_func=lambda x: model.latent(x, get_svd=True)[0],
+            call_func=lambda x: model.latent(x, get_basis_coeffs=True)[0],
             str="Finding train latent space...",
             end_type="concat",
             key=jrandom.key(0),
@@ -577,7 +597,8 @@ class RRAE_Trainor_class(Trainor_class):
         self.sings_of_all_bases = sings
         
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(model, input, out, idx, basis):
+        def loss_fun(diff_model, static_model, input, out, idx, basis):
+            model = eqx.combine(diff_model, static_model)
             pred = model(input, apply_basis=self.basis, inv_norm_out=False)
             return norm_loss_(pred, out), (pred,)
 
@@ -585,11 +606,13 @@ class RRAE_Trainor_class(Trainor_class):
             raise ValueError(
                 "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
             )
+        
         ft_kwargs["loss_type"] = loss_fun
         ft_kwargs["loss_kwargs"] = {"basis": basis}
         ft_kwargs = {**kwargs, **ft_kwargs}
+        fix_comp = lambda model: model.encode
         print("Fine tuning the basis found ...")
-        super().fit(*args, training_key=key1, **ft_kwargs)
+        super().fit(*args, training_key=key1, fix_comp=fix_comp, **ft_kwargs)
 
     def evaluate(
         self,
