@@ -76,9 +76,9 @@ def stable_SVD(x):
 def _svd_jvp_rule(primals, tangents):
     (A,) = primals
     (dA,) = tangents
-    U, s_orig, Vt = jnp.linalg.svd(A, full_matrices=False)
+    U, s, Vt = jnp.linalg.svd(A, full_matrices=False)
 
-    s = (s_orig / s_orig[0] * 100 >= 1e-9) * s_orig
+    s = (s / s[0] * 100 >= 1e-9) * s
 
     Ut, V = _H(U), _H(Vt)
     s_dim = s[..., None, :]
@@ -86,10 +86,7 @@ def _svd_jvp_rule(primals, tangents):
     ds = _extract_diagonal(dS.real)
 
     s_diffs = (s_dim + _T(s_dim)) * (s_dim - _T(s_dim))
-    s_diffs_zeros = lax_internal._eye(
-        s.dtype, (s.shape[-1], s.shape[-1])
-    )  # jnp.ones((), dtype=A.dtype) * (s_diffs == 0.)  # is 1. where s_diffs is 0. and is 0. everywhere else
-    s_diffs_zeros = lax.expand_dims(s_diffs_zeros, range(s_diffs.ndim - 2))
+    s_diffs_zeros = (s_diffs == 0).astype(s_diffs.dtype)
     F = 1 / (s_diffs + s_diffs_zeros) - s_diffs_zeros
     dSS = s_dim.astype(A.dtype) * dS  # dS.dot(jnp.diag(s))
     SdS = _T(s_dim.astype(A.dtype)) * dS  # jnp.diag(s).dot(dS)
@@ -109,7 +106,7 @@ def _svd_jvp_rule(primals, tangents):
         dAHU = _H(dA) @ U
         dV = dV + (dAHU - V @ (Vt @ dAHU)) * s_inv.astype(A.dtype)
 
-    return (U, s_orig, Vt), (dU, ds, _H(dV))
+    return (U, s, Vt), (dU, ds, _H(dV))
 
 
 def loss_generator(which=None, norm_loss_=None):
@@ -175,20 +172,22 @@ def loss_generator(which=None, norm_loss_=None):
                     "To use LoRAE, you should specify how to find the layer for "
                     "which we add the nuclear norm in the loss. To do so, give the path "
                     "to the layer as loss kwargs to the trainor: "
-                    'e.g.: \n"loss_kwargs": {"find_layer": lambda model: model.encode.layers_l[1].weight} (for predefined CNN AE) \n'
-                    '"loss_kwargs": {"find_layer": lambda model: model.encode.layers_l[0].weight} (for predefined MLP AE).'
+                    'e.g.: \n"loss_kwargs": {"find_layer": lambda model: model.encode.layers[-2].layers_l[-1].weight} (for predefined CNN AE) \n'
+                    '"loss_kwargs": {"find_layer": lambda model: model.encode.layers_l[-1].weight} (for predefined MLP AE).'
                 )
             else:
                 weight = find_layer(model)
 
-            pdb.set_trace()
-            return find_weighted_loss(
-                [
-                    norm_loss(pred, out),
-                    jnp.linalg.norm(weight, "nuc"),
-                ],
-                weight_vals=wv,
-            ), (pred,)
+            return (
+                find_weighted_loss(
+                    [
+                        norm_loss(pred, out),
+                        jnp.linalg.norm(weight, "nuc"),
+                    ],
+                    weight_vals=wv,
+                ),
+                (norm_loss(pred, out), jnp.linalg.norm(weight, "nuc")),
+            )
 
     elif which == "var":
 
@@ -395,6 +394,40 @@ def get_data(problem, folder=None, google=True, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
+        case "Angelo":
+            import os
+
+            def f(n):
+                return os.path.join(folder, n)
+
+            import h5py
+
+            data = h5py.File(f("Data.mat"), "r")
+            data = jnp.array(data["data"]).T
+            param = h5py.File(f("Param.mat"), "r")
+            param = jnp.array(param["param"]).T
+
+            data = jrandom.permutation(jrandom.key(0), data, axis=-1)
+            data = jnp.log(data[::10])
+            perc = 0.8
+            x_train = data[:, : int(perc * data.shape[-1])]
+            x_test = data[:, int(perc * data.shape[-1]) :]
+            y_train = x_train
+            y_test = x_test
+            p_train = param[..., : int(perc * data.shape[-1])]
+            p_test = param[..., int(perc * data.shape[-1]) :]
+            return (
+                x_train,
+                x_test,
+                None,
+                None,
+                y_train,
+                y_test,
+                lambda x: x,
+                lambda x: x,
+                (),
+            )
+
         case "CelebA":
             data_res = 160
             import os
@@ -437,6 +470,33 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 y_test,
                 pre_func_in,
                 pre_func_out,
+                (),
+            )
+
+        case "Circle":
+            import pickle as pkl
+            import os
+
+            if os.path.exists(f"{folder}/Inputs_One_Circle_Regular.pickle"):
+                print("Loading data from file")
+                with open(f"{folder}/Inputs_One_Circle_Regular.pickle", "rb") as f:
+                    data = pkl.load(f)
+            else:
+                raise ValueError("data is missing")
+            data = jnp.expand_dims(data, 0)
+            data = jrandom.permutation(jrandom.key(100), data, axis=-1)
+            perc = 0.8
+            x_train = data[..., : int(perc * data.shape[-1])]
+            x_test = data[..., int(perc * data.shape[-1]) :]
+            return (
+                x_train,
+                x_test,
+                None,
+                None,
+                x_train,
+                x_test,
+                lambda x: x,
+                lambda x: x,
                 (),
             )
 
@@ -1415,7 +1475,6 @@ class MLP_with_linear(Module, strict=True):
     layers: tuple[Linear, ...]
     layers_l: tuple[Linear, ...]
     activation: Callable
-    activation_l: Callable
     use_bias: bool = field(static=True)
     use_final_bias: bool = field(static=True)
     in_size: Union[int, Literal["scalar"]] = field(static=True)
@@ -1423,7 +1482,7 @@ class MLP_with_linear(Module, strict=True):
     width_size: tuple[int, ...]
     depth: tuple[int, ...]
     final_activation: Callable
-    final_activation_l: Callable
+    linear_l: int
 
     def __init__(
         self,
@@ -1432,11 +1491,9 @@ class MLP_with_linear(Module, strict=True):
         width_size,
         depth,
         activation=_relu,
-        activation_l=_identity,
         use_bias=True,
         use_final_bias=True,
         final_activation=_identity,
-        final_activation_l=_identity,
         linear_l=0,
         *,
         key,
@@ -1459,7 +1516,8 @@ class MLP_with_linear(Module, strict=True):
             layers.append(
                 Linear(width_size[depth - 1], out_size, use_final_bias, key=keys[-2])
             )
-            width_size_l = [width_size[-1]] * (linear_l - 1)
+
+        if linear_l != 0:
             for i in range(linear_l):
                 layers_l.append(
                     Linear(out_size, out_size, use_bias=False, key=keys[-2])
@@ -1479,16 +1537,10 @@ class MLP_with_linear(Module, strict=True):
                 )()
                 for w in width_size
             ]
-            self.activation_l = [
-                filter_vmap(
-                    filter_vmap(lambda: _identity, axis_size=w), axis_size=depth
-                )()
-                for w in width_size_l
-            ]
         else:
             self.activation = None
         self.final_activation = final_activation
-        self.final_activation_l = final_activation_l
+        self.linear_l = linear_l
         self.use_bias = use_bias
         self.use_final_bias = use_final_bias
 
@@ -1505,16 +1557,9 @@ class MLP_with_linear(Module, strict=True):
                 x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
         x = self.layers[-1](x)
         x = self.final_activation(x)
-        if self.depth != 0:
-            for i, (layer, act) in enumerate(
-                zip(self.layers_l[:-1], self.activation_l)
-            ):
+        if self.linear_l != 0:
+            for i, layer in enumerate(self.layers_l[:-1]):
                 x = layer(x)
-                layer_activation = jtu.tree_map(
-                    lambda x: x[i] if is_array(x) else x, act
-                )
-                x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
-            x = self.final_activation_l(x)
         return x
 
 
@@ -1686,7 +1731,7 @@ class CNNs_with_MLP(eqx.Module, strict=True):
     The encoder is composed of multiple CNNs followed by an MLP.
     """
 
-    layers: tuple[MLCNN, MLP_with_linear]
+    layers: tuple[MLCNN, Linear]
 
     def __init__(
         self,
@@ -1694,27 +1739,36 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         out,
         channels=1,
         CNNs_num=4,
-        CNN_widths=[32, 64, 128, 256],
+        width_CNNs=[32, 64, 128, 256],
         kernel_conv=3,
         stride=2,
         padding=1,
         dilation=1,
-        width_size=64,
-        depth=2,
+        mlp_width=None,
+        mlp_depth=0,
         final_activation=_identity,
         *,
         key,
         kwargs_cnn={},
-        **kwargs,
+        kwargs_mlp={},
     ):
         super().__init__()
-        assert CNNs_num == len(CNN_widths)
+
+        if mlp_depth != 0:
+            if mlp_width is not None:
+                assert (
+                    mlp_width >= out
+                ), "Choose a bigger (or equal) MLP width than the latent space in the encoder."
+            else:
+                mlp_width = out
+
+        assert CNNs_num == len(width_CNNs)
         key1, key2 = jax.random.split(key, 2)
 
         try:
-            last_width = CNN_widths[-1]
+            last_width = width_CNNs[-1]
         except:
-            last_width = CNN_widths
+            last_width = width_CNNs
 
         mlcnn = MLCNN(
             channels,
@@ -1723,18 +1777,23 @@ class CNNs_with_MLP(eqx.Module, strict=True):
             padding,
             kernel_conv,
             dilation,
-            CNN_widths,
+            width_CNNs,
             CNNs_num,
             key=key1,
             final_activation=_relu,
             **kwargs_cnn,
         )
         final_D = mlcnn(jnp.zeros((channels, data_dim0, data_dim0))).shape[-1]
-        linear = MLP_with_linear(
-            (final_D) ** 2 * last_width, out, width_size, depth, key=key2
+        mlp = MLP_with_linear(
+            (final_D) ** 2 * last_width,
+            out,
+            mlp_width,
+            mlp_depth,
+            key=key2,
+            **kwargs_mlp,
         )
         act = lambda x: final_activation(x)
-        self.layers = tuple([mlcnn, linear, act])
+        self.layers = tuple([mlcnn, mlp, act])
 
     def __call__(self, x, *args, **kwargs):
         x = self.layers[0](x)
@@ -1742,13 +1801,6 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         x = self.layers[1](jnp.squeeze(x))
         x = self.layers[2](x)
         return x
-
-
-# def next_D_CNN(D, pad, ker, st, dil, num, all_Ds=[]):
-#     if num == 0:
-#         return all_Ds
-#     all_Ds.append(int(jnp.floor(D)))
-#     return next_D_CNN((D + 2 * pad - dil*(ker-1)) / st + 1, pad, ker, st, dil, num - 1)
 
 
 def prev_D_CNN_trans(D, pad, ker, st, dil, outpad, num, all_Ds=[]):
@@ -1796,7 +1848,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
     The encoder is composed of multiple CNNs followed by an MLP.
     """
 
-    layers_: tuple[MLCNN, MLP_with_linear]
+    layers_: tuple[MLCNN, Linear]
     start_dim: int
     first_D: int
     out_after_mlp: int
@@ -1809,19 +1861,19 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         channels,
         out_after_mlp=32,
         CNNs_num=2,
-        width_CNNs=[8, 1],
+        width_CNNs=[64, 32],
         kernel_conv=3,
         stride=2,
         padding=1,
         dilation=1,
         output_padding=1,
-        width=64,
-        depth=2,
         final_activation=_identity,
+        mlp_width=None,
+        mlp_depth=0,
         *,
         key,
         kwargs_cnn={},
-        **kwargs,
+        kwargs_mlp={},
     ):
         super().__init__()
         assert CNNs_num == len(width_CNNs)
@@ -1848,7 +1900,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         )
 
         key1, key2 = jax.random.split(key, 2)
-        mlcnn_ = MLCNN(
+        mlcnn = MLCNN(
             out_after_mlp,
             width_CNNs[-1],
             stride,
@@ -1864,9 +1916,23 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
             **kwargs_cnn,
         )
 
-        linear = MLP_with_linear(
-            inp, out_after_mlp * first_D**2, width, depth, key=key2
+        if mlp_depth != 0:
+            if mlp_width is not None:
+                assert (
+                    mlp_width >= inp
+                ), "Choose a bigger (or equal) MLP width than the latent space in decoder."
+            else:
+                mlp_width = inp
+
+        mlp = MLP_with_linear(
+            inp,
+            out_after_mlp * first_D**2,
+            mlp_width,
+            mlp_depth,
+            key=key2,
+            **kwargs_mlp,
         )
+
         final_conv = Conv2d(
             width_CNNs[-1],
             channels,
@@ -1882,15 +1948,15 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         self.final_act = doc_repr(
             lambda x: final_activation(x), "lambda x: final_activation(x)"
         )
-        self.layers_ = tuple([linear, mlcnn_, final_conv, self.final_act])
+        self.layers = tuple([mlp, mlcnn, final_conv, self.final_act])
         self.out_after_mlp = out_after_mlp
 
     def __call__(self, x, *args, **kwargs):
-        x = self.layers_[0](x)
+        x = self.layers[0](x)
         x = jnp.reshape(x, (self.out_after_mlp, self.first_D, self.first_D))
-        x = self.layers_[1](x)
-        x = self.layers_[2](x)
-        x = self.layers_[3](x)
+        x = self.layers[1](x)
+        x = self.layers[2](x)
+        x = self.layers[3](x)
         return x
 
 

@@ -17,8 +17,7 @@ from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
     [
         (Vanilla_AE_CNN, (1, 2, 2, 10), "default"),
         (Weak_RRAE_CNN, (3, 12, 12, 10), "Weak"),
-        (IRMAE_CNN, (5, 5, 5, 5), "default"),
-        # (LoRAE_CNN, (6, 16, 16, 10), "nuc"),
+        (LoRAE_CNN, (6, 16, 16, 10), "nuc"),
     ],
 )
 def test_fitting(model_cls, sh, lf):
@@ -29,13 +28,16 @@ def test_fitting(model_cls, sh, lf):
         latent_size=100,
         data_size=x.shape[1],
         channels=x.shape[0],
-        samples=x.shape[-1], # Only for weak
+        samples=x.shape[-1],  # Only for weak
         k_max=2,
         key=jrandom.PRNGKey(0),
     )
     kwargs = {
         "step_st": [2],
-        "loss_kwargs": {"lambda_nuc": 0.001, "find_layer": lambda model: model.encode.layers_l[1].weight},
+        "loss_kwargs": {
+            "lambda_nuc": 0.001,
+            "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
+        },
     }
     try:
         trainor.fit(
@@ -49,6 +51,35 @@ def test_fitting(model_cls, sh, lf):
     except Exception as e:
         assert False, f"Fitting failed with the following exception {repr(e)}"
 
+
+def test_IRMAE_fitting():
+    model_cls = IRMAE_CNN
+    lf = "default"
+    sh = (3, 12, 12, 10)
+    x = jrandom.normal(jrandom.PRNGKey(0), sh)
+    trainor = Trainor_class(
+        x,
+        model_cls,
+        latent_size=100,
+        data_size=x.shape[1],
+        channels=x.shape[0],
+        samples=x.shape[-1],  # Only for weak
+        k_max=2,
+        linear_l=4,
+        key=jrandom.PRNGKey(0),
+    )
+    kwargs = {"step_st": [2]}
+    try:
+        trainor.fit(
+            x,
+            x,
+            loss_type=lf,
+            verbose=False,
+            training_key=jrandom.PRNGKey(50),
+            **kwargs,
+        )
+    except Exception as e:
+        assert False, f"Fitting failed with the following exception {repr(e)}"
 
 def test_Strong_fitting():
     sh = (1, 20, 20, 10)

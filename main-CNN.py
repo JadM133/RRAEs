@@ -13,33 +13,25 @@ from RRAEs.utilities import get_data
 import jax.nn as jnn
 import pickle as pkl
 import numpy as np
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
 
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    # problem = "mnist_"
-    # (
-    #     x_train,
-    #     x_test,
-    #     p_train,
-    #     p_test,
-    #     y_train,
-    #     y_test,
-    #     pre_func_inp,
-    #     pre_func_out,
-    #     kwargs,
-    # ) = get_data(problem, folder="../")
-    with open("Inputs_One_Circle_Regular/Inputs_One_Circle_Regular.pickle", "rb") as f:
-        all_data = np.expand_dims(pkl.load(f), 0)
-    x_train = all_data
-    x_test = all_data
-    p_train = None
-    p_test = p_train
-    pre_func_inp = lambda x:x
-    pre_func_out = lambda x:x
-    kwargs = {}
-    y_train = x_train
-    problem = "circle"
+    problem = "Circle"
+    (
+        x_train,
+        x_test,
+        p_train,
+        p_test,
+        y_train,
+        y_test,
+        pre_func_inp,
+        pre_func_out,
+        kwargs,
+    ) = get_data(problem, folder="Inputs_One_Circle_Regular/")
+
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
     print(f"Shape of data is {x_train.shape} (C x D x D x Ntr) and {x_test.shape}.")
@@ -60,7 +52,7 @@ if __name__ == "__main__":
     loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
-    latent_size = 1000  # latent space dimension
+    latent_size = 200  # latent space dimension
     k_max = 4  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
@@ -77,20 +69,30 @@ if __name__ == "__main__":
         norm_in="None",
         norm_out="None",
         out_train=x_train,
-        # kwargs_dec={
-        #     "final_activation": jnn.sigmoid
-        # },  # this is how you change the final activation
-        key=jrandom.PRNGKey(0),
+        kwargs_enc={
+            "width_CNNs": [16, 32, 64],
+            "CNNs_num": 3,
+            "kernel_conv": 3,
+            "stride": 2,
+            "padding": 1,
+        },
+        kwargs_dec={
+            "width_CNNs": [32, 8],
+            "CNNs_num": 2,
+            "kernel_conv": 3,
+            "stride": 2,
+            "padding": 1,
+            "final_activation": lambda x: jnn.sigmoid(x),
+        },
+        key=jrandom.PRNGKey(50),
     )
-    pdb.set_trace()
-
     # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
     # you need to specify training kw arguments (first stage of training with SVD to
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [10],  # aprox 30 epoch (30*202000/256)
-        "batch_size_st": [-1],
+        "step_st": [300, 300],  # aprox 30 epoch (30*202000/256)
+        "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
         # "save_every": 789,
@@ -98,12 +100,11 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [1],
+        "step_st": [100],
         "batch_size_st": [20],
-        "lr_st": [1e-5, 1e-6, 1e-7, 1e-8],
+        "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
         "print_every": 20,
         # "save_every": np.nan,
-        # "loss_type": loss_type,
     }
 
     # Step 6: Train the model and get the predictions.

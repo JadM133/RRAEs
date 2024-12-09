@@ -178,7 +178,7 @@ class Trainor_class:
 
                     if (step % print_every) == 0 or step == steps - 1:
                         if len(aux) > 1:
-                            to_print = ["loss {i}: {aux[i]}" for i in range(len(aux))]
+                            to_print = [f"loss {i}: {aux[i]}" for i in range(len(aux))]
                             to_print = ", ".join(to_print)
                             v_print(
                                 f"Step: {step}, Total loss: {loss}, " + to_print,

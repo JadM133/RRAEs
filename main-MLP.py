@@ -5,15 +5,16 @@ from RRAEs.AE_classes import (
     IRMAE_MLP,
     LoRAE_MLP,
 )
-from RRAEs.training_classes import RRAE_Trainor_class
+from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
 import jax.random as jrandom
 import pdb
 from RRAEs.utilities import get_data
+import jax.numpy as jnp
 
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "shift"
+    problem = "Angelo"
     (
         x_train,
         x_test,
@@ -24,12 +25,16 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         args,
-    ) = get_data(problem)
+    ) = get_data(problem, folder="Ang_data/")
 
+    x_train = jnp.reshape(x_train, (-1, x_train.shape[-1]))
+    y_train = x_train
+    x_test = jnp.reshape(x_test, (-1, x_test.shape[-1]))
+    y_test = x_test
     print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
 
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-    method = "Strong"
+    method = "LoRAE"
     match method:
         case "Strong":
             model_cls = Strong_RRAE_MLP
@@ -45,8 +50,8 @@ if __name__ == "__main__":
     loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
-    latent_size = 5000  # latent space dimension
-    k_max = 1  # number of features in the latent space (after the truncated SVD).
+    latent_size = 800  # latent space dimension
+    k_max = 10  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
@@ -69,7 +74,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [1],
+        "step_st": [2000, 2000],
         "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -77,7 +82,7 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [2],
+        "step_st": [500],
         "batch_size_st": [20, 20],
         "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -98,4 +103,4 @@ if __name__ == "__main__":
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
-    # pdb.set_trace()
+    pdb.set_trace()

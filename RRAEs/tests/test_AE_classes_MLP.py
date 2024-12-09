@@ -61,7 +61,6 @@ class Test_AEs_shapes:
         x = model.decode(y)
         assert x.shape == (500, dim_D)
 
-
 @pytest.mark.parametrize("width,depth", [(64, 2), ([2, 4, 6], 3)])
 class Test_width:
     def test_MLP(self, width, depth):

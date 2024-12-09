@@ -17,8 +17,7 @@ from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
     [
         (Vanilla_AE_MLP, (500, 10), "default"),
         (Weak_RRAE_MLP, (500, 10), "Weak"),
-        (IRMAE_MLP, (500, 10), "default"),
-        # (LoRAE_MLP, (500, 10), "nuc"),
+        (LoRAE_MLP, (500, 10), "nuc"),
     ],
 )
 def test_fitting(model_cls, sh, lf):
@@ -38,7 +37,7 @@ def test_fitting(model_cls, sh, lf):
     )
     kwargs = {
         "step_st": [2],
-        "loss_kwargs": {"lambda_nuc": 0.001},
+        "loss_kwargs": {"lambda_nuc": 0.001, "find_layer": lambda model: model.encode.layers_l[0].weight},
     }
     try:
         trainor.fit(
@@ -82,10 +81,6 @@ def test_weak_mul_lr():
             "batch_size_st": [20, 20, 20, 20],  # batch size strategy
             "lr_st": [1e-3, 1e-4, 1e-5],  # learning rate strategy
             "print_every": 100,
-            "mul_lr": [0.05, 0.05, 0.05],  # The values of kappa (to multiply lr for A)
-            "mul_lr_func": lambda tree: (
-                tree.v_vt.vt,
-            ),  # Who will be affected by kappa, this means A
         }
         _ = trainor_Weak.fit(
             x_train,
@@ -96,6 +91,7 @@ def test_weak_mul_lr():
         )
     except Exception as e:
         assert False, f"Can not change lr in Weak for the following reason: {repr(e)}"
+
 
 def test_Strong_fitting():
     sh = (500, 10)
@@ -123,6 +119,34 @@ def test_Strong_fitting():
             training_key=jrandom.PRNGKey(50),
             training_kwargs=training_kwargs,
             ft_kwargs=ft_kwargs,
+        )
+    except Exception as e:
+        assert False, f"Fitting failed with the following exception {repr(e)}"
+
+def test_IRMAE_fitting():
+    model_cls = IRMAE_MLP
+    lf = "default"
+    sh = (500, 10)
+    x = jrandom.normal(jrandom.PRNGKey(0), sh)
+    trainor = Trainor_class(
+        x,
+        model_cls,
+        in_size=x.shape[0],
+        data_size=x.shape[-1],
+        latent_size=2000,
+        k_max=2,
+        linear_l=4,
+        key=jrandom.PRNGKey(0),
+    )
+    kwargs = {"step_st": [2]}
+    try:
+        trainor.fit(
+            x,
+            x,
+            loss_type=lf,
+            verbose=False,
+            training_key=jrandom.PRNGKey(50),
+            **kwargs,
         )
     except Exception as e:
         assert False, f"Fitting failed with the following exception {repr(e)}"

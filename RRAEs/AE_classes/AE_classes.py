@@ -452,13 +452,15 @@ class IRMAE_MLP(Autoencoder):
         self,
         in_size,
         latent_size,
-        linear_l=2,
+        linear_l=None,
         *,
         key,
         kwargs_enc={},
         kwargs_dec={},
         **kwargs,
     ):
+
+        assert linear_l is not None, "linear_l must be specified for IRMAE_MLP"
 
         if "k_max" in kwargs.keys():
             if kwargs["k_max"] != -1:
@@ -487,6 +489,10 @@ class LoRAE_MLP(IRMAE_MLP):
     def __init__(
         self, in_size, latent_size, *, key, kwargs_enc={}, kwargs_dec={}, **kwargs
     ):
+        if "linear_l" in kwargs.keys():
+            if kwargs["linear_l"] != 1:
+                raise ValueError("linear_l can not be specified for LoRAE_CNN")
+
         super().__init__(
             in_size,
             latent_size,
@@ -650,7 +656,11 @@ class Weak_RRAE_CNN(CNN_Autoencoder):
 
 
 class IRMAE_CNN(CNN_Autoencoder):
-    def __init__(self, data_size, channels, latent_size, linear_l=2, *, key, **kwargs):
+    def __init__(
+        self, data_size, channels, latent_size, linear_l=None, *, key, **kwargs
+    ):
+
+        assert linear_l is not None, "linear_l must be specified for IRMAE_CNN"
 
         if "k_max" in kwargs.keys():
             if kwargs["k_max"] != -1:
@@ -662,12 +672,18 @@ class IRMAE_CNN(CNN_Autoencoder):
         warnings.warn(
             "IRMAEs and LoRAEs are not tested for CNNs, be careful when using them..."
         )
+
+        if "kwargs_enc" in kwargs:
+            kwargs_enc = kwargs["kwargs_enc"]
+            kwargs_enc["kwargs_mlp"] = {"linear_l": linear_l}
+            kwargs["kwargs_enc"] = kwargs_enc
+        else:
+            kwargs["kwargs_enc"] = {"kwargs_mlp": {"linear_l": linear_l}}
         super().__init__(
             data_size,
             channels,
             latent_size,
             -1,
-            kwargs_mlp_enc={"linear_l": linear_l},
             key=key,
             **kwargs,
         )
@@ -675,6 +691,11 @@ class IRMAE_CNN(CNN_Autoencoder):
 
 class LoRAE_CNN(IRMAE_CNN):
     def __init__(self, data_size, channels, latent_size, *, key, **kwargs):
+
+        if "linear_l" in kwargs.keys():
+            if kwargs["linear_l"] != 1:
+                raise ValueError("linear_l can not be specified for LoRAE_CNN")
+
         super().__init__(
             data_size, channels, latent_size, linear_l=1, key=key, **kwargs
         )
