@@ -1380,7 +1380,7 @@ def v_dataloader(arrays, batch_size, p_vals=None, once=False, *, key, idx_change
         kk += 1
 
 
-def dataloader(arrays, batch_size, p_vals=None, once=False, *, key):
+def dataloader(arrays, batch_size, p_vals=None, once=False, *, key_idx):
     dataset_size = arrays[0].shape[0]
     arrays = [array if array is not None else [None] * dataset_size for array in arrays]
     # assert all(array.shape[0] == dataset_size for array in arrays)
@@ -1388,8 +1388,8 @@ def dataloader(arrays, batch_size, p_vals=None, once=False, *, key):
     kk = 0
 
     while True:
+        key = jrandom.key(key_idx + kk)
         perm = jrandom.permutation(key, indices)
-        (key,) = jrandom.split(key, 1)
         start = 0
         end = batch_size
         while end <= dataset_size:
@@ -1848,7 +1848,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
     The encoder is composed of multiple CNNs followed by an MLP.
     """
 
-    layers_: tuple[MLCNN, Linear]
+    layers: tuple[MLCNN, Linear]
     start_dim: int
     first_D: int
     out_after_mlp: int

@@ -143,6 +143,8 @@ class Trainor_class:
 
         t_all = 0
         
+        training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
+
         counter = 0
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
             try:
@@ -158,7 +160,7 @@ class Trainor_class:
                     dataloader(
                         [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
                         batch_size,
-                        key=training_key,
+                        key_idx=training_num,
                     ),
                 ):
                     start = time.perf_counter()
@@ -767,6 +769,7 @@ class V_AE_Trainor_class(RRAE_Trainor_class):
             is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
 
         t_all = 0
+        training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
 
         try:
             inc = 0
@@ -801,7 +804,7 @@ class V_AE_Trainor_class(RRAE_Trainor_class):
                     dataloader(
                         [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
                         batch_size,
-                        key=training_key,
+                        key_idx=training_num,
                     ),
                 ):
 
