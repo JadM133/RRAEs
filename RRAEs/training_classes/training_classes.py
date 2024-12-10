@@ -616,7 +616,6 @@ class RRAE_Trainor_class(Trainor_class):
     ):
 
         call_func = lambda x: self.model(x, apply_basis=self.basis)
-
         res = super().evaluate(
             x_train_o, y_train_o, x_test_o, y_test_o, batch_size, call_func=call_func
         )

@@ -27,10 +27,6 @@ if __name__ == "__main__":
         args,
     ) = get_data(problem, folder="Ang_data/")
 
-    x_train = jnp.reshape(x_train, (-1, x_train.shape[-1]))
-    y_train = x_train
-    x_test = jnp.reshape(x_test, (-1, x_test.shape[-1]))
-    y_test = x_test
     print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
 
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
