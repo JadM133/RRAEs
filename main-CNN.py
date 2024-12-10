@@ -70,7 +70,7 @@ if __name__ == "__main__":
         norm_out="None",
         out_train=x_train,
         kwargs_enc={
-            "width_CNNs": [16, 32, 64],
+            "width_CNNs": [32, 64, 128],
             "CNNs_num": 3,
             "kernel_conv": 3,
             "stride": 2,
@@ -82,7 +82,7 @@ if __name__ == "__main__":
             "kernel_conv": 3,
             "stride": 2,
             "padding": 1,
-            "final_activation": lambda x: jnn.sigmoid(x),
+            # "final_activation": lambda x: jnn.sigmoid(x),
         },
         key=jrandom.PRNGKey(50),
     )
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [300, 300],  # aprox 30 epoch (30*202000/256)
+        "step_st": [2000, 2000],  # aprox 30 epoch (30*202000/256)
         "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [100],
+        "step_st": [2000],
         "batch_size_st": [20],
         "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
         "print_every": 20,

@@ -142,7 +142,7 @@ class Trainor_class:
         filtered_model = eqx.filter(diff_model, eqx.is_inexact_array)
 
         t_all = 0
-        
+
         training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
 
         counter = 0
@@ -577,7 +577,7 @@ class RRAE_Trainor_class(Trainor_class):
             call_func=lambda x: model.latent(x, get_basis_coeffs=True)[0],
             str="Finding train latent space...",
             end_type="concat",
-            key=jrandom.key(0),
+            key_idx=0,
         )
         norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
 

@@ -45,7 +45,7 @@ class BaseClass(eqx.Module):
         end_type="concat_and_resort",
         str=None,
         *args,
-        key,
+        key_idx,
         **kwargs,
     ):
         """Works for array input with data as final dim."""
@@ -68,7 +68,7 @@ class BaseClass(eqx.Module):
                 dataloader(
                     [*x, jnp.arange(0, x[0].shape[0], 1)],
                     batch_size,
-                    key=key,
+                    key_idx=key_idx,
                     once=True,
                 ),
             ),
