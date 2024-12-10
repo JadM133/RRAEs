@@ -49,7 +49,6 @@ class BaseClass(eqx.Module):
         **kwargs,
     ):
         """Works for array input with data as final dim."""
-        pdb.set_trace()
         idxs = []
         all_preds = []
 
