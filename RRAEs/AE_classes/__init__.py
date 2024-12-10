@@ -13,5 +13,6 @@ from .AE_classes import (
     CNN_Autoencoder,
     VAR_AE_MLP,
     VAR_AE_CNN, 
-    BaseClass
+    BaseClass,
+    Strong_Dynamics_RRAE_MLP
 )

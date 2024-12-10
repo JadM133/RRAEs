@@ -17,6 +17,8 @@ from equinox._doc_utils import doc_repr
 import warnings
 from tqdm import tqdm
 import numpy as np
+from equinox.nn._linear import Linear
+
 
 _identity = doc_repr(lambda x, *args, **kwargs: x, "lambda x: x")
 
@@ -47,6 +49,7 @@ class BaseClass(eqx.Module):
         **kwargs,
     ):
         """Works for array input with data as final dim."""
+        pdb.set_trace()
         idxs = []
         all_preds = []
 
@@ -64,7 +67,7 @@ class BaseClass(eqx.Module):
             zip(
                 itertools.count(start=0),
                 dataloader(
-                    [*x, jnp.arange(0, x[0].shape[-1], 1)],
+                    [*x, jnp.arange(0, x[0].shape[0], 1)],
                     batch_size,
                     key=key,
                     once=True,
@@ -250,11 +253,7 @@ def latent_func_strong_RRAE(
         return apply_basis @ apply_basis.T @ y
 
     if get_basis_coeffs or get_coeffs:
-        if y.shape[-1] > y.shape[0]:
-            new_y = y @ y.T
-        else:
-            new_y = y
-        u, s, v = stable_SVD(new_y)
+        u, s, v = stable_SVD(y)
         u_now = u[:, :k_max]
         coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
         if get_coeffs:
@@ -359,6 +358,51 @@ class Vanilla_AE_MLP(Autoencoder):
             kwargs_enc=kwargs_enc,
             kwargs_dec=kwargs_dec,
             _perform_in_latent=latent_func,
+            **kwargs,
+        )
+
+
+class Strong_Dynamics_RRAE_MLP(Autoencoder):
+    DMD_W: Linear
+    
+    """Vanilla Autoencoder.
+
+    Subclass for the Vanilla AE, basically the strong RRAE with
+    k_max = -1, hence returning all the modes with no truncation.
+    """
+
+    def __init__(
+        self,
+        in_size,
+        latent_size,
+        k_max,
+        post_proc_func=None,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
+
+        if "linear_l" in kwargs.keys():
+            warnings.warn("linear_l can not be specified for Strong")
+            kwargs.pop("linear_l")
+
+        key1, key2 = jrandom.split(key, 2)
+
+        latent_func = latent_func_strong_RRAE
+        self.DMD_W = Linear(k_max, k_max, use_bias=False, key=key1)
+
+        super().__init__(
+            in_size,
+            latent_size,
+            k_max,
+            _perform_in_latent=latent_func,
+            map_latent=False,
+            post_proc_func=post_proc_func,
+            key=key2,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
             **kwargs,
         )
 
