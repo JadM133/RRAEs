@@ -712,10 +712,6 @@ class IRMAE_CNN(CNN_Autoencoder):
                 )
             kwargs.pop("k_max")
 
-        warnings.warn(
-            "IRMAEs and LoRAEs are not tested for CNNs, be careful when using them..."
-        )
-
         if "kwargs_enc" in kwargs:
             kwargs_enc = kwargs["kwargs_enc"]
             kwargs_enc["kwargs_mlp"] = {"linear_l": linear_l}
