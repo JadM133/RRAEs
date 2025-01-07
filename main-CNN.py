@@ -39,13 +39,12 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         kwargs,
-    ) = get_data(
-        problem, folder="Inputs_One_Circle_Regular/"
-    ) 
+    ) = get_data(problem, folder="Inputs_One_Circle_Regular/")
 
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
-    print(f"Shape of data is {x_train.shape} (C x D x D x Ntr) and {x_test.shape}.")
+    print(f"Shape of data is {x_train.shape} (C x D0 x D1 x Ntr).")
+
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
     method = "Strong"
     match method:
@@ -117,20 +116,24 @@ if __name__ == "__main__":
         "batch_size_st": [20],
         "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
-        # "save_every": np.nan,
+        # "save_every": 50,
     }
 
     # Step 6: Train the model and get the predictions.
     trainor.fit(
         x_train,
         y_train,
-        training_key=jrandom.PRNGKey(50),
+        training_key=jrandom.key(50),
         training_kwargs=training_kwargs,
         ft_kwargs=ft_kwargs,
         pre_func_inp=pre_func_inp,
         pre_func_out=pre_func_out,
     )
-    preds = trainor.evaluate(x_train, y_train, x_test, y_test, None, None, None, pre_func_inp, pre_func_out)
+    preds = trainor.evaluate(
+        x_train, y_train, x_test, y_test, None, None, None, pre_func_inp, pre_func_out
+    )
+    # NOTE: preds are not saved so uncomment last line if you want to save/plot etc.
+
     trainor.save(kwargs=kwargs)
 
     # Uncomment the following line if you want to hold the session to check your

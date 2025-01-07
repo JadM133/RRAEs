@@ -1831,7 +1831,7 @@ class CNNs_with_MLP(eqx.Module, strict=True):
             final_activation=_relu,
             **kwargs_cnn,
         )
-        final_Ds = mlcnn(jnp.zeros((channels, width, height))).shape[-2:]
+        final_Ds = mlcnn(jnp.zeros((channels, height, width))).shape[-2:]
         mlp = MLP_with_linear(
             final_Ds[0] * final_Ds[1] * last_width,
             out,
@@ -1956,8 +1956,8 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         super().__init__()
         assert CNNs_num == len(width_CNNs)
         D0s, D1s = prev_D_CNN_trans(
-            width,
             height,
+            width,
             padding,
             kernel_conv,
             stride,
@@ -1974,8 +1974,8 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         _, _, final_D0, final_D1 = is_convT_valid(
             first_D0,
             first_D1,
-            width,
             height,
+            width,
             padding,
             kernel_conv,
             stride,
@@ -1983,6 +1983,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
             output_padding,
             CNNs_num + 1,
         )
+
 
         key1, key2 = jax.random.split(key, 2)
         mlcnn = MLCNN(
@@ -2021,7 +2022,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         final_conv = Conv2d(
             width_CNNs[-1],
             channels,
-            kernel_size=(1 + (final_D0 - width), 1 + (final_D1 - height)),
+            kernel_size=(1 + (final_D0 - height), 1 + (final_D1 - width)),
             stride=1,
             padding=0,
             dilation=1,
@@ -2039,7 +2040,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
 
     def __call__(self, x, *args, **kwargs):
         x = self.layers[0](x)
-        x = jnp.reshape(x, (self.out_after_mlp, self.first_D1, self.first_D0))
+        x = jnp.reshape(x, (self.out_after_mlp, self.first_D0, self.first_D1))
         x = self.layers[1](x)
         x = self.layers[2](x)
         x = self.layers[3](x)
