@@ -17,9 +17,18 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
 
+def get_coeffs(trainors, inp):
+    coeffs = []
+    for trainor in trainors:
+        coeffs.append(
+            trainor.model.latent(inp, apply_basis=trainor.basis, get_coeffs=True)
+        )
+    return coeffs
+
+
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "Circle"
+    problem = "fashion_mnist"
     (
         x_train,
         x_test,
@@ -30,7 +39,9 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         kwargs,
-    ) = get_data(problem, folder="Inputs_One_Circle_Regular/")
+    ) = get_data(
+        problem
+    )  # folder="Inputs_One_Circle_Regular/"
 
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
@@ -49,11 +60,12 @@ if __name__ == "__main__":
         case "LoRAE":
             model_cls = LoRAE_CNN
 
+    pdb.set_trace()
     loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
     latent_size = 200  # latent space dimension
-    k_max = 4  # number of features in the latent space (after the truncated SVD).
+    k_max = 12  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
@@ -122,4 +134,4 @@ if __name__ == "__main__":
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
-    # pdb.set_trace()
+    pdb.set_trace()

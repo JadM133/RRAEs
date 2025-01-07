@@ -58,7 +58,7 @@ class BaseClass(eqx.Module):
         else:
             fn = lambda x, *args, **kwargs: x
 
-        if isinstance(x, jnp.ndarray) or isinstance(x, np.ndarray):
+        if not(isinstance(x, tuple) or isinstance(x, list)):
             x = [x]
         x = [el.T for el in x]
 
@@ -363,7 +363,7 @@ class Vanilla_AE_MLP(Autoencoder):
 
 class Strong_Dynamics_RRAE_MLP(Autoencoder):
     DMD_W: Linear
-    
+
     """Vanilla Autoencoder.
 
     Subclass for the Vanilla AE, basically the strong RRAE with
@@ -452,15 +452,19 @@ class Weak_RRAE_MLP(Autoencoder):
 
 def sample(y, sample_cls, k_max, epsilon=None, *args, **kwargs):
     if epsilon is None:
-        new_perform_sample = lambda x: sample_cls(x, *args, **kwargs)
-        return jax.vmap(new_perform_sample, in_axes=[-1], out_axes=-1)(y)
+        new_perform_sample = lambda m, lv: sample_cls(m, lv, *args, **kwargs)
+        return jax.vmap(new_perform_sample, in_axes=[-1, -1], out_axes=-1)(*y)
     else:
-        new_perform_sample = lambda x, s: sample_cls(x, s, *args, **kwargs)
-        return jax.vmap(new_perform_sample, in_axes=[-1, -1], out_axes=-1)(y, epsilon)
+        new_perform_sample = lambda m, lv, s: sample_cls(m, lv, s, *args, **kwargs)
+        return jax.vmap(new_perform_sample, in_axes=[-1, -1, -1], out_axes=-1)(
+            *y, epsilon
+        )
 
 
 class VAR_AE_MLP(Autoencoder):
     _sample: Sample
+    lin_mean: Linear
+    lin_logvar: Linear
 
     def __init__(
         self,
@@ -472,23 +476,29 @@ class VAR_AE_MLP(Autoencoder):
         kwargs_dec={},
         **kwargs,
     ):
+        key, key_m, key_s = jrandom.split(key, 3)
 
         self._sample = Sample(sample_dim=latent_size)
+        self.lin_mean = Linear(latent_size, latent_size, key=key_m)
+        self.lin_logvar = Linear(latent_size, latent_size, key=key_s)
 
-        def perform_in_latent(y, *args, **kwargs):
-            return (sample(y, self._sample, *args, **kwargs),)
+        def perform_in_latent(y, *args, return_dist=False, **kwargs):
+            y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
+                self.lin_logvar, in_axes=-1, out_axes=-1
+            )(y)
+            if return_dist:
+                return y[0], y[1]
+            return sample(y, self._sample, *args, **kwargs)
 
         super().__init__(
             in_size,
-            latent_size=latent_size * 2,
-            latent_size_after=latent_size,
-            perform_in_latent=perform_in_latent,  # Note: can not define sample as calss method to maintain tree structure
+            latent_size,
+            _perform_in_latent=perform_in_latent,  # Note: can not define sample as calss method to maintain tree structure
             map_latent=False,
             key=key,
             kwargs_enc=kwargs_enc,
             kwargs_dec=kwargs_dec,
         )
-
 
 class IRMAE_MLP(Autoencoder):
     def __init__(
@@ -600,32 +610,32 @@ class CNN_Autoencoder(Autoencoder):
 
 class VAR_AE_CNN(CNN_Autoencoder):
     _sample: Sample
+    lin_mean: Linear
+    lin_logvar: Linear
 
-    def __init__(
-        self,
-        data_size,
-        channels,
-        latent_size,
-        *,
-        key,
-        kwargs_enc={},
-        kwargs_dec={},
-        **kwargs,
-    ):
+    def __init__(self, data_size, channels, latent_size, k_max, *, key, **kwargs):
+        key, key_m, key_s = jrandom.split(key, 3)
 
         self._sample = Sample(sample_dim=latent_size)
+        self.lin_mean = Linear(latent_size, latent_size, key=key_m)
+        self.lin_logvar = Linear(latent_size, latent_size, key=key_s)
+
+        def perform_in_latent(y, *args, return_dist=False, **kwargs):
+            y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
+                self.lin_logvar, in_axes=-1, out_axes=-1
+            )(y)
+            if return_dist:
+                return y[0], y[1]
+            return sample(y, self._sample, *args, **kwargs)
 
         super().__init__(
             data_size,
             channels,
-            latent_size=latent_size * 2,
-            latent_size_after=latent_size,
-            _perform_in_latent=lambda y, *args, **kwargs: sample(
-                y, self._sample, *args, **kwargs
-            ),  # Note: can not define sample as calss method to maintain tree structure
+            latent_size,
+            -1,
+            _perform_in_latent=perform_in_latent,
             key=key,
-            kwargs_enc=kwargs_enc,
-            kwargs_dec=kwargs_dec,
+            **kwargs,
         )
 
 

@@ -4,6 +4,7 @@ from RRAEs.AE_classes import (
     Vanilla_AE_MLP,
     IRMAE_MLP,
     LoRAE_MLP,
+    VAR_AE_MLP
 )
 from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
 import jax.random as jrandom
@@ -30,7 +31,8 @@ if __name__ == "__main__":
     print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
 
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-    method = "LoRAE"
+    method = "VAE"
+
     match method:
         case "Strong":
             model_cls = Strong_RRAE_MLP
@@ -38,20 +40,28 @@ if __name__ == "__main__":
             model_cls = Weak_RRAE_MLP
         case "Vanilla":
             model_cls = Vanilla_AE_MLP
+        case "Sparse":
+            model_cls = Vanilla_AE_MLP
+        case "Contractive":
+            model_cls = Vanilla_AE_MLP
         case "IRMAE":
             model_cls = IRMAE_MLP
         case "LoRAE":
             model_cls = LoRAE_MLP
+        case "VAE":
+            model_cls = VAR_AE_MLP
+        case "Long":
+            model_cls = Vanilla_AE_MLP
 
-    loss_type = "Strong"  # Specify the loss type, according to the model chosen.
+    loss_type = "var"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
     latent_size = 800  # latent space dimension
-    k_max = 10  # number of features in the latent space (after the truncated SVD).
+    k_max = -1  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
-    trainor = RRAE_Trainor_class(
+    trainor = Trainor_class(
         x_train,
         model_cls,
         latent_size=latent_size,
@@ -64,7 +74,6 @@ if __name__ == "__main__":
         out_train=x_train,
         key=jrandom.PRNGKey(0),
     )
-
     # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
     # you need to specify training kw arguments (first stage of training with SVD to
     # find the basis), and fine-tuning kw arguments (second stage of training with the
@@ -89,11 +98,13 @@ if __name__ == "__main__":
         x_train,
         y_train,
         training_key=jrandom.PRNGKey(50),
-        training_kwargs=training_kwargs,
-        ft_kwargs=ft_kwargs,
+        # training_kwargs=training_kwargs,
+        # ft_kwargs=ft_kwargs,
         pre_func_inp=pre_func_inp,
         pre_func_out=pre_func_out,
+        **training_kwargs
     )
+
     preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test)
     trainor.save()
 

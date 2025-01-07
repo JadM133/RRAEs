@@ -277,7 +277,7 @@ class Trainor_class:
             batch_size,
             call_func=call_func,
             str="Finding train predictions...",
-            key=jrandom.key(0),
+            key_idx=0,
         )
 
         self.error_train_o = (
@@ -297,7 +297,7 @@ class Trainor_class:
         if x_test_o is not None:
             y_test_o = self.model.pre_func_out(y_test_o)
             y_pred_test_o = self.model.eval_with_batches(
-                x_test_o, batch_size, call_func=call_func, key=jrandom.key(0)
+                x_test_o, batch_size, call_func=call_func, key_idx=0,
             )
             self.error_test_o = (
                 jnp.linalg.norm(y_pred_test_o - y_test_o)
@@ -382,167 +382,6 @@ class Trainor_class:
                 setattr(self, key, attributes[key])
         if erase:
             os.remove(filename)
-
-
-class VAR_AE_Trainor_class(Trainor_class):
-    def fit(
-        self,
-        input,
-        output,
-        loss_type="default",  # should be string to use pre defined functions
-        loss=None,  # a function loss(pred, true) to differentiate in the model
-        step_st=[3000, 3000],  # 000, 8000],
-        lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
-        print_every=jnp.nan,
-        save_every=jnp.nan,
-        batch_size_st=[16, 16, 16, 16, 32],
-        mul_lr=None,
-        mul_lr_func=None,  #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
-        regression=False,
-        verbose=True,
-        loss_kwargs={},
-        *,
-        training_key,
-    ):
-        training_params = {
-            "loss": loss,
-            "step_st": step_st,
-            "lr_st": lr_st,
-            "print_every": print_every,
-            "batch_size_st": batch_size_st,
-            "mul_lr": mul_lr,
-            "mul_lr_func": mul_lr_func,
-            "regression": regression,
-            "verbose": verbose,
-            "loss_kwargs": loss_kwargs,
-            "training_key": training_key,
-        }
-
-        self.all_kwargs = {**self.all_kwargs, **training_params}
-        model = self.model
-
-        fn = lambda x: x if fn is None else fn
-
-        if mul_lr is None:
-            mul_lr = [1] * len(lr_st)
-
-        if callable(loss_type):
-            loss_fun = loss_type
-        else:
-            loss_fun = loss_generator(loss_type, loss)
-
-        @eqx.filter_jit
-        def make_step(model, input, out, opt_state, idx, epsilon, **loss_kwargs):
-            (loss, aux), grads = loss_fun(
-                model, input, out, idx, epsilon, **loss_kwargs
-            )
-            updates, opt_state = optim.update(grads, opt_state)
-            new_model = eqx.apply_updates(model, updates)
-            return loss, new_model, opt_state, aux, model
-
-        if mul_lr_func is not None:
-            filter_spec = jtu.tree_map(lambda _: False, model)
-            is_acc = eqx.tree_at(
-                mul_lr_func,
-                filter_spec,
-                replace=(True,) * len(mul_lr_func(model)),
-            )
-            is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
-
-        t_all = 0
-        # try:
-        counter = 0
-        for steps, lr, batch_size, mul_l in zip(step_st, lr_st, batch_size_st, mul_lr):
-            t_t = 0
-
-            if mul_lr_func is not None:
-                optim = optax.chain(
-                    optax.masked(optax.adabelief(lr), is_not_acc),
-                    optax.masked(optax.adabelief(mul_l * lr), is_acc),
-                )
-            else:
-                optim = optax.adabelief(lr)
-
-            filtered_model = eqx.filter(model, eqx.is_inexact_array)
-            try:
-                opt_state = optim.init(filtered_model)
-            except ValueError:
-                raise ValueError(
-                    "Optax has a bug! Send a message to Jad so he can fix it to you..."
-                )
-
-            if (batch_size > input.shape[-1]) or batch_size == -1:
-                batch_size = input.shape[-1]
-
-            for step, (input_b, out, idx) in zip(
-                range(steps),
-                dataloader(
-                    [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
-                    batch_size,
-                    key=training_key,
-                ),
-            ):
-                start = time.perf_counter()
-                out = self.model.norm_out(self.model.pre_func_out(out))
-                epsilon = model._sample.create_epsilon(counter, input_b.shape[0])
-                loss, model, opt_state, aux, old_model = make_step(
-                    model,
-                    input_b.T,
-                    out.T,
-                    opt_state,
-                    idx,
-                    epsilon,
-                    **loss_kwargs,
-                )
-                counter += 1
-                end = time.perf_counter()
-                t_t += end - start
-
-                if (step % print_every) == 0 or step == steps - 1:
-                    if len(aux) == 2:
-                        v_print(
-                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
-                            verbose,
-                        )
-                    else:
-                        v_print(
-                            f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
-                            verbose,
-                        )
-                    t_all += t_t
-                    t_t = 0
-                if ((step % save_every) == 0) or jnp.isnan(loss):
-                    if jnp.isnan(loss):
-                        raise ValueError("Loss is nan, stopping training...")
-                    self.model = old_model
-                    orig = (
-                        f"checkpoint_{step}"
-                        if not jnp.isnan(loss)
-                        else "checkpoint_bf_nan"
-                    )
-                    checkpoint_filename = f"{orig}_0.pkl"
-                    if os.path.exists(checkpoint_filename):
-                        i = 1
-                        new_filename = f"{orig}_{i}.pkl"
-                        while os.path.exists(new_filename):
-                            i += 1
-                            new_filename = f"{orig}_{i}.pkl"
-                        checkpoint_filename = new_filename
-                    self.save(checkpoint_filename)
-
-                if jnp.isnan(loss):
-                    print("Loss is nan, stopping training...")
-                    break
-        # except (Exception, KeyboardInterrupt) as e:
-        #     print(e)
-        #     pass
-
-        model = eqx.nn.inference_mode(model)
-        self.model = model
-        self.batch_size = batch_size
-        self.t_all = t_all
-        return model
-
 
 class RRAE_Trainor_class(Trainor_class):
     def fit(self, *args, training_key, **kwargs):

@@ -182,3 +182,4 @@ for_paper/MNIST
 MNIST/*
 img_align_celeba/*
 *.jpg
+fashion_mnist/*

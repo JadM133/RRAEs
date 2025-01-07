@@ -122,6 +122,28 @@ def loss_generator(which=None, norm_loss_=None):
             wv = jnp.array([1.0])
             return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (pred,)
 
+    elif which == "Sparse":
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(
+            diff_model, static_model, input, out, idx, sparsity=0.05, **kwargs
+        ):
+            model = eqx.combine(diff_model, static_model)
+            pred = model(input, inv_norm_out=False)
+            lat = model.latent(input)
+            wv = jnp.array([1.0, 100.0])
+            sparse_term = sparsity * jnp.log(sparsity / (jnp.mean(lat) + 1e-8)) + (
+                1 - sparsity
+            ) * jnp.log((1 - sparsity) / (1 - jnp.mean(lat) + 1e-8))
+
+            return find_weighted_loss(
+                [
+                    norm_loss_(pred, out),
+                    sparse_term
+                ],
+                weight_vals=wv,
+            ), (norm_loss_(pred, out), sparse_term)
+
     elif which == "Weak":
 
         @eqx.filter_value_and_grad(has_aux=True)
@@ -192,11 +214,14 @@ def loss_generator(which=None, norm_loss_=None):
     elif which == "var":
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, epsilon, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, idx, beta=1.0, **kwargs):
             model = eqx.combine(diff_model, static_model)
+            seed = np.random.randint(0, 100000)
+            lat = model.encode.layers[-1].weight.shape[0]
+            epsilon = model._sample.create_epsilon(seed, (lat, input.shape[-1]))
             pred = model(input, epsilon=epsilon)
-            _, means, logvars = model.latent(input, epsilon=epsilon, ret=True)
-            wv = jnp.array([1.0, 1.0])
+            means, logvars = model.latent(input, epsilon=epsilon, return_dist=True)
+            wv = jnp.array([1.0, beta])
             kl_loss = jnp.sum(
                 -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
             )
@@ -206,7 +231,20 @@ def loss_generator(which=None, norm_loss_=None):
                 norm_loss_(pred, out),
                 kl_loss,
             )
+        
+    elif "Contractive":
 
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(diff_model, static_model, input, out, idx, beta=1.0, **kwargs):
+            model = eqx.combine(diff_model, static_model)
+            lat = model.latent(input)
+            pred = model(input, inv_norm_out=False)
+            W = model.encode.layers[-1].weight
+            dh = lat * (1 - lat)
+            dh = dh.T
+            loss_contr = jnp.sum(jnp.matmul(dh**2, jnp.square(W)))
+            wv = jnp.array([1.0, beta])
+            return find_weighted_loss([norm_loss_(pred, out), loss_contr], weight_vals=wv), (pred,)
     else:
         raise ValueError(f"{which} is an Unknown loss type")
 
@@ -1211,6 +1249,14 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 y_all, jnp.expand_dims(p_all, -1), prop_train=0.8, output=output_all
             )
 
+        case "fashion_mnist":
+            import pandas
+            x_train = pandas.read_csv("fashion_mnist/fashion-mnist_train.csv").to_numpy().T[1:]
+            x_test = pandas.read_csv("fashion_mnist/fashion-mnist_test.csv").to_numpy().T[1:]
+            y_all = jnp.concatenate([x_train, x_test], axis=-1)
+            y_all = jnp.reshape(y_all, (1, 28, 28, -1))
+            return divide_return(y_all, None, test_end=x_test.shape[-1])
+            
         case "mnist_":
             import torchvision
 
@@ -1959,20 +2005,17 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         x = self.layers[3](x)
         return x
 
-
 class Sample(eqx.Module):
     sample_dim: int
 
     def __init__(self, sample_dim):
         self.sample_dim = sample_dim
 
-    def __call__(self, x, epsilon=None, ret=False, *args, **kwargs):
-        mean = x[..., : self.sample_dim]
-        logvar = x[..., self.sample_dim :]
+    def __call__(self, mean, logvar, epsilon=None, ret=False, *args, **kwargs):
         epsilon = 0 if epsilon is None else epsilon
         if ret:
             return mean + jnp.exp(0.5 * logvar) * epsilon, mean, logvar
         return mean + jnp.exp(0.5 * logvar) * epsilon
 
-    def create_epsilon(self, seed, batch_size):
-        return jrandom.normal(jrandom.key(seed), (self.sample_dim, batch_size))
+    def create_epsilon(self, seed, shape):
+        return jrandom.normal(jrandom.key(seed), shape)
