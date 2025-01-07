@@ -11,7 +11,7 @@ from RRAEs.utilities import (
     remove_keys_from_dict,
     merge_dicts,
     loss_generator,
-    tree_map
+    tree_map,
 )
 from RRAEs.utilities import v_print
 from RRAEs.interpolation import Objects_Interpolator_nD
@@ -127,15 +127,17 @@ class Trainor_class:
         @eqx.filter_jit
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
             diff_model, static_model = eqx.partition(model, filter_spec)
-            (loss, aux), grads = loss_fun(diff_model, static_model, input, out, idx, **loss_kwargs)
+            (loss, aux), grads = loss_fun(
+                diff_model, static_model, input, out, idx, **loss_kwargs
+            )
             updates, opt_state = optim.update(grads, opt_state)
             diff_model = eqx.apply_updates(diff_model, updates)
             model = eqx.combine(diff_model, static_model)
             return loss, model, opt_state, aux
-                    
-        filtered_filter_spec = tree_map(lambda _: True, model)        
+
+        filtered_filter_spec = tree_map(lambda _: True, model)
         new_filt = jtu.tree_map(lambda _: False, fix_comp(filtered_filter_spec))
-        filter_spec = jtu.tree_map(lambda _: True, model) 
+        filter_spec = jtu.tree_map(lambda _: True, model)
         filter_spec = eqx.tree_at(fix_comp, filter_spec, replace=new_filt)
 
         diff_model, _ = eqx.partition(model, filter_spec)
@@ -266,7 +268,7 @@ class Trainor_class:
         call_func = (
             (lambda x: self.model(pre_func_inp(x))) if call_func is None else call_func
         )
-        y_train_o = self.model.pre_func_out(y_train_o)
+        y_train_o = pre_func_out(y_train_o)
         assert (
             hasattr(self, "batch_size") or batch_size is not None
         ), "You should either provide a batch_size or fit the model first."
@@ -295,9 +297,12 @@ class Trainor_class:
         print("Train error on normalized output: ", self.error_train)
 
         if x_test_o is not None:
-            y_test_o = self.model.pre_func_out(y_test_o)
+            y_test_o = pre_func_out(y_test_o)
             y_pred_test_o = self.model.eval_with_batches(
-                x_test_o, batch_size, call_func=call_func, key_idx=0,
+                x_test_o,
+                batch_size,
+                call_func=call_func,
+                key_idx=0,
             )
             self.error_test_o = (
                 jnp.linalg.norm(y_pred_test_o - y_test_o)
@@ -383,6 +388,7 @@ class Trainor_class:
         if erase:
             os.remove(filename)
 
+
 class RRAE_Trainor_class(Trainor_class):
     def fit(self, *args, training_key, **kwargs):
         print("Training RRAEs...")
@@ -399,6 +405,11 @@ class RRAE_Trainor_class(Trainor_class):
         else:
             ft_kwargs = {}
 
+        if "pre_func_inp" not in kwargs:
+            pre_func_inp = lambda x: x
+        else:
+            pre_func_inp = kwargs["pre_func_inp"]
+
         key0, key1 = jrandom.split(training_key)
 
         training_kwargs = {**kwargs, **training_kwargs}
@@ -413,7 +424,7 @@ class RRAE_Trainor_class(Trainor_class):
         all_bases = model.eval_with_batches(
             inp,
             batch_size,
-            call_func=lambda x: model.latent(x, get_basis_coeffs=True)[0],
+            call_func=lambda x: model.latent(pre_func_inp(x), get_basis_coeffs=True)[0],
             str="Finding train latent space...",
             end_type="concat",
             key_idx=0,
@@ -424,7 +435,7 @@ class RRAE_Trainor_class(Trainor_class):
 
         self.basis = basis[:, : self.model.k_max.attr]
         self.sings_of_all_bases = sings
-        
+
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, basis):
             model = eqx.combine(diff_model, static_model)
@@ -435,7 +446,7 @@ class RRAE_Trainor_class(Trainor_class):
             raise ValueError(
                 "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
             )
-        
+
         ft_kwargs["loss_type"] = loss_fun
         ft_kwargs["loss_kwargs"] = {"basis": basis}
         ft_kwargs = {**kwargs, **ft_kwargs}
@@ -452,17 +463,31 @@ class RRAE_Trainor_class(Trainor_class):
         p_train=None,
         p_test=None,
         batch_size=None,
+        pre_func_inp=lambda x: x,
+        pre_func_out=lambda x: x,
     ):
 
-        call_func = lambda x: self.model(x, apply_basis=self.basis)
+        call_func = lambda x: self.model(pre_func_inp(x), apply_basis=self.basis)
         res = super().evaluate(
-            x_train_o, y_train_o, x_test_o, y_test_o, batch_size, call_func=call_func
+            x_train_o,
+            y_train_o,
+            x_test_o,
+            y_test_o,
+            batch_size,
+            call_func=call_func,
+            pre_func_inp=pre_func_inp,
+            pre_func_out=pre_func_out,
         )
 
         if p_train is not None:
             assert (
                 p_test is not None
             ), "You should provide p_test if you provide p_train."
+            if len(x_train_o.shape) > 1:
+                raise NotImplementedError(
+                    "Interpolation is not implemented for images."
+                )
+
             res = res | self.AE_interpolate(
                 p_train, p_test, x_train_o, y_test_o, batch_size
             )

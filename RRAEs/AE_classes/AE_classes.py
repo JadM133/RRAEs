@@ -560,7 +560,8 @@ class LoRAE_MLP(IRMAE_MLP):
 class CNN_Autoencoder(Autoencoder):
     def __init__(
         self,
-        data_size,
+        width,
+        height,
         channels,
         latent_size,
         k_max=-1,
@@ -578,7 +579,8 @@ class CNN_Autoencoder(Autoencoder):
         key1, key2, key3 = jrandom.split(key, 3)
 
         encode = CNNs_with_MLP(
-            data_dim0=data_size,
+            width=width,
+            height=height,
             channels=channels,
             out=latent_size,
             key=key1,
@@ -587,7 +589,8 @@ class CNN_Autoencoder(Autoencoder):
         _encode = BaseClass(encode, -1)
 
         decode = MLP_with_CNNs_trans(
-            data_dim0=data_size,
+            width=width,
+            height=height,
             inp=latent_size_after,
             channels=channels,
             key=key2,
@@ -596,7 +599,7 @@ class CNN_Autoencoder(Autoencoder):
         _decode = BaseClass(decode, -1)
 
         super().__init__(
-            data_size,
+            None,
             latent_size,
             k_max=k_max,
             _encode=_encode,
@@ -613,7 +616,7 @@ class VAR_AE_CNN(CNN_Autoencoder):
     lin_mean: Linear
     lin_logvar: Linear
 
-    def __init__(self, data_size, channels, latent_size, k_max, *, key, **kwargs):
+    def __init__(self, width, height, channels, latent_size, k_max, *, key, **kwargs):
         key, key_m, key_s = jrandom.split(key, 3)
 
         self._sample = Sample(sample_dim=latent_size)
@@ -629,7 +632,8 @@ class VAR_AE_CNN(CNN_Autoencoder):
             return sample(y, self._sample, *args, **kwargs)
 
         super().__init__(
-            data_size,
+            width,
+            height,
             channels,
             latent_size,
             -1,
@@ -644,10 +648,11 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
     dimension (data_size_1 x data_size_2 x batch_size).
     """
 
-    def __init__(self, data_size, channels, latent_size, k_max, *, key, **kwargs):
+    def __init__(self, width, height, channels, latent_size, k_max, *, key, **kwargs):
 
         super().__init__(
-            data_size,
+            width,
+            height,
             channels,
             latent_size,
             k_max,
@@ -664,7 +669,7 @@ class Vanilla_AE_CNN(CNN_Autoencoder):
     k_max = -1, hence returning all the modes with no truncation.
     """
 
-    def __init__(self, data_size, channels, latent_size, *, key, **kwargs):
+    def __init__(self, width, height, channels, latent_size, *, key, **kwargs):
         if "k_max" in kwargs.keys():
             if kwargs["k_max"] != -1:
                 warnings.warn(
@@ -676,7 +681,7 @@ class Vanilla_AE_CNN(CNN_Autoencoder):
             warnings.warn("linear_l can not be specified for Vanilla_CNN")
             kwargs.pop("linear_l")
 
-        super().__init__(data_size, channels, latent_size, key=key, **kwargs)
+        super().__init__(width, height, channels, latent_size, key=key, **kwargs)
 
 
 class Weak_RRAE_CNN(CNN_Autoencoder):
@@ -695,13 +700,13 @@ class Weak_RRAE_CNN(CNN_Autoencoder):
     """
 
     def __init__(
-        self, data_size, channels, latent_size, k_max, samples, *, key, **kwargs
+        self, width, height, channels, latent_size, k_max, samples, *, key, **kwargs
     ):
         if "linear_l" in kwargs.keys():
             warnings.warn("linear_l can not be specified for Vanilla_CNN")
             kwargs.pop("linear_l")
 
-        super().__init__(data_size, channels, latent_size, key=key, **kwargs)
+        super().__init__(width, height, channels, latent_size, key=key, **kwargs)
         if k_max == -1:
             k_max = samples
 
@@ -710,7 +715,7 @@ class Weak_RRAE_CNN(CNN_Autoencoder):
 
 class IRMAE_CNN(CNN_Autoencoder):
     def __init__(
-        self, data_size, channels, latent_size, linear_l=None, *, key, **kwargs
+        self, width, height, channels, latent_size, linear_l=None, *, key, **kwargs
     ):
 
         assert linear_l is not None, "linear_l must be specified for IRMAE_CNN"
@@ -729,7 +734,8 @@ class IRMAE_CNN(CNN_Autoencoder):
         else:
             kwargs["kwargs_enc"] = {"kwargs_mlp": {"linear_l": linear_l}}
         super().__init__(
-            data_size,
+            width,
+            height,
             channels,
             latent_size,
             -1,
@@ -739,12 +745,12 @@ class IRMAE_CNN(CNN_Autoencoder):
 
 
 class LoRAE_CNN(IRMAE_CNN):
-    def __init__(self, data_size, channels, latent_size, *, key, **kwargs):
+    def __init__(self, width, height, channels, latent_size, *, key, **kwargs):
 
         if "linear_l" in kwargs.keys():
             if kwargs["linear_l"] != 1:
                 raise ValueError("linear_l can not be specified for LoRAE_CNN")
 
         super().__init__(
-            data_size, channels, latent_size, linear_l=1, key=key, **kwargs
+            width, height, channels, latent_size, linear_l=1, key=key, **kwargs
         )

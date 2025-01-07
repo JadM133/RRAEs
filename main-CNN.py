@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     # Step 3: Specify the archietectures' parameters:
     latent_size = 200  # latent space dimension
-    k_max = 4  # number of features in the latent space (after the truncated SVD).
+    k_max = 64  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
@@ -72,7 +72,8 @@ if __name__ == "__main__":
         x_train,
         model_cls,
         latent_size=latent_size,
-        data_size=x_train.shape[1],
+        height=x_train.shape[1],
+        width=x_train.shape[2],
         channels=x_train.shape[0],
         k_max=k_max,
         folder=f"test",
@@ -97,6 +98,7 @@ if __name__ == "__main__":
         },
         key=jrandom.PRNGKey(50),
     )
+
     # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
     # you need to specify training kw arguments (first stage of training with SVD to
     # find the basis), and fine-tuning kw arguments (second stage of training with the
@@ -105,7 +107,7 @@ if __name__ == "__main__":
         "step_st": [2000, 2000],  # aprox 30 epoch (30*202000/256)
         "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
-        "print_every": 1,
+        "print_every": 100,
         # "save_every": 789,
         "loss_type": loss_type,
     }
@@ -114,7 +116,7 @@ if __name__ == "__main__":
         "step_st": [2000],
         "batch_size_st": [20],
         "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
-        "print_every": 20,
+        "print_every": 100,
         # "save_every": np.nan,
     }
 
@@ -128,7 +130,7 @@ if __name__ == "__main__":
         pre_func_inp=pre_func_inp,
         pre_func_out=pre_func_out,
     )
-    # preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test, pre_func_inp, pre_func_out)
+    preds = trainor.evaluate(x_train, y_train, x_test, y_test, None, None, None, pre_func_inp, pre_func_out)
     trainor.save(kwargs=kwargs)
 
     # Uncomment the following line if you want to hold the session to check your

@@ -104,7 +104,7 @@ if __name__ == "__main__":
         pre_func_out=pre_func_out
     )
 
-    preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test)
+    preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test, pre_func_inp, pre_func_out)
     trainor.save()
 
     # Uncomment the following line if you want to hold the session to check your

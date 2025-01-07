@@ -322,7 +322,7 @@ def divide_return(
     test_end=0,
     eps=1,
     pre_func_in=lambda x: x,
-    post_func_out=lambda x: x,
+    pre_func_out=lambda x: x,
     args=(),
 ):
     """p_all of shape (P x N) and y_all of shape (T x N).
@@ -391,7 +391,7 @@ def divide_return(
             output_train,
             output_test,
             pre_func_in,
-            post_func_out,
+            pre_func_out,
             args,
         )
 
@@ -423,7 +423,7 @@ def divide_return(
         output_train,
         output_test,
         pre_func_in,
-        post_func_out,
+        pre_func_out,
         args,
     )
 
@@ -1255,7 +1255,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
             x_test = pandas.read_csv("fashion_mnist/fashion-mnist_test.csv").to_numpy().T[1:]
             y_all = jnp.concatenate([x_train, x_test], axis=-1)
             y_all = jnp.reshape(y_all, (1, 28, 28, -1))
-            return divide_return(y_all, None, test_end=x_test.shape[-1])
+            pre_func_in = lambda x: jnp.astype(x, jnp.float32) / 255
+            return divide_return(y_all, None, test_end=x_test.shape[-1], pre_func_in=pre_func_in, pre_func_out=pre_func_in)
             
         case "mnist_":
             import torchvision
@@ -1781,7 +1782,8 @@ class CNNs_with_MLP(eqx.Module, strict=True):
 
     def __init__(
         self,
-        data_dim0,
+        width,
+        height,
         out,
         channels=1,
         CNNs_num=4,
@@ -1829,9 +1831,9 @@ class CNNs_with_MLP(eqx.Module, strict=True):
             final_activation=_relu,
             **kwargs_cnn,
         )
-        final_D = mlcnn(jnp.zeros((channels, data_dim0, data_dim0))).shape[-1]
+        final_Ds = mlcnn(jnp.zeros((channels, width, height))).shape[-2:]
         mlp = MLP_with_linear(
-            (final_D) ** 2 * last_width,
+            final_Ds[0] * final_Ds[1] * last_width,
             out,
             mlp_width,
             mlp_depth,
@@ -1849,12 +1851,28 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         return x
 
 
-def prev_D_CNN_trans(D, pad, ker, st, dil, outpad, num, all_Ds=[]):
+def int_to_lst(x, len=1):
+    if isinstance(x, int):
+        return [x]*len
+    return x
+
+
+def prev_D_CNN_trans(D0, D1, pad, ker, st, dil, outpad, num, all_D0s=[], all_D1s=[]):
+    pad = int_to_lst(pad, 2)
+    ker = int_to_lst(ker, 2)
+    st = int_to_lst(st, 2)
+    dil = int_to_lst(dil, 2)
+    outpad = int_to_lst(outpad, 2)
+
     if num == 0:
-        return all_Ds
-    all_Ds.append(int(jnp.ceil(D)))
+        return all_D0s, all_D1s
+    
+    all_D0s.append(int(jnp.ceil(D0)))
+    all_D1s.append(int(jnp.ceil(D1)))
+
     return prev_D_CNN_trans(
-        (D + 2 * pad - dil * (ker - 1) - 1 - outpad) / st + 1,
+        (D0 + 2 * pad[0] - dil[0] * (ker[0] - 1) - 1 - outpad[0]) / st[0] + 1,
+        (D1 + 2 * pad[1] - dil[1] * (ker[1] - 1) - 1 - outpad[1]) / st[1] + 1,
         pad,
         ker,
         st,
@@ -1869,12 +1887,22 @@ def find_padding_convT(D, data_dim0, ker, st, dil, outpad):
     return D
 
 
-def next_CNN_trans(O, pad, ker, st, dil, outpad, num, all_Ds=[]):
+def next_CNN_trans(O0, O1, pad, ker, st, dil, outpad, num, all_D0s=[], all_D1s=[]):
+    pad = int_to_lst(pad, 2)
+    ker = int_to_lst(ker, 2)
+    st = int_to_lst(st, 2)
+    dil = int_to_lst(dil, 2)
+    outpad = int_to_lst(outpad, 2)
+
     if num == 0:
-        return all_Ds
-    all_Ds.append(int(O))
+        return all_D0s, all_D1s
+    
+    all_D0s.append(int(O0))
+    all_D1s.append(int(O1))
+
     return next_CNN_trans(
-        (O - 1) * st + dil * (ker - 1) - 2 * pad + 1 + outpad,
+        (O0 - 1) * st[0] + dil[0] * (ker[0] - 1) - 2 * pad[0] + 1 + outpad[0],
+        (O1 - 1) * st[1] + dil[1] * (ker[1] - 1) - 2 * pad[1] + 1 + outpad[1],
         pad,
         ker,
         st,
@@ -1884,9 +1912,11 @@ def next_CNN_trans(O, pad, ker, st, dil, outpad, num, all_Ds=[]):
     )
 
 
-def is_convT_valid(D, data_dim0, pad, ker, st, dil, outpad, nums):
-    final_D = next_CNN_trans(D, pad, ker, st, dil, outpad, nums, all_Ds=[])[-1]
-    return final_D == data_dim0, final_D
+def is_convT_valid(D0, D1, data_dim0, data_dim1, pad, ker, st, dil, outpad, nums):
+    all_D0s, all_D1s = next_CNN_trans(D0, D1, pad, ker, st, dil, outpad, nums, all_D0s=[], all_D1s=[])
+    final_D0 = all_D0s[-1]
+    final_D1 = all_D1s[-1]
+    return final_D0 == data_dim0, final_D1 == data_dim1, final_D0, final_D1
 
 
 class MLP_with_CNNs_trans(eqx.Module, strict=True):
@@ -1896,13 +1926,15 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
 
     layers: tuple[MLCNN, Linear]
     start_dim: int
-    first_D: int
+    first_D0: int
+    first_D1: int
     out_after_mlp: int
     final_act: Callable
 
     def __init__(
         self,
-        data_dim0,
+        width,
+        height,
         inp,
         channels,
         out_after_mlp=32,
@@ -1923,20 +1955,27 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
     ):
         super().__init__()
         assert CNNs_num == len(width_CNNs)
-        first_D = prev_D_CNN_trans(
-            data_dim0,
+        D0s, D1s = prev_D_CNN_trans(
+            width,
+            height,
             padding,
             kernel_conv,
             stride,
             dilation,
             output_padding,
             CNNs_num + 1,
-            all_Ds=[],
-        )[-1]
+            all_D0s=[],
+            all_D1s=[],
+        )
 
-        valid, final_D = is_convT_valid(
-            first_D,
-            data_dim0,
+        first_D0 = D0s[-1]
+        first_D1 = D1s[-1]
+
+        _, _, final_D0, final_D1 = is_convT_valid(
+            first_D0,
+            first_D1,
+            width,
+            height,
             padding,
             kernel_conv,
             stride,
@@ -1972,7 +2011,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
 
         mlp = MLP_with_linear(
             inp,
-            out_after_mlp * first_D**2,
+            out_after_mlp * first_D0 * first_D1,
             mlp_width,
             mlp_depth,
             key=key2,
@@ -1982,7 +2021,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         final_conv = Conv2d(
             width_CNNs[-1],
             channels,
-            kernel_size=1 + (final_D - data_dim0),
+            kernel_size=(1 + (final_D0 - width), 1 + (final_D1 - height)),
             stride=1,
             padding=0,
             dilation=1,
@@ -1990,7 +2029,8 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         )
 
         self.start_dim = inp
-        self.first_D = first_D
+        self.first_D0 = first_D0
+        self.first_D1 = first_D1
         self.final_act = doc_repr(
             lambda x: final_activation(x), "lambda x: final_activation(x)"
         )
@@ -1999,7 +2039,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
 
     def __call__(self, x, *args, **kwargs):
         x = self.layers[0](x)
-        x = jnp.reshape(x, (self.out_after_mlp, self.first_D, self.first_D))
+        x = jnp.reshape(x, (self.out_after_mlp, self.first_D1, self.first_D0))
         x = self.layers[1](x)
         x = self.layers[2](x)
         x = self.layers[3](x)
