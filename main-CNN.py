@@ -40,8 +40,8 @@ if __name__ == "__main__":
         pre_func_out,
         kwargs,
     ) = get_data(
-        problem
-    )  # folder="Inputs_One_Circle_Regular/"
+        problem, folder="Inputs_One_Circle_Regular/"
+    ) 
 
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
@@ -60,12 +60,11 @@ if __name__ == "__main__":
         case "LoRAE":
             model_cls = LoRAE_CNN
 
-    pdb.set_trace()
     loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
     latent_size = 200  # latent space dimension
-    k_max = 12  # number of features in the latent space (after the truncated SVD).
+    k_max = 4  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
@@ -94,7 +93,7 @@ if __name__ == "__main__":
             "kernel_conv": 3,
             "stride": 2,
             "padding": 1,
-            # "final_activation": lambda x: jnn.sigmoid(x),
+            # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
         },
         key=jrandom.PRNGKey(50),
     )
@@ -134,4 +133,4 @@ if __name__ == "__main__":
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
-    pdb.set_trace()
+    # pdb.set_trace()

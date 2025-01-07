@@ -6,7 +6,7 @@ from RRAEs.AE_classes import (
     LoRAE_MLP,
     VAR_AE_MLP
 )
-from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
+from RRAEs.training_classes import RRAE_Trainor_class # , Trainor_class
 import jax.random as jrandom
 import pdb
 from RRAEs.utilities import get_data
@@ -15,7 +15,7 @@ import jax.numpy as jnp
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "Angelo"
+    problem = "shift"
     (
         x_train,
         x_test,
@@ -26,12 +26,12 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         args,
-    ) = get_data(problem, folder="Ang_data/")
+    ) = get_data(problem)
 
     print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
 
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-    method = "VAE"
+    method = "Strong"
 
     match method:
         case "Strong":
@@ -53,15 +53,15 @@ if __name__ == "__main__":
         case "Long":
             model_cls = Vanilla_AE_MLP
 
-    loss_type = "var"  # Specify the loss type, according to the model chosen.
+    loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
-    latent_size = 800  # latent space dimension
-    k_max = -1  # number of features in the latent space (after the truncated SVD).
+    latent_size = 200  # latent space dimension
+    k_max = 2  # number of features in the latent space (after the truncated SVD).
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
-    trainor = Trainor_class(
+    trainor = RRAE_Trainor_class(
         x_train,
         model_cls,
         latent_size=latent_size,
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [2000, 2000],
+        "step_st": [1000, 1000],
         "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [500],
+        "step_st": [200],
         "batch_size_st": [20, 20],
         "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -98,11 +98,10 @@ if __name__ == "__main__":
         x_train,
         y_train,
         training_key=jrandom.PRNGKey(50),
-        # training_kwargs=training_kwargs,
-        # ft_kwargs=ft_kwargs,
+        training_kwargs=training_kwargs,
+        ft_kwargs=ft_kwargs,
         pre_func_inp=pre_func_inp,
-        pre_func_out=pre_func_out,
-        **training_kwargs
+        pre_func_out=pre_func_out
     )
 
     preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test)
@@ -110,4 +109,4 @@ if __name__ == "__main__":
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
-    pdb.set_trace()
+    # pdb.set_trace()

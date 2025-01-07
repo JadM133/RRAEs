@@ -479,7 +479,7 @@ class RRAE_Trainor_class(Trainor_class):
             batch_size,
             call_func=lambda x: self.model.latent(x, apply_basis=self.basis),
             str="Finding train latent space used for interpolation...",
-            key=jrandom.key(0),
+            key_idx=0,
         )
 
         interpolation = Objects_Interpolator_nD()
@@ -490,7 +490,7 @@ class RRAE_Trainor_class(Trainor_class):
             batch_size,
             call_func=lambda x: self.model.decode(x),
             str="Decoding interpolated latent space ...",
-            key=jrandom.key(0),
+            key_idx=0,
         )
 
         self.error_interp_test_o = (
@@ -508,7 +508,7 @@ class RRAE_Trainor_class(Trainor_class):
             batch_size,
             call_func=lambda x: self.model.norm_out(x),
             str="Finding Normalized pred of interpolated latent space ...",
-            key=jrandom.key(0),
+            key_idx=0,
         )
 
         y_test = self.model.eval_with_batches(
@@ -516,7 +516,7 @@ class RRAE_Trainor_class(Trainor_class):
             batch_size,
             call_func=lambda x: self.model.norm_out(x),
             str="Finding Normalized output of interpolated latent space ...",
-            key=jrandom.key(0),
+            key_idx=0,
         )
         self.error_interp_test = (
             jnp.linalg.norm(y_pred_interp_test - y_test) / jnp.linalg.norm(y_test) * 100
