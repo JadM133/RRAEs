@@ -28,7 +28,7 @@ def get_coeffs(trainors, inp):
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "fashion_mnist"
+    problem = "mnist"
     (
         x_train,
         x_test,
@@ -39,12 +39,13 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         kwargs,
-    ) = get_data(problem, folder="Inputs_One_Circle_Regular/")
+    ) = get_data(problem, folder="MNIST/MNIST/raw/")
 
     # C is channels, D is the dimensions of the image (only same length and width
     # are supported), and Ntr is the number of training samples.
     print(f"Shape of data is {x_train.shape} (C x D0 x D1 x Ntr).")
-
+    x_train = x_train[...]
+    y_train = x_train
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
     method = "Strong"
     match method:
@@ -95,7 +96,7 @@ if __name__ == "__main__":
             "padding": 1,
             # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
         },
-        key=jrandom.PRNGKey(50),
+        key=jrandom.PRNGKey(500),
     )
 
     # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
@@ -103,10 +104,10 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [2000, 2000],  # aprox 30 epoch (30*202000/256)
-        "batch_size_st": [20, 20],
+        "step_st": [200, 200],  # aprox 30 epoch (30*202000/256)
+        "batch_size_st": [64, 64],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
-        "print_every": 100,
+        "print_every": 1,
         # "save_every": 789,
         "loss_type": loss_type,
     }

@@ -1258,52 +1258,66 @@ def get_data(problem, folder=None, google=True, **kwargs):
             pre_func_in = lambda x: jnp.astype(x, jnp.float32) / 255
             return divide_return(y_all, None, test_end=x_test.shape[-1], pre_func_in=pre_func_in, pre_func_out=pre_func_in)
             
-        case "mnist_":
-            import torchvision
+        case "mnist":
+            import os
+            import gzip
+            import numpy as np
+            import pickle as pkl
 
-            normalise_data = torchvision.transforms.Compose(
-                [
-                    torchvision.transforms.ToTensor(),
-                    torchvision.transforms.Normalize((0.5,), (0.5,)),
-                ]
+            if os.path.exists(f"{folder}/mnist_data.npy"):
+                print("Loading data from file")
+                with open(f"{folder}/mnist_data.npy", "rb") as f:
+                    train_images, train_labels, test_images, test_labels = pkl.load(f)
+            else:
+                print("Loading data and processing...")
+
+                def load_mnist_images(filename):
+                    with gzip.open(filename, 'rb') as f:
+                        data = np.frombuffer(f.read(), np.uint8, offset=16)
+                        data = data.reshape(-1, 28, 28)
+                    return data
+
+                def load_mnist_labels(filename):
+                    with gzip.open(filename, 'rb') as f:
+                        data = np.frombuffer(f.read(), np.uint8, offset=8)
+                    return data
+
+                def load_mnist(path):
+                    train_images = load_mnist_images(os.path.join(path, 'train-images-idx3-ubyte.gz'))
+                    train_labels = load_mnist_labels(os.path.join(path, 'train-labels-idx1-ubyte.gz'))
+                    test_images = load_mnist_images(os.path.join(path, 't10k-images-idx3-ubyte.gz'))
+                    test_labels = load_mnist_labels(os.path.join(path, 't10k-labels-idx1-ubyte.gz'))
+                    return (train_images, train_labels), (test_images, test_labels)
+
+                def preprocess_mnist(images):
+                    images = images.astype(np.float32) / 255.0
+                    images = np.expand_dims(images, axis=1)  # Add channel dimension
+                    return images
+
+                def get_mnist_data(path):
+                    (train_images, train_labels), (test_images, test_labels) = load_mnist(path)
+                    train_images = preprocess_mnist(train_images)
+                    test_images = preprocess_mnist(test_images)
+                    return train_images, train_labels, test_images, test_labels
+
+                train_images, train_labels, test_images, test_labels = get_mnist_data(folder)
+                train_images = jnp.swapaxes(jnp.moveaxis(train_images, 1, -1), 0, -1)
+                test_images = jnp.swapaxes(jnp.moveaxis(test_images, 1, -1), 0, -1)
+                with open(f"{folder}/mnist_data.npy", "wb") as f:
+                    pkl.dump((train_images, train_labels, test_images, test_labels), f)
+
+            return (
+                train_images,
+                test_images,
+                None,
+                None,
+                train_labels,
+                test_labels,
+                lambda x: x,
+                lambda x: x,
+                (),
             )
-            train_dataset = torchvision.datasets.MNIST(
-                "MNIST",
-                train=True,
-                download=True,
-                transform=normalise_data,
-            )
-            test_dataset = torchvision.datasets.MNIST(
-                "MNIST",
-                train=False,
-                download=True,
-                transform=normalise_data,
-            )
-            x_train = my_vmap(lambda x: x[0])(train_dataset).T
-            x_test = my_vmap(lambda x: x[0])(test_dataset).T
-            x_all = jnp.squeeze(jnp.concatenate([x_train, x_test], axis=-1))
 
-            if "mlp" in kwargs.keys():
-                if kwargs["mlp"]:
-                    y_train = my_vmap(lambda x: x[1])(train_dataset)
-                    y_test = my_vmap(lambda x: x[1])(test_dataset)
-                    idx = np.arange(0, y_train.shape[0], 1)
-                    y_now_tr = np.zeros((y_train.shape[0], jnp.max(y_train) + 1))
-                    all_idx = np.stack([idx, y_train])
-                    y_now_tr[all_idx[0, :], all_idx[1, :]] = 1
-
-                    idx = np.arange(0, y_test.shape[0], 1)
-                    y_now_t = np.zeros((y_test.shape[0], jnp.max(y_test) + 1))
-                    all_idx = np.stack([idx, y_test])
-                    y_now_t[all_idx[0, :], all_idx[1, :]] = 1
-
-                    return (
-                        jnp.array(y_now_tr),
-                        jnp.squeeze(x_test),
-                        jnp.array(y_now_t),
-                    )  # [45000:]
-            x_all = jnp.expand_dims(x_all, 0)  # [..., 45000:]
-            return divide_return(x_all, None, test_end=x_test.shape[-1])
         case _:
             raise ValueError(f"Problem {problem} not recognized")
 
