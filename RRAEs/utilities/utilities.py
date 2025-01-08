@@ -1311,7 +1311,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 test_images,
                 None,
                 None,
-                train_labels,
+                train_images,
                 test_labels,
                 lambda x: x,
                 lambda x: x,
