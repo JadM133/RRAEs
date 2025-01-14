@@ -483,7 +483,7 @@ class RRAE_Trainor_class(Trainor_class):
             assert (
                 p_test is not None
             ), "You should provide p_test if you provide p_train."
-            if len(x_train_o.shape) > 1:
+            if len(x_train_o.shape) > 2:
                 raise NotImplementedError(
                     "Interpolation is not implemented for images."
                 )

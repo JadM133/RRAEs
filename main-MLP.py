@@ -79,7 +79,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [1000, 1000],
+        "step_st": [10, 10],
         "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [200],
+        "step_st": [10],
         "batch_size_st": [20, 20],
         "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         pre_func_out=pre_func_out
     )
 
-    preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test, pre_func_inp, pre_func_out)
+    preds = trainor.evaluate(x_train, y_train, x_test, y_test, p_train, p_test, None, pre_func_inp, pre_func_out)
     trainor.save()
 
     # Uncomment the following line if you want to hold the session to check your
