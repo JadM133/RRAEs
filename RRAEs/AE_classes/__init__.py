@@ -14,5 +14,6 @@ from .AE_classes import (
     VAR_AE_MLP,
     VAR_AE_CNN, 
     BaseClass,
-    Strong_Dynamics_RRAE_MLP
+    Strong_Dynamics_RRAE_MLP,
+    Var_Strong_RRAE_MLP
 )

@@ -765,12 +765,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
             p_vals = jnp.linspace(1 / 3, 1, 15)[:-1]
             y_shift = jax.vmap(func, in_axes=[0, None])(p_vals, ts).T
-            p_test = jrandom.uniform(
-                jrandom.PRNGKey(0),
-                (300,),
-                minval=p_vals[0] * 1.00001,
-                maxval=p_vals[-1] * 0.99999,
-            )
+            p_test = jnp.linspace(1 / 3, 1, 500)
             y_test = jax.vmap(func, in_axes=[0, None])(p_test, ts).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
@@ -782,19 +777,27 @@ def get_data(problem, folder=None, google=True, **kwargs):
             def sf_func(s, x):
                 return jnp.sin(x - s * jnp.pi)
 
-            p_vals = jnp.linspace(0, 1.8, 18)[:-1]  # 18
+            p_vals = jnp.linspace(0, 1.8, 5)[:-1]  # 18
             y_shift = jax.vmap(sf_func, in_axes=[0, None])(p_vals, ts).T
-            p_test = jrandom.uniform(
-                jrandom.PRNGKey(0),
-                (80,),
-                minval=p_vals[0] * 1.00001,
-                maxval=p_vals[-1] * 0.99999,
-            )
+            p_test = jnp.linspace(0, jnp.max(p_vals), 500)[1:-1]
             y_test = jax.vmap(sf_func, in_axes=[0, None])(p_test, ts).T
             y_all = jnp.concatenate([y_shift, y_test], axis=-1)
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
             return divide_return(y_all, p_all, test_end=y_test.shape[-1])
-
+        
+        case "gaussian_shift":
+            ts = jnp.linspace(0, 2 * jnp.pi, 200)
+            def gauss_shift(s, x):
+                return jnp.exp(-((x - s) ** 2) / 0.1)  # Smaller width
+            p_vals = jnp.linspace(1, 2 * jnp.pi +1, google)
+            ts = jnp.linspace(0, 2 * jnp.pi + 2, 500)
+            y_shift = jax.vmap(gauss_shift, in_axes=[0, None])(p_vals, ts).T
+            p_test = jnp.linspace(jnp.min(p_vals), jnp.max(p_vals), 500)[1:-1]
+            y_test = jax.vmap(gauss_shift, in_axes=[0, None])(p_test, ts).T
+            y_all = jnp.concatenate([y_shift, y_test], axis=-1)
+            p_all = jnp.concatenate([p_vals, p_test], axis=0)
+            return divide_return(y_all, p_all, test_end=y_test.shape[-1])
+        
         case "stairs":
             Tend = 3.5  # [s]
             NT = 500

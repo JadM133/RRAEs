@@ -238,14 +238,14 @@ class Trainor_class:
 
     def evaluate(
         self,
-        x_train_o,
-        y_train_o,
+        x_train_o=None,
+        y_train_o=None,
         x_test_o=None,
         y_test_o=None,
         batch_size=None,
-        call_func=None,
         pre_func_inp=lambda x: x,
         pre_func_out=lambda x: x,
+        call_func=None,
         **kwargs,
     ):
         """Performs post-processing to find the relative error of the RRAE model.
@@ -268,33 +268,34 @@ class Trainor_class:
         call_func = (
             (lambda x: self.model(pre_func_inp(x))) if call_func is None else call_func
         )
-        y_train_o = pre_func_out(y_train_o)
-        assert (
-            hasattr(self, "batch_size") or batch_size is not None
-        ), "You should either provide a batch_size or fit the model first."
+        if x_train_o is not None:
+            y_train_o = pre_func_out(y_train_o)
+            assert (
+                hasattr(self, "batch_size") or batch_size is not None
+            ), "You should either provide a batch_size or fit the model first."
 
-        batch_size = self.batch_size if batch_size is None else batch_size
-        y_pred_train_o = self.model.eval_with_batches(
-            x_train_o,
-            batch_size,
-            call_func=call_func,
-            str="Finding train predictions...",
-            key_idx=0,
-        )
+            batch_size = self.batch_size if batch_size is None else batch_size
+            y_pred_train_o = self.model.eval_with_batches(
+                x_train_o,
+                batch_size,
+                call_func=call_func,
+                str="Finding train predictions...",
+                key_idx=0,
+            )
 
-        self.error_train_o = (
-            jnp.linalg.norm(y_pred_train_o - y_train_o)
-            / jnp.linalg.norm(y_train_o)
-            * 100
-        )
-        print("Train error on original output: ", self.error_train_o)
+            self.error_train_o = (
+                jnp.linalg.norm(y_pred_train_o - y_train_o)
+                / jnp.linalg.norm(y_train_o)
+                * 100
+            )
+            print("Train error on original output: ", self.error_train_o)
 
-        y_pred_train = self.model.norm_out(y_pred_train_o)
-        y_train = self.model.norm_out(y_train_o)
-        self.error_train = (
-            jnp.linalg.norm(y_pred_train - y_train) / jnp.linalg.norm(y_train) * 100
-        )
-        print("Train error on normalized output: ", self.error_train)
+            y_pred_train = self.model.norm_out(y_pred_train_o)
+            y_train = self.model.norm_out(y_train_o)
+            self.error_train = (
+                jnp.linalg.norm(y_pred_train - y_train) / jnp.linalg.norm(y_train) * 100
+            )
+            print("Train error on normalized output: ", self.error_train)
 
         if x_test_o is not None:
             y_test_o = pre_func_out(y_test_o)
@@ -335,8 +336,86 @@ class Trainor_class:
             "y_pred_train": y_pred_train,
             "y_pred_test": y_pred_test,
         }
+    
+    def AE_interpolate(
+        self, p_train, p_test, x_train_o, y_test_o, batch_size=None, latent_func=None, decode_func=None, norm_out_func=None
+    ):
+        """Interpolates the latent space of the model and then decodes it to find the output."""
+        batch_size = self.batch_size if batch_size is None else batch_size
 
-    def save(self, filename=None, erase=True, **kwargs):
+        if latent_func is None:
+            call_func = lambda x: self.model.latent(x)
+        else:
+            call_func = latent_func
+
+        latent_train = self.model.eval_with_batches(
+            x_train_o,
+            batch_size,
+            call_func=call_func,
+            str="Finding train latent space used for interpolation...",
+            key_idx=0,
+        )
+
+        interpolation = Objects_Interpolator_nD()
+        latent_test_interp = interpolation(p_test, p_train, latent_train)
+
+        if decode_func is None:
+            call_func = lambda x: self.model.decode(x)
+        else:
+            call_func = decode_func
+
+        y_pred_interp_test_o = self.model.eval_with_batches(
+            latent_test_interp,
+            batch_size,
+            call_func=call_func,
+            str="Decoding interpolated latent space ...",
+            key_idx=0,
+        )
+
+        self.error_interp_test_o = (
+            jnp.linalg.norm(y_pred_interp_test_o - y_test_o)
+            / jnp.linalg.norm(y_test_o)
+            * 100
+        )
+        print(
+            "Test (interpolation) error over original output: ",
+            self.error_interp_test_o,
+        )
+
+        if norm_out_func is None:
+            call_func = lambda x: self.model.norm_out(x)
+        else:
+            call_func = norm_out_func
+
+        y_pred_interp_test = self.model.eval_with_batches(
+            y_pred_interp_test_o,
+            batch_size,
+            call_func=call_func,
+            str="Finding Normalized pred of interpolated latent space ...",
+            key_idx=0,
+        )
+
+        y_test = self.model.eval_with_batches(
+            y_test_o,
+            batch_size,
+            call_func=call_func,
+            str="Finding Normalized output of interpolated latent space ...",
+            key_idx=0,
+        )
+        self.error_interp_test = (
+            jnp.linalg.norm(y_pred_interp_test - y_test) / jnp.linalg.norm(y_test) * 100
+        )
+        print(
+            "Test (interpolation) error over normalized output: ",
+            self.error_interp_test,
+        )
+        return {
+            "error_interp_test": self.error_interp_test,
+            "error_interp_test_o": self.error_interp_test_o,
+            "y_pred_interp_test_o": y_pred_interp_test_o,
+            "y_pred_interp_test": y_pred_interp_test,
+        }
+    def save(self, filename=None, erase=False, **kwargs):
         """Saves the trainor class."""
         if filename is None:
             if (self.folder is None) or (self.file is None):
@@ -456,15 +535,14 @@ class RRAE_Trainor_class(Trainor_class):
 
     def evaluate(
         self,
-        x_train_o,
-        y_train_o,
+        x_train_o=None,
+        y_train_o=None,
         x_test_o=None,
         y_test_o=None,
-        p_train=None,
-        p_test=None,
         batch_size=None,
         pre_func_inp=lambda x: x,
         pre_func_out=lambda x: x,
+        call_func=None,
     ):
 
         call_func = lambda x: self.model(pre_func_inp(x), apply_basis=self.basis)
@@ -478,85 +556,22 @@ class RRAE_Trainor_class(Trainor_class):
             pre_func_inp=pre_func_inp,
             pre_func_out=pre_func_out,
         )
-
-        if p_train is not None:
-            assert (
-                p_test is not None
-            ), "You should provide p_test if you provide p_train."
-            if len(x_train_o.shape) > 2:
-                raise NotImplementedError(
-                    "Interpolation is not implemented for images."
-                )
-
-            res = res | self.AE_interpolate(
-                p_train, p_test, x_train_o, y_test_o, batch_size
-            )
         return res
 
     def AE_interpolate(
-        self, p_train, p_test, x_train_o, y_test_o, y_test, batch_size=None
+        self, p_train, p_test, x_train_o, y_test_o, batch_size=None, latent_func=None, decode_func=None, norm_out_func=None
     ):
-        """Interpolates the latent space of the model and then decodes it to find the output."""
-        batch_size = self.batch_size if batch_size is None else batch_size
-
-        latent_train = self.model.eval_with_batches(
+        call_func = lambda x: self.model.latent(x, apply_basis=self.basis) if latent_func is None else latent_func
+        return super().AE_interpolate(
+            p_train,
+            p_test,
             x_train_o,
-            batch_size,
-            call_func=lambda x: self.model.latent(x, apply_basis=self.basis),
-            str="Finding train latent space used for interpolation...",
-            key_idx=0,
-        )
-
-        interpolation = Objects_Interpolator_nD()
-        latent_test_interp = interpolation(p_test, p_train, latent_train)
-
-        y_pred_interp_test_o = self.model.eval_with_batches(
-            latent_test_interp,
-            batch_size,
-            call_func=lambda x: self.model.decode(x),
-            str="Decoding interpolated latent space ...",
-            key_idx=0,
-        )
-
-        self.error_interp_test_o = (
-            jnp.linalg.norm(y_pred_interp_test_o - y_test_o)
-            / jnp.linalg.norm(y_test_o)
-            * 100
-        )
-        print(
-            "Test (interpolation) error over original output: ",
-            self.error_interp_test_o,
-        )
-
-        y_pred_interp_test = self.model.eval_with_batches(
-            y_pred_interp_test_o,
-            batch_size,
-            call_func=lambda x: self.model.norm_out(x),
-            str="Finding Normalized pred of interpolated latent space ...",
-            key_idx=0,
-        )
-
-        y_test = self.model.eval_with_batches(
             y_test_o,
             batch_size,
-            call_func=lambda x: self.model.norm_out(x),
-            str="Finding Normalized output of interpolated latent space ...",
-            key_idx=0,
+            latent_func=call_func,
+            decode_func=decode_func,
+            norm_out_func=norm_out_func,
         )
-        self.error_interp_test = (
-            jnp.linalg.norm(y_pred_interp_test - y_test) / jnp.linalg.norm(y_test) * 100
-        )
-        print(
-            "Test (interpolation) error over normalized output: ",
-            self.error_interp_test,
-        )
-        return {
-            "error_interp_test": self.error_interp_test,
-            "error_interp_test_o": self.error_interp_test_o,
-            "y_pred_interp_test_o": y_pred_interp_test_o,
-            "y_pred_interp_test": y_pred_interp_test,
-        }
-
 
 class V_AE_Trainor_class(RRAE_Trainor_class):
     """ " Trainor class for variational batching."""

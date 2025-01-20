@@ -272,6 +272,67 @@ def latent_func_strong_RRAE(
     return y_approx
 
 
+def latent_func_var_strong_RRAE(
+    y,
+    k_max,
+    apply_basis=None,
+    get_basis_coeffs=False,
+    get_coeffs=False,
+    ret=False,
+    mn_noise=-0.05,
+    mx_noise=0.05,
+    *args,
+    **kwargs,
+):
+    """Performing the truncated SVD in the latent space.
+
+    Parameters
+    ----------
+    y : jnp.array
+        The latent space.
+    k_max : int
+        The maximum number of modes to keep. If this is -1,
+        the function will return y (i.e. all the modes).
+
+    Returns
+    -------
+    y_approx : jnp.array
+        The latent space after the truncation.
+    """
+    
+    if apply_basis is not None:
+        if get_basis_coeffs:
+            raise ValueError("Can not get SVD and apply basis at the same time.")
+        if get_coeffs:
+            return apply_basis.T @ y
+        return apply_basis @ apply_basis.T @ y
+
+    if get_basis_coeffs or get_coeffs:
+        u, s, v = stable_SVD(y)
+        u_now = u[:, :k_max]
+        coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+        if get_coeffs:
+            return coeffs
+        return u_now, coeffs
+
+    G =  np.random.uniform(mn_noise, mx_noise, size=(y.shape[-1], y.shape[-1]))
+    np.fill_diagonal(G, 0)
+    G = G + np.eye(y.shape[-1])
+    y = y @ G
+
+    if k_max != -1:
+        u, s, v = stable_SVD(y)
+        y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
+    else:
+        y_approx = y
+        u_now = None
+        coeffs = None
+        sigs = None
+    if ret:
+        return u_now, coeffs, sigs
+    return y_approx
+
+
 class Strong_RRAE_MLP(Autoencoder):
     """Subclass of RRAEs with the strong formulation when the input
     is of dimension (data_size, batch_size).
@@ -320,6 +381,53 @@ class Strong_RRAE_MLP(Autoencoder):
             **kwargs,
         )
 
+class Var_Strong_RRAE_MLP(Autoencoder):
+    """Subclass of RRAEs with the strong formulation when the input
+    is of dimension (data_size, batch_size).
+
+    Attributes
+    ----------
+    encode : MLP_with_linear
+        An MLP as the encoding function.
+    decode : MLP_with_linear
+        An MLP as the decoding function.
+    perform_in_latent : function
+        The function that performs operations in the latent space.
+    k_max : int
+        The maximum number of modes to keep in the latent space.
+    """
+
+    def __init__(
+        self,
+        in_size,
+        latent_size,
+        k_max,
+        post_proc_func=None,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
+
+        if "linear_l" in kwargs.keys():
+            warnings.warn("linear_l can not be specified for Strong")
+            kwargs.pop("linear_l")
+
+        latent_func = latent_func_var_strong_RRAE
+
+        super().__init__(
+            in_size,
+            latent_size,
+            k_max,
+            _perform_in_latent=latent_func,
+            map_latent=False,
+            post_proc_func=post_proc_func,
+            key=key,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
+            **kwargs,
+        )
 
 class Vanilla_AE_MLP(Autoencoder):
     """Vanilla Autoencoder.
