@@ -31,8 +31,8 @@ if __name__ == "__main__":
         out_size=out.shape[0],
         width_size=100,
         depth=2,
-        folder=f"folder_name/",
-        file=f"saved_model.pkl",
+        folder="folder_name/",
+        file="saved_model.pkl",
         norm_in="None",
         norm_out="None",
         map_axis=-1, # The dimension of your data, to parallelize over.
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     kwargs = {
-        "step_st": [1000],
+        "step_st": [2], # Increase those to train well
         "batch_size_st": [20, 20],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 100,

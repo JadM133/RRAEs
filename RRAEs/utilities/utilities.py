@@ -785,6 +785,11 @@ def get_data(problem, folder=None, google=True, **kwargs):
             p_all = jnp.concatenate([p_vals, p_test], axis=0)
             return divide_return(y_all, p_all, test_end=y_test.shape[-1])
         
+        case "test_data_CNN":
+            y_all = jrandom.uniform(jrandom.key(0), (1, 100, 120, 200))
+            p_all = None
+            return divide_return(y_all, p_all, None, 0.8)
+         
         case "gaussian_shift":
             ts = jnp.linspace(0, 2 * jnp.pi, 200)
             def gauss_shift(s, x):

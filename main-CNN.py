@@ -28,7 +28,7 @@ def get_coeffs(trainors, inp):
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "mnist"
+    problem = "test_data_CNN"
     (
         x_train,
         x_test,
@@ -39,13 +39,11 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         kwargs,
-    ) = get_data(problem, folder="MNIST/MNIST/raw/")
+    ) = get_data(problem)
 
-    # C is channels, D is the dimensions of the image (only same length and width
-    # are supported), and Ntr is the number of training samples.
+    # C is channels, D0 is width, D1 is height, and Ntr is the number of training samples.
     print(f"Shape of data is {x_train.shape} (C x D0 x D1 x Ntr).")
-    x_train = x_train[...]
-    y_train = x_train
+
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
     method = "Strong"
     match method:
@@ -76,7 +74,7 @@ if __name__ == "__main__":
         width=x_train.shape[2],
         channels=x_train.shape[0],
         k_max=k_max,
-        folder=f"test",
+        folder=f"{problem}",
         file=f"{method}_{problem}_test.pkl",
         norm_in="None",
         norm_out="None",
@@ -104,7 +102,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [200, 200],  # aprox 30 epoch (30*202000/256)
+        "step_st": [2, 2],  # Increase those to train well
         "batch_size_st": [64, 64],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
@@ -113,7 +111,7 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [2000],
+        "step_st": [2], # Increase those to train well
         "batch_size_st": [20],
         "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -131,7 +129,7 @@ if __name__ == "__main__":
         pre_func_out=pre_func_out,
     )
     preds = trainor.evaluate(
-        x_train, y_train, x_test, y_test, None, None, None, pre_func_inp, pre_func_out
+        x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
     )
     # NOTE: preds are not saved so uncomment last line if you want to save/plot etc.
 

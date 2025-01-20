@@ -26,8 +26,9 @@ def test_fitting(model_cls, sh, lf):
         x,
         model_cls,
         latent_size=100,
-        data_size=x.shape[1],
         channels=x.shape[0],
+        width=x.shape[1],
+        height=x.shape[2],
         samples=x.shape[-1],  # Only for weak
         k_max=2,
         key=jrandom.PRNGKey(0),
@@ -61,9 +62,9 @@ def test_IRMAE_fitting():
         x,
         model_cls,
         latent_size=100,
-        data_size=x.shape[1],
         channels=x.shape[0],
-        samples=x.shape[-1],  # Only for weak
+        width=x.shape[1],
+        height=x.shape[2],
         k_max=2,
         linear_l=4,
         key=jrandom.PRNGKey(0),
@@ -89,8 +90,9 @@ def test_Strong_fitting():
         x,
         model_cls,
         latent_size=100,
-        data_size=x.shape[1],
         channels=x.shape[0],
+        width=x.shape[1],
+        height=x.shape[2],
         k_max=2,
         key=jrandom.PRNGKey(0),
     )
