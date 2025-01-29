@@ -29,7 +29,7 @@ def get_coeffs(trainors, inp):
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
     problem = "2d_gaussian_shift_scale"
-    
+
     (
         x_train,
         x_test,
@@ -45,19 +45,10 @@ if __name__ == "__main__":
     # C is channels, D0 is width, D1 is height, and Ntr is the number of training samples.
     print(f"Shape of data is {x_train.shape} (C x D0 x D1 x Ntr).")
 
-    # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
+    # Step 2: Specify the model to use, Strong_RRAE_CNN is ours (recommended).
     method = "Strong"
-    match method:
-        case "Strong":
-            model_cls = Strong_RRAE_CNN
-        case "Weak":
-            model_cls = Weak_RRAE_CNN
-        case "Vanilla":
-            model_cls = Vanilla_AE_CNN
-        case "IRMAE":
-            model_cls = IRMAE_CNN
-        case "LoRAE":
-            model_cls = LoRAE_CNN
+
+    model_cls = Strong_RRAE_CNN
 
     loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
