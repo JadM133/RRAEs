@@ -13,6 +13,7 @@ from RRAEs.utilities import (
     loss_generator,
     tree_map,
 )
+import warnings
 from RRAEs.utilities import v_print
 from RRAEs.interpolation import Objects_Interpolator_nD
 from RRAEs.AE_classes import BaseClass
@@ -23,6 +24,12 @@ import dill
 import shutil
 import copy
 from functools import partial
+from RRAEs.trackers import (
+    Null_Tracker,
+    RRAE_fixed_Tracker,
+    RRAE_pars_Tracker,
+    RRAE_gen_Tracker,
+)
 
 
 class Trainor_class:
@@ -92,6 +99,8 @@ class Trainor_class:
         pre_func_inp=lambda x: x,
         pre_func_out=lambda x: x,
         fix_comp=lambda _: (),
+        tracker=Null_Tracker(),
+        stagn_window=20,
         *,
         training_key,
     ):
@@ -148,6 +157,10 @@ class Trainor_class:
         training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
 
         counter = 0
+        prev_losses = []
+        track_params = tracker.init()
+        avg_loss = jnp.inf
+
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
             try:
                 t_t = 0
@@ -168,31 +181,37 @@ class Trainor_class:
                     start = time.perf_counter()
                     out = self.model.norm_out(pre_func_out(out))
                     input_b = pre_func_inp(input_b)
+
+                    step_kwargs = merge_dicts(loss_kwargs, track_params)
+
                     loss, model, opt_state, aux = make_step(
                         model,
                         input_b.T,
                         out.T,
                         opt_state,
                         idx,
-                        **loss_kwargs,
+                        **step_kwargs,
                     )
+
+                    prev_losses.append(loss)
+                    if step > stagn_window:
+                        prev_losses = prev_losses[-stagn_window:]
+                        avg_loss = sum(prev_losses) / len(prev_losses)
+
+                    track_params = tracker(loss, avg_loss, track_params)
+
                     counter += 1
                     end = time.perf_counter()
                     t_t += end - start
 
                     if (step % print_every) == 0 or step == steps - 1:
-                        if len(aux) > 1:
-                            to_print = [f"loss {i}: {aux[i]}" for i in range(len(aux))]
-                            to_print = ", ".join(to_print)
-                            v_print(
-                                f"Step: {step}, Total loss: {loss}, " + to_print,
-                                verbose,
-                            )
-                        else:
-                            v_print(
-                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
-                                verbose,
-                            )
+                        to_print = [f"{k}: {v}" for k, v in aux.items()]
+                        print(
+                            f"Step: {step}, "
+                            + ", ".join(to_print)
+                            + ", "
+                            + f"Comp time: {end - start}"
+                        )
                         t_all += t_t
                         t_t = 0
                     if ((step % save_every) == 0) or jnp.isnan(loss):
@@ -220,7 +239,7 @@ class Trainor_class:
         self.model = model
         self.batch_size = batch_size
         self.t_all = t_all
-        return model
+        return model, track_params
 
     def evaluate_no_preds(
         self,
@@ -336,9 +355,17 @@ class Trainor_class:
             "y_pred_train": y_pred_train,
             "y_pred_test": y_pred_test,
         }
-    
+
     def AE_interpolate(
-        self, p_train, p_test, x_train_o, y_test_o, batch_size=None, latent_func=None, decode_func=None, norm_out_func=None
+        self,
+        p_train,
+        p_test,
+        x_train_o,
+        y_test_o,
+        batch_size=None,
+        latent_func=None,
+        decode_func=None,
+        norm_out_func=None,
     ):
         """Interpolates the latent space of the model and then decodes it to find the output."""
         batch_size = self.batch_size if batch_size is None else batch_size
@@ -415,6 +442,7 @@ class Trainor_class:
             "y_pred_interp_test_o": y_pred_interp_test_o,
             "y_pred_interp_test": y_pred_interp_test,
         }
+
     def save(self, filename=None, erase=False, **kwargs):
         """Saves the trainor class."""
         if filename is None:
@@ -469,7 +497,32 @@ class Trainor_class:
 
 
 class RRAE_Trainor_class(Trainor_class):
+    def __init__(self, *args, adapt=False, k_max=None, adap_type="None", **kwargs):
+
+        
+        self.k_init = k_max
+        self.adap_type = adap_type
+        kwargs["k_max"] = k_max
+        super().__init__(*args, **kwargs)
+        self.adapt = adapt
+
     def fit(self, *args, training_key, **kwargs):
+
+        if self.adap_type == "pars":
+            default_tracker = RRAE_pars_Tracker(k_init=self.k_init)
+        elif self.adap_type == "gen":
+            if self.k_init is None:
+                warnings.warn(
+                    "k_max can not be None when using gen adaptive scheme, choose a big initial k_max to start with."
+                )
+            default_tracker = RRAE_gen_Tracker(k_init=self.k_init)
+        elif self.adap_type == "None":
+            if self.k_init is None:
+                warnings.warn(
+                    "k_max can not be None when using fixed scheme, choose a fixed k_max to use."
+                )
+            default_tracker = RRAE_fixed_Tracker(k_init=self.k_init)
+
         print("Training RRAEs...")
 
         if "training_kwargs" in kwargs:
@@ -489,10 +542,13 @@ class RRAE_Trainor_class(Trainor_class):
         else:
             pre_func_inp = kwargs["pre_func_inp"]
 
+        if "tracker" not in training_kwargs:
+            training_kwargs["tracker"] = default_tracker
+
         key0, key1 = jrandom.split(training_key)
 
         training_kwargs = {**kwargs, **training_kwargs}
-        model = super().fit(*args, training_key=key0, **training_kwargs)
+        model, track_params = super().fit(*args, training_key=key0, **training_kwargs)
         inp = args[0] if len(args) > 0 else kwargs["input"]
 
         if "batch_size_st" in training_kwargs:
@@ -503,23 +559,25 @@ class RRAE_Trainor_class(Trainor_class):
         all_bases = model.eval_with_batches(
             inp,
             batch_size,
-            call_func=lambda x: model.latent(pre_func_inp(x), get_basis_coeffs=True)[0],
+            call_func=lambda x: model.latent(
+                pre_func_inp(x), get_basis_coeffs=True, **track_params
+            )[0],
             str="Finding train latent space...",
             end_type="concat",
             key_idx=0,
         )
         norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
 
-        basis, sings = jnp.linalg.svd(all_bases, full_matrices=False)[0:2]
+        basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
 
-        self.basis = basis[:, : self.model.k_max.attr]
-        self.sings_of_all_bases = sings
+        self.basis = basis[:, : track_params["k_max"]]
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, basis):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, apply_basis=self.basis, inv_norm_out=False)
-            return norm_loss_(pred, out), (pred,)
+            aux = {"loss": norm_loss_(pred, out)}
+            return norm_loss_(pred, out), aux
 
         if "loss_type" in ft_kwargs:
             raise ValueError(
@@ -559,9 +617,21 @@ class RRAE_Trainor_class(Trainor_class):
         return res
 
     def AE_interpolate(
-        self, p_train, p_test, x_train_o, y_test_o, batch_size=None, latent_func=None, decode_func=None, norm_out_func=None
+        self,
+        p_train,
+        p_test,
+        x_train_o,
+        y_test_o,
+        batch_size=None,
+        latent_func=None,
+        decode_func=None,
+        norm_out_func=None,
     ):
-        call_func = lambda x: self.model.latent(x, apply_basis=self.basis) if latent_func is None else latent_func
+        call_func = lambda x: (
+            self.model.latent(x, apply_basis=self.basis)
+            if latent_func is None
+            else latent_func
+        )
         return super().AE_interpolate(
             p_train,
             p_test,
@@ -572,6 +642,7 @@ class RRAE_Trainor_class(Trainor_class):
             decode_func=decode_func,
             norm_out_func=norm_out_func,
         )
+
 
 class V_AE_Trainor_class(RRAE_Trainor_class):
     """ " Trainor class for variational batching."""

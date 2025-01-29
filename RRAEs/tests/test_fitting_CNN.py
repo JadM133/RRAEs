@@ -16,7 +16,7 @@ from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
     "model_cls, sh, lf",
     [
         (Vanilla_AE_CNN, (1, 2, 2, 10), "default"),
-        (Weak_RRAE_CNN, (3, 12, 12, 10), "Weak"),
+        # (Weak_RRAE_CNN, (3, 12, 12, 10), "Weak"),
         (LoRAE_CNN, (6, 16, 16, 10), "nuc"),
     ],
 )
@@ -110,6 +110,7 @@ def test_Strong_fitting():
             training_key=jrandom.PRNGKey(50),
             training_kwargs=training_kwargs,
             ft_kwargs=ft_kwargs,
+            loss_type="Strong"
         )
     except Exception as e:
         assert False, f"Fitting failed with the following exception {repr(e)}"

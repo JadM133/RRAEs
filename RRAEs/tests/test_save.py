@@ -31,7 +31,7 @@ def test_save():  # Only to test if saving/loading is causing a problem
     new_trainor = RRAE_Trainor_class()
     new_trainor.load("test_", erase=True)
     try:
-        pr = new_trainor.model(data[..., 0:1])
+        pr = new_trainor.model(data[..., 0:1], k_max=2)
     except Exception as e:
         raise ValueError(f"Failed with following exception {e}")
 
@@ -56,7 +56,7 @@ def test_save_with_final_act():
     new_trainor = RRAE_Trainor_class()
     new_trainor.load("test_", erase=True)
     try:
-        pr = new_trainor.model(data[..., 0:1])
+        pr = new_trainor.model(data[..., 0:1], k_max=2)
         assert jnp.max(pr) <= 1.0, "Final activation not working"
         assert jnp.min(pr) >= 0.0, "Final activation not working"
     except Exception as e:

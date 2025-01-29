@@ -183,3 +183,8 @@ MNIST/*
 img_align_celeba/*
 *.jpg
 fashion_mnist/*
+*.txt
+main-now-CNN.py
+main-now-MLP.py
+interp_2d_gauss.py
+utils.py

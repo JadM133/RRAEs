@@ -20,7 +20,7 @@ if __name__ == "__main__":
     # i.e. do not open/close parenthesis.
     model_cls = MLP
 
-    loss_type = "Strong"  # Specify the loss type, this uses the norm in %.
+    loss_type = "default"  # Specify the loss type, this uses the norm in %.
 
     # Step 3: Define your trainor, with the model, data, and parameters.
     # Use Trainor_class. It has some slight differences compared to RRAE_Trainor_class.

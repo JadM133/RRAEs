@@ -28,7 +28,8 @@ def get_coeffs(trainors, inp):
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "test_data_CNN"
+    problem = "2d_gaussian_shift_scale"
+    
     (
         x_train,
         x_test,

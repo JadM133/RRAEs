@@ -33,6 +33,31 @@ _identity = doc_repr(lambda x: x, "lambda x: x")
 _relu = doc_repr(jnn.relu, "<function relu>")
 
 
+def get_diff_func(x_1, x_2, V_1, V_2, type="tanh"):
+    match type:
+        case "tanh":
+            eps = 0.00001
+            a = (V_2 - V_1) / 2
+            c = (V_2 + V_1) / 2
+            sn = jnp.sign(V_2 - V_1)
+            F_1 = jnp.arctanh((V_1 + sn * eps - c) / a)
+            F_2 = jnp.arctanh((V_2 - sn * eps - c) / a)
+            d = (F_2 - F_1) / (x_2 - x_1)
+            b = F_2 - d * x_2
+            inter_func = lambda x: a * jnp.tanh(d * x + b) + c
+                
+        case "line":
+            inter_func = lambda x: (V_2 - V_1) / (x_2 - x_1) * (x - x_1) + V_1
+            
+    def func(x):
+        bl = ((x > x_2) + (x < x_1)) > 0
+        other = (x > x_2) * V_2 + (x < x_1) * V_1
+        inter = inter_func(x) 
+        return (1 - bl) * inter + bl * other
+    
+    return func
+
+
 def tree_map(f, tree, *rest, is_leaf=None):
     def filtered_f(leaf):
         if (
@@ -113,15 +138,25 @@ def loss_generator(which=None, norm_loss_=None):
     if norm_loss_ is None:
         norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
 
-    if (which == "Strong") or (which == "default") or (which == "Vanilla"):
+    if (which == "default") or (which == "Vanilla"):
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, **kwargs):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, inv_norm_out=False)
             wv = jnp.array([1.0])
-            return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (pred,)
-
+            aux = {"loss": norm_loss_(pred, out)}
+            return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), aux
+        
+    elif which == "Strong":
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(diff_model, static_model, input, out, idx, k_max, **kwargs):
+            model = eqx.combine(diff_model, static_model)
+            pred = model(input, k_max=k_max, inv_norm_out=False)
+            wv = jnp.array([1.0])
+            aux = {"loss": norm_loss_(pred, out), "k_max": k_max}
+            return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), aux
+    
     elif which == "Sparse":
 
         @eqx.filter_value_and_grad(has_aux=True)
@@ -136,16 +171,17 @@ def loss_generator(which=None, norm_loss_=None):
                 1 - sparsity
             ) * jnp.log((1 - sparsity) / (1 - jnp.mean(lat) + 1e-8))
 
+            aux = {"loss rec": norm_loss_(pred, out), "loss sparse": sparse_term}
             return find_weighted_loss(
                 [
                     norm_loss_(pred, out),
                     sparse_term
                 ],
                 weight_vals=wv,
-            ), (norm_loss_(pred, out), sparse_term)
+            ), aux
 
     elif which == "Weak":
-
+        raise NotImplementedError
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(
             diff_model, static_model, input, out, idx, norm_loss=None, **kwargs
@@ -200,6 +236,7 @@ def loss_generator(which=None, norm_loss_=None):
             else:
                 weight = find_layer(model)
 
+            aux = {"loss rec": norm_loss_(pred, out), "loss nuc": jnp.linalg.norm(weight, "nuc")}
             return (
                 find_weighted_loss(
                     [
@@ -208,7 +245,7 @@ def loss_generator(which=None, norm_loss_=None):
                     ],
                     weight_vals=wv,
                 ),
-                (norm_loss(pred, out), jnp.linalg.norm(weight, "nuc")),
+                aux
             )
 
     elif which == "var":
@@ -225,12 +262,15 @@ def loss_generator(which=None, norm_loss_=None):
             kl_loss = jnp.sum(
                 -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
             )
+
+            aux = {
+                "loss rec": norm_loss_(pred, out),
+                "loss kl": kl_loss
+            }
+
             return find_weighted_loss(
                 [norm_loss_(pred, out), kl_loss], weight_vals=wv
-            ), (
-                norm_loss_(pred, out),
-                kl_loss,
-            )
+            ), aux
         
     elif "Contractive":
 
@@ -244,7 +284,8 @@ def loss_generator(which=None, norm_loss_=None):
             dh = dh.T
             loss_contr = jnp.sum(jnp.matmul(dh**2, jnp.square(W)))
             wv = jnp.array([1.0, beta])
-            return find_weighted_loss([norm_loss_(pred, out), loss_contr], weight_vals=wv), (pred,)
+            aux = {"loss": norm_loss_(pred, out)}
+            return find_weighted_loss([norm_loss_(pred, out), loss_contr], weight_vals=wv), aux
     else:
         raise ValueError(f"{which} is an Unknown loss type")
 
@@ -432,6 +473,55 @@ def get_data(problem, folder=None, google=True, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
+        case "2d_gaussian_shift_scale":
+            D = 64  # Dimension of the domain
+            Ntr = 200  # Number of training samples
+            Nte = 200  # Number of test samples
+            sigma = 0.2
+
+            def gaussian_2d(x, y, x0, y0, sigma):
+                return jnp.exp(-((x - x0)**2 + (y - y0)**2) / (2 * sigma**2))
+
+            x = jnp.linspace(-1, 1, D)
+            y = jnp.linspace(-1, 1, D)
+            X, Y = jnp.meshgrid(x, y)
+
+            # Create training data
+            train_data = []
+            x0_vals = jnp.linspace(-0.5, 0.5, int(jnp.sqrt(Ntr)))
+            y0_vals = jnp.linspace(-0.5, 0.5, int(jnp.sqrt(Ntr)))
+            x0_mesh, y0_mesh = jnp.meshgrid(x0_vals, y0_vals)
+            x0_mesh = x0_mesh.flatten()
+            y0_mesh = y0_mesh.flatten()
+
+            for i in range(Ntr):
+                train_data.append(gaussian_2d(X, Y, x0_mesh[i], y0_mesh[i], sigma))
+            train_data = jnp.stack(train_data, axis=-1)
+
+            # Create test data
+            x0_vals_test = jnp.linspace(-0.5, 0.5, Nte)
+            y0_vals_test = x0_vals_test  # Moving along the diagonal
+            x0_mesh_test = x0_vals_test
+            y0_mesh_test = y0_vals_test
+
+            test_data = []
+            for i in range(Nte):
+                test_data.append(gaussian_2d(X, Y, x0_mesh_test[i], y0_mesh_test[i], sigma))
+            test_data = jnp.stack(test_data, axis=-1)
+
+            # Normalize the data
+            train_data = (train_data - jnp.mean(train_data)) / jnp.std(train_data)
+            test_data = (test_data - jnp.mean(test_data)) / jnp.std(test_data)
+
+            # Split the data into training and test sets
+            x_train = jnp.expand_dims(train_data, 0)
+            x_test = jnp.expand_dims(test_data, 0)
+            y_train = jnp.expand_dims(train_data, 0)
+            y_test = jnp.expand_dims(test_data, 0)
+            p_train = jnp.stack([x0_mesh, y0_mesh], axis=-1)
+            p_test = jnp.stack([x0_mesh_test, y0_mesh_test], axis=-1)
+            return x_train, x_test, p_train, p_test, y_train, y_test, lambda x: x, lambda x: x, ()
+
         case "Angelo":
             import os
 
@@ -794,7 +884,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
             ts = jnp.linspace(0, 2 * jnp.pi, 200)
             def gauss_shift(s, x):
                 return jnp.exp(-((x - s) ** 2) / 0.1)  # Smaller width
-            p_vals = jnp.linspace(1, 2 * jnp.pi +1, google)
+            p_vals = jnp.linspace(1, 2 * jnp.pi +1, 20)
             ts = jnp.linspace(0, 2 * jnp.pi + 2, 500)
             y_shift = jax.vmap(gauss_shift, in_axes=[0, None])(p_vals, ts).T
             p_test = jnp.linspace(jnp.min(p_vals), jnp.max(p_vals), 500)[1:-1]

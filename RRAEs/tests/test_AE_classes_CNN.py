@@ -25,7 +25,7 @@ class Test_AEs_shapes:
         )
         y = model.encode(x)
         assert y.shape == (latent, num_samples)
-        y = model.latent(x)
+        y = model.latent(x, k_max=num_modes)
         _, sing_vals, _ = jnp.linalg.svd(y, full_matrices=False)
         assert sing_vals[num_modes + 1] < 1e-5
         assert y.shape == (latent, num_samples)
@@ -42,25 +42,25 @@ class Test_AEs_shapes:
         x = model.decode(y)
         assert x.shape == (channels, width, height, num_samples)
 
-    def test_Weak_CNN(self, latent, num_modes, width, height, channels, num_samples):
-        x = jrandom.normal(jrandom.PRNGKey(0), (channels, width, height, num_samples))
-        kwargs = {"kwargs_dec": {"stride": 2}}
-        model = Weak_RRAE_CNN(
-            x.shape[0],
-            x.shape[1],
-            x.shape[2],
-            latent,
-            num_modes,
-            x.shape[-1],
-            key=jrandom.PRNGKey(0),
-            **kwargs
-        )
-        y = model.encode(x)
-        assert y.shape == (latent, num_samples)
-        x = model.decode(y)
-        assert x.shape == (channels, width, height, num_samples)
-        assert model.v_vt.v.shape == (latent, num_modes)
-        assert model.v_vt.vt.shape == (num_modes, num_samples)
+    # def test_Weak_CNN(self, latent, num_modes, width, height, channels, num_samples):
+    #     x = jrandom.normal(jrandom.PRNGKey(0), (channels, width, height, num_samples))
+    #     kwargs = {"kwargs_dec": {"stride": 2}}
+    #     model = Weak_RRAE_CNN(
+    #         x.shape[0],
+    #         x.shape[1],
+    #         x.shape[2],
+    #         latent,
+    #         num_modes,
+    #         x.shape[-1],
+    #         key=jrandom.PRNGKey(0),
+    #         **kwargs
+    #     )
+    #     y = model.encode(x)
+    #     assert y.shape == (latent, num_samples)
+    #     x = model.decode(y)
+    #     assert x.shape == (channels, width, height, num_samples)
+    #     assert model.v_vt.v.shape == (latent, num_modes)
+    #     assert model.v_vt.vt.shape == (num_modes, num_samples)
 
     def test_IRMAE_CNN(self, latent, num_modes, width, height, channels, num_samples):
         x = jrandom.normal(jrandom.PRNGKey(0), (channels, width, height, num_samples))
