@@ -475,8 +475,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
     match problem:
         case "2d_gaussian_shift_scale":
             D = 64  # Dimension of the domain
-            Ntr = 200  # Number of training samples
-            Nte = 200  # Number of test samples
+            Ntr = google  # Number of training samples
+            Nte = google  # Number of test samples
             sigma = 0.2
 
             def gaussian_2d(x, y, x0, y0, sigma):
