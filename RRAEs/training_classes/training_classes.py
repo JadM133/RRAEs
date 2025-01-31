@@ -32,6 +32,26 @@ from RRAEs.trackers import (
 )
 
 
+class Circular_list:
+    """
+        Creates a list of fixed size.
+        Adds elements in a circular manner
+    """
+    def __init__(self, size):
+        self.size = size
+        self.buffer = [0.0] * size  
+        self.index = 0  
+
+    def add(self, value):
+        self.buffer[self.index] = value  
+        self.index = (self.index + 1) % self.size  
+        
+    def __iter__(self):
+        for value in self.buffer:
+            yield value
+
+
+
 class Trainor_class:
     def __init__(
         self,
@@ -153,25 +173,30 @@ class Trainor_class:
         diff_model, _ = eqx.partition(model, filter_spec)
         filtered_model = eqx.filter(diff_model, eqx.is_inexact_array)
 
-        t_all = 0
+        t_all = 0.0
 
         training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
 
         counter = 0
-        prev_losses = []
+        
+        store_window = min(stagn_window, sum(step_st))
+        prev_losses = Circular_list(store_window) # pre-allocate list
+        
         track_params = tracker.init()
         avg_loss = jnp.inf
+        
 
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
             try:
-                t_t = 0
-                optim = optimizer(lr)
-                opt_state = optim.init(filtered_model)
+                t_t = 0.0                                       # Zero time
+                optim = optimizer(lr)                           # Create optimizer
+                opt_state = optim.init(filtered_model)          # initialize it
 
                 if (batch_size > input.shape[-1]) or batch_size == -1:
+                    print(f"Setting batch size to: {input.shape[-1]}")
                     batch_size = input.shape[-1]
 
-                for step, (input_b, out, idx) in zip(
+                for step, (input_b, out_b, idx_b) in zip(
                     range(steps),
                     dataloader(
                         [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
@@ -179,42 +204,48 @@ class Trainor_class:
                         key_idx=training_num,
                     ),
                 ):
-                    start = time.perf_counter()
-                    out = self.model.norm_out(pre_func_out(out))
-                    input_b = pre_func_inp(input_b)
+                    start = time.perf_counter()             # Start time
+                    
+                    out_b = self.model.norm_out(pre_func_out(out_b))    # Pre-process out values
+                    input_b = pre_func_inp(input_b)         # Pre-process batch input values 
 
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
 
                     loss, model, opt_state, aux = make_step(
                         model,
                         input_b.T,
-                        out.T,
+                        out_b.T,
                         opt_state,
-                        idx,
+                        idx_b,
                         **step_kwargs,
                     )
 
-                    prev_losses.append(loss)
+                    prev_losses.add(loss.item())
+                    
                     if step > stagn_window:
-                        prev_losses = prev_losses[-stagn_window:]
-                        avg_loss = sum(prev_losses) / len(prev_losses)
+                        avg_loss = sum(prev_losses) / stagn_window
+                        
 
                     track_params = tracker(loss, avg_loss, track_params)
 
                     counter += 1
-                    end = time.perf_counter()
-                    t_t += end - start
+                    end = time.perf_counter()           # End time
+                    t_t += (end - start)                # Batch execution time
+                    t_all += t_t                        # Total executin time
 
                     if (step % print_every) == 0 or step == steps - 1:
-                        to_print = [f"{k}: {v}" for k, v in aux.items()]
+                        t_t = 0.0                       # Reset Batch execution time
+                        
+                        to_print = ", ".join([f"{k}: {v}" for k, v in aux.items()])
                         print(
-                            f"Step: {step}, "
-                            + ", ".join(to_print)
-                            + ", "
-                            + f"Comp time: {end - start}"
-                        )
-                        t_all += t_t
-                        t_t = 0
+                                f"Step: {step}, "
+                                + to_print
+                                + ", "
+                                + f"Step time: {round(end - start, 4)}, "
+                                + f"Total elapsed time: {round(t_all, 4)}"
+                             ) 
+                        
+                        
                     if ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
                             raise ValueError("Loss is nan, stopping training...")
