@@ -101,6 +101,7 @@ class Trainor_class:
         fix_comp=lambda _: (),
         tracker=Null_Tracker(),
         stagn_window=20,
+        optimizer=optax.adabelief,
         *,
         training_key,
     ):
@@ -164,7 +165,7 @@ class Trainor_class:
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
             try:
                 t_t = 0
-                optim = optax.adabelief(lr)
+                optim = optimizer(lr)
                 opt_state = optim.init(filtered_model)
 
                 if (batch_size > input.shape[-1]) or batch_size == -1:
@@ -566,7 +567,12 @@ class RRAE_Trainor_class(Trainor_class):
             end_type="concat",
             key_idx=0,
         )
-        norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
+        
+        if "loss" in ft_kwargs:
+            norm_loss_ = ft_kwargs["loss"]
+        else:
+            print("Defaulting to L2 norm")    
+            norm_loss_ = lambda x1, x2: 100.0*(jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2))
 
         basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
 
