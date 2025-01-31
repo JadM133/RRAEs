@@ -184,8 +184,8 @@ img_align_celeba/*
 *.jpg
 fashion_mnist/*
 *.txt
-main-now-CNN.py
-main-now-MLP.py
+# main-now-CNN.py
+# main-now-MLP.py
 interp_2d_gauss.py
 utils.py
 2d_gaussian_shift_scale/*
