@@ -144,27 +144,43 @@ class Trainor_class:
             "training_key": training_key,
         }
 
-        self.all_kwargs = {**self.all_kwargs, **training_params}
-        model = self.model
+        self.all_kwargs = merge_dicts(self.all_kwargs, training_params) # Append dicts
+        
+        model = self.model    # Create alias for model
 
         fn = lambda x: x if fn is None else fn
 
+        # Process loss function
         if callable(loss_type):
             loss_fun = loss_type
         else:
             loss_fun = loss_generator(loss_type, loss)
 
+        # Make step funciton
         @eqx.filter_jit
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
-            diff_model, static_model = eqx.partition(model, filter_spec)
+            diff_model, static_model = eqx.partition(model, filter_spec) # Split model into differential and static portions
+            
+            # Compute (loss, auxiliar vars) and gradient
             (loss, aux), grads = loss_fun(
-                diff_model, static_model, input, out, idx, **loss_kwargs
-            )
+                                              diff_model, 
+                                              static_model, 
+                                              input, 
+                                              out, 
+                                              idx, 
+                                              **loss_kwargs
+                                          )
+            
+            # Perform back-propagation
             updates, opt_state = optim.update(grads, opt_state)
             diff_model = eqx.apply_updates(diff_model, updates)
+            
+            # Recombine differential and static portions
             model = eqx.combine(diff_model, static_model)
+            
             return loss, model, opt_state, aux
 
+        # Create filter for splitting the model into differential and static portions
         filtered_filter_spec = tree_map(lambda _: True, model)
         new_filt = jtu.tree_map(lambda _: False, fix_comp(filtered_filter_spec))
         filter_spec = jtu.tree_map(lambda _: True, model)
@@ -173,75 +189,83 @@ class Trainor_class:
         diff_model, _ = eqx.partition(model, filter_spec)
         filtered_model = eqx.filter(diff_model, eqx.is_inexact_array)
 
-        t_all = 0.0
-
-        training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
-
-        counter = 0
-        
-        store_window = min(stagn_window, sum(step_st))
-        prev_losses = Circular_list(store_window) # pre-allocate list
-        
-        track_params = tracker.init()
+        # Loop variables
+        t_all = 0.0   # Total time
         avg_loss = jnp.inf
+        training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]       
         
-
+        # Window to store averages
+        store_window = min(stagn_window, sum(step_st))
+        prev_losses = Circular_list(store_window)       
+        
+        # Initialize tracker
+        track_params = tracker.init()
+        
+        
+        # Outler Loop
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
             try:
                 t_t = 0.0                                       # Zero time
                 optim = optimizer(lr)                           # Create optimizer
-                opt_state = optim.init(filtered_model)          # initialize it
+                opt_state = optim.init(filtered_model)          # Initialize optimizer
 
                 if (batch_size > input.shape[-1]) or batch_size == -1:
                     print(f"Setting batch size to: {input.shape[-1]}")
                     batch_size = input.shape[-1]
 
-                for step, (input_b, out_b, idx_b) in zip(
+                # Inner loop (batch)
+                for step, (input_b, out_b, idx_b) in \
+                zip(
                     range(steps),
                     dataloader(
-                        [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
-                        batch_size,
-                        key_idx=training_num,
-                    ),
-                ):
-                    start = time.perf_counter()             # Start time
+                                [
+                                    input.T, 
+                                    output.T, 
+                                    jnp.arange(0, input.shape[-1], 1)
+                                ],
+                                batch_size,
+                                key_idx=training_num,
+                                ),
+                   ):
+                    start_time = time.perf_counter()             # Start time
                     
-                    out_b = self.model.norm_out(pre_func_out(out_b))    # Pre-process out values
-                    input_b = pre_func_inp(input_b)         # Pre-process batch input values 
+                    out_b = self.model.norm_out(pre_func_out(out_b))    # Pre-process batch out values
+                    input_b = pre_func_inp(input_b)              # Pre-process batch input values 
 
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
 
+                    # Compute loss
                     loss, model, opt_state, aux = make_step(
-                        model,
-                        input_b.T,
-                        out_b.T,
-                        opt_state,
-                        idx_b,
-                        **step_kwargs,
-                    )
+                                                                model,
+                                                                input_b.T,
+                                                                out_b.T,
+                                                                opt_state,
+                                                                idx_b,
+                                                                **step_kwargs,
+                                                            )
 
+                    # Add loss to list (maybe store info for plotting?)
                     prev_losses.add(loss.item())
                     
                     if step > stagn_window:
                         avg_loss = sum(prev_losses) / stagn_window
                         
-
                     track_params = tracker(loss, avg_loss, track_params)
 
-                    counter += 1
-                    end = time.perf_counter()           # End time
-                    t_t += (end - start)                # Batch execution time
-                    t_all += t_t                        # Total executin time
+                    dt = time.perf_counter() - start_time  # Execution time
+                    t_t += dt                   # Batch execution time
+                    t_all += dt                 # Total execution time  
 
                     if (step % print_every) == 0 or step == steps - 1:
-                        t_t = 0.0                       # Reset Batch execution time
+                        t_t = 0.0               # Reset Batch execution time
                         
-                        to_print = ", ".join([f"{k}: {v}" for k, v in aux.items()])
+                        message = ", ".join([f"{k}: {v}" for k, v in aux.items()])
+                        
                         print(
                                 f"Step: {step}, "
-                                + to_print
+                                + message
                                 + ", "
-                                + f"Step time: {round(end - start, 4)}, "
+                                + f"Step time: {round(dt, 4)}, "
                                 + f"Total elapsed time: {round(t_all, 4)}"
                              ) 
                         
@@ -249,13 +273,17 @@ class Trainor_class:
                     if ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
                             raise ValueError("Loss is nan, stopping training...")
+                            
                         self.model = model
+                        
                         orig = (
-                            f"checkpoint_{step}"
-                            if not jnp.isnan(loss)
-                            else "checkpoint_bf_nan"
-                        )
+                                    f"checkpoint_{step}"
+                                    if not jnp.isnan(loss)
+                                    else "checkpoint_bf_nan"
+                               )
+                        
                         checkpoint_filename = f"{orig}_0.pkl"
+                        
                         if os.path.exists(checkpoint_filename):
                             i = 1
                             new_filename = f"{orig}_{i}.pkl"
@@ -268,6 +296,7 @@ class Trainor_class:
                 pass
 
         model = eqx.nn.inference_mode(model)
+        
         self.model = model
         self.batch_size = batch_size
         self.t_all = t_all
@@ -579,7 +608,7 @@ class RRAE_Trainor_class(Trainor_class):
 
         key0, key1 = jrandom.split(training_key)
 
-        training_kwargs = {**kwargs, **training_kwargs}
+        training_kwargs = merge_dicts(kwargs, training_kwargs)
         model, track_params = super().fit(*args, training_key=key0, **training_kwargs)
         inp = args[0] if len(args) > 0 else kwargs["input"]
 
@@ -603,7 +632,7 @@ class RRAE_Trainor_class(Trainor_class):
             norm_loss_ = ft_kwargs["loss"]
         else:
             print("Defaulting to L2 norm")    
-            norm_loss_ = lambda x1, x2: 100.0*(jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2))
+            norm_loss_ = lambda x1, x2: 100*(jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2))
 
         basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
 
