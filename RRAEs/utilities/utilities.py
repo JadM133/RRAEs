@@ -1487,7 +1487,7 @@ def adaptive_TSVD(
 
 
 def find_weighted_loss(terms, weight_vals=None):
-    terms = jnp.asarray(terms, dtype=jnp.float32)
+    terms = jnp.asarray(terms) # Removed float32 assumption
     total = jnp.sum(jnp.abs(terms))
     if weight_vals is None:
         weights = jnp.asarray([jnp.abs(term) / total for term in terms])
