@@ -207,7 +207,8 @@ class Trainor_class:
                     counter += 1
                     end = time.perf_counter()
                     t_t += end - start
-
+                    if ("stop_train" in track_params) and (track_params["stop_train"] == True):
+                        break
                     if (step % print_every) == 0 or step == steps - 1:
                         to_print = [f"{k}: {v}" for k, v in aux.items()]
                         print(

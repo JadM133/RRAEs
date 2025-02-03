@@ -22,7 +22,7 @@ class RRAE_gen_Tracker:
         patience_not_right=500,
         max_steps=1000,
         perf_loss=0,
-        eps_0=5,
+        eps_0=1,
         eps_perc=5,
         save_steps=20
     ):
@@ -52,6 +52,7 @@ class RRAE_gen_Tracker:
         self.prev_k_steps = 0
         self.max_patience = jnp.inf
         self.save_steps = save_steps
+        self.stop_train = False
 
     def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
         save = False
@@ -86,7 +87,7 @@ class RRAE_gen_Tracker:
                 diff_func_params_eps["type"] = "line"
                 self.diff_func_eps = get_diff_func(**diff_func_params_eps)
 
-            return {"k_max": self.k_now, "save": save, "break_": break_}
+            return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
 
         self.total_steps += 1
         if not self.converged:
@@ -107,7 +108,7 @@ class RRAE_gen_Tracker:
             else:
                 self.patience_c_conv = 0
                 self.k_steps += 1
-                if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_perc:
+                if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_0:
                     self.k_steps = 0
                     self.patience_c += 1
                     if self.patience_c == self.patience:
@@ -117,15 +118,20 @@ class RRAE_gen_Tracker:
                         save = True
                         self.converged = True
                         break_ = True
-                else:
-                    if self.k_steps == self.prev_k_steps * 5:
-                        self.k_now += 1
-                        save = True
-                        self.converged = True
-                        break_ = True
-                        print(f"Reached max steps for k={self.k_now}")
+                        print("adding one and shit")
+                        
+        else:
+            if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_perc:
+                self.patience_c += 1
+                if self.patience_c == self.patience:
+                    self.patience_c = 0
+                    self.prev_k_steps = 0
+                    save = True
+                    break_ = True
+                    self.stop_train = True
+                    print("Stopping training")
 
-        return {"k_max": self.k_now, "save": save, "break_": break_}
+        return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
 
     def init(self):
         return {"k_max": self.k_now}
