@@ -33,8 +33,6 @@ class PrintLogger:
         pass  # This is needed for compatibility with sys.stdout
 
 
-sys.stdout = PrintLogger(logging.getLogger())
-
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
     all_errors = []
@@ -89,10 +87,10 @@ if __name__ == "__main__":
             # Step 3: Specify the archietectures' parameters:
             latent_size = 200  # latent space dimension 200
             k_max = (
-                1  # number of features in the latent space (after the truncated SVD).
+                64  # number of features in the latent space (after the truncated SVD).
             )
 
-            adap_type = "pars"
+            adap_type = "gen"
 
             log_dir = f"{problem}/{method}_{problem}_{adap_type}"
             if not os.path.exists(log_dir):
@@ -152,7 +150,7 @@ if __name__ == "__main__":
                 "lr_st": [1e-3, 1e-4, 1e-7, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
-                "tracker": RRAE_pars_Tracker(k_max, perf_loss=10),
+                "tracker": RRAE_gen_Tracker(k_max, perf_loss=1),
             }
 
             ft_kwargs = {

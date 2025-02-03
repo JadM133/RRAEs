@@ -18,11 +18,13 @@ class RRAE_gen_Tracker:
         self,
         k_init,
         patience_conv=1,
+        patience_init=50,
         patience_not_right=500,
         max_steps=1000,
         perf_loss=0,
         eps_0=5,
-        eps_perc=1,
+        eps_perc=5,
+        save_steps=20
     ):
 
         self.patience_c_conv = 0
@@ -40,6 +42,7 @@ class RRAE_gen_Tracker:
 
         self.patience_conv = patience_conv
         self.patience = patience_not_right
+        self.patience_init = patience_init
         self.init_phase = True
         self.ideal_loss = jnp.nan
         self.eps_0 = eps_0
@@ -48,25 +51,25 @@ class RRAE_gen_Tracker:
         self.k_steps = 0
         self.prev_k_steps = 0
         self.max_patience = jnp.inf
+        self.save_steps = save_steps
 
     def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
         save = False
         break_ = False
         self.prev_k_steps += 1
-
+        print(self.patience_c)
         if self.init_phase:
             if (
                 jnp.abs(current_loss - prev_avg_loss) / jnp.abs(prev_avg_loss) * 100
                 < self.eps_perc
             ):
                 self.patience_c += 1
-                if self.patience_c == self.patience:
+                if self.patience_c == self.patience_init:
                     self.patience_c = 0
                     self.init_phase = False
                     self.ideal_loss = prev_avg_loss
                     print(f"Ideal loss is {self.ideal_loss}")
-            else:
-                self.patience_c = 0
+                    print("Stagnated")
 
             if current_loss < self.perf_loss:
                 self.ideal_loss = self.perf_loss
@@ -94,18 +97,17 @@ class RRAE_gen_Tracker:
                 if self.patience_c_conv == self.patience_conv:
                     self.patience_c_conv = 0
                     self.k_now -= 1
-                    self.prev_k_steps = 0
-                    if self.total_steps == self.patience_conv:
+                    if (self.total_steps == self.patience_conv):
                         save = False
                     else:
-                        save = True
+                        if self.prev_k_steps >= self.save_steps:
+                            save = True
+                    self.prev_k_steps = 0
                     self.total_steps = 0
             else:
                 self.patience_c_conv = 0
                 self.k_steps += 1
-                if jnp.abs(current_loss - prev_avg_loss) < self.diff_func_eps(
-                    current_loss
-                ):
+                if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_perc:
                     self.k_steps = 0
                     self.patience_c += 1
                     if self.patience_c == self.patience:
@@ -122,8 +124,6 @@ class RRAE_gen_Tracker:
                         self.converged = True
                         break_ = True
                         print(f"Reached max steps for k={self.k_now}")
-
-                    self.patience_c = 0
 
         return {"k_max": self.k_now, "save": save, "break_": break_}
 
