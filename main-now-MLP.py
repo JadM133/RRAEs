@@ -150,7 +150,7 @@ if __name__ == "__main__":
                 "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
-                "tracker": RRAE_gen_Tracker(k_max, eps_perc=1, patience_init=5000),
+                "tracker": RRAE_gen_Tracker(k_max, eps_perc=1, perf_loss=2),
             }
 
             ft_kwargs = {

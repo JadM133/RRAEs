@@ -18,7 +18,7 @@ class RRAE_gen_Tracker:
         self,
         k_init,
         patience_conv=1,
-        patience_init=50,
+        patience_init=None,
         patience_not_right=500,
         max_steps=1000,
         perf_loss=0,
@@ -60,32 +60,24 @@ class RRAE_gen_Tracker:
         self.prev_k_steps += 1
         print(self.patience_c)
         if self.init_phase:
-            if (
-                jnp.abs(current_loss - prev_avg_loss) / jnp.abs(prev_avg_loss) * 100
-                < self.eps_perc
-            ):
-                self.patience_c += 1
-                if self.patience_c == self.patience_init:
-                    self.patience_c = 0
-                    self.init_phase = False
-                    self.ideal_loss = prev_avg_loss
-                    print(f"Ideal loss is {self.ideal_loss}")
-                    print("Stagnated")
-
+            if self.patience_init is not None:
+                if (
+                    jnp.abs(current_loss - prev_avg_loss) / jnp.abs(prev_avg_loss) * 100
+                    < self.eps_perc
+                ):
+                    self.patience_c += 1
+                    if self.patience_c == self.patience_init:
+                        self.patience_c = 0
+                        self.init_phase = False
+                        self.ideal_loss = prev_avg_loss
+                        print(f"Ideal loss is {self.ideal_loss}")
+                        print("Stagnated")
+            
             if current_loss < self.perf_loss:
                 self.ideal_loss = self.perf_loss
                 self.init_phase = False
                 self.patience_c = 0
                 print(f"Ideal loss is {self.ideal_loss}")
-
-            if not self.init_phase:
-                diff_func_params_eps = {}
-                diff_func_params_eps["x_1"] = self.ideal_loss
-                diff_func_params_eps["x_2"] = 40
-                diff_func_params_eps["V_1"] = 0
-                diff_func_params_eps["V_2"] = self.eps_0
-                diff_func_params_eps["type"] = "line"
-                self.diff_func_eps = get_diff_func(**diff_func_params_eps)
 
             return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
 
