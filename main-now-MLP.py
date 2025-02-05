@@ -94,9 +94,9 @@ if __name__ == "__main__":
 
             # Step 3: Specify the archietectures' parameters:
             latent_size = 200  # latent space dimension 200
-            k_max = 64  # number of features in the latent space (after the truncated SVD).
+            k_max = 1  # number of features in the latent space (after the truncated SVD).
             
-            adap_type = "gen"
+            adap_type = "pars"
 
             log_dir = f"{problem}/{method}_{problem}_{adap_type}"
             
@@ -150,7 +150,7 @@ if __name__ == "__main__":
                 "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
-                "tracker": RRAE_gen_Tracker(k_max, eps_perc=1, perf_loss=2),
+                "tracker": RRAE_pars_Tracker(k_max, eps_perc=1),
             }
 
             ft_kwargs = {

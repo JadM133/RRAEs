@@ -119,7 +119,6 @@ class RRAE_gen_Tracker:
                     self.patience_c = 0
                     self.prev_k_steps = 0
                     save = True
-                    break_ = True
                     self.stop_train = True
                     print("Stopping training")
 
@@ -133,65 +132,57 @@ class RRAE_pars_Tracker:
     def __init__(
         self,
         k_init=None,
-        patience=10,
+        patience=5000,
         max_wait=500,
-        eps_0=1,
-        wac_0=1,
+        eps_perc=1,
         perf_loss=10,
         diff_func_params_eps=None,
         diff_func_params_wac=None,
     ):
         k_init = 1 if k_init is None else k_init
 
-        if diff_func_params_eps is None:
-            diff_func_params_eps = {}
-            diff_func_params_eps["x_1"] = perf_loss
-            diff_func_params_eps["x_2"] = 40
-            diff_func_params_eps["V_1"] = 0
-            diff_func_params_eps["V_2"] = eps_0
-            diff_func_params_eps["type"] = "line"
-
-        if diff_func_params_wac is None:
-            diff_func_params_wac = {}
-            diff_func_params_wac["x_1"] = perf_loss
-            diff_func_params_wac["x_2"] = 40
-            diff_func_params_wac["V_1"] = 0
-            diff_func_params_wac["V_2"] = wac_0
-            diff_func_params_wac["type"] = "line"
-
         self.patience = patience
-        self.diff_func_eps = get_diff_func(**diff_func_params_eps)
-        self.diff_func_wac = get_diff_func(**diff_func_params_wac)
+        self.eps = eps_perc
         self.patience_c = 0
         self.change_prot = False
         self.loss_prev_mode = jnp.inf
         self.wait_counter = 0
         self.max_wait = max_wait
         self.k_now = k_init
+        self.converged = False
+        self.stop_train = False
 
     def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
         save = False
-        if not self.change_prot:
-            if jnp.abs(current_loss - prev_avg_loss) < self.diff_func_eps(current_loss):
+        break_ = False
+        print(self.patience_c)
+        if not self.converged:
+            if jnp.abs(current_loss - prev_avg_loss) < self.eps:
                 self.patience_c += 1
                 if self.patience_c == self.patience:
                     self.patience_c = 0
-                    self.change_prot = True
-                    self.k_now += 1
                     save = True
-                    self.loss_prev_mode = prev_avg_loss
-            else:
-                self.patience_c = 0
+                
+                    if jnp.abs(prev_avg_loss - self.loss_prev_mode)/jnp.abs(self.loss_prev_mode)*100 <  self.eps:
+                        import pdb; pdb.set_trace()
+                        self.k_now -= 1
+                        break_ = True
+                        self.converged = True
+                        self.patience_c = 0
+                    else:
+                        self.k_now += 1
+                        self.loss_prev_mode = prev_avg_loss
         else:
-            self.wait_counter += 1
-            new_wac = self.diff_func_wac(current_loss)
-
-            if (self.wait_counter >= self.max_wait) or (
-                self.loss_prev_mode - current_loss
-            ) > new_wac:
-                self.change_prot = False
-                self.wait_counter = 0
-        return {"k_max": self.k_now, "save": save}
+             if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps:
+                self.patience_c += 1
+                if self.patience_c == self.patience:
+                    self.patience_c = 0
+                    self.prev_k_steps = 0
+                    save = True
+                    self.stop_train = True
+                    print("Stopping training")    
+        
+        return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
 
     def init(self):
         return {"k_max": self.k_now}
