@@ -559,8 +559,6 @@ class Trainor_class:
 
 class RRAE_Trainor_class(Trainor_class):
     def __init__(self, *args, adapt=False, k_max=None, adap_type="None", **kwargs):
-
-        
         self.k_init = k_max
         self.adap_type = adap_type
         kwargs["k_max"] = k_max
@@ -568,7 +566,6 @@ class RRAE_Trainor_class(Trainor_class):
         self.adapt = adapt
 
     def fit(self, *args, training_key, **kwargs):
-
         if self.adap_type == "pars":
             default_tracker = RRAE_pars_Tracker(k_init=self.k_init)
         elif self.adap_type == "gen":
@@ -599,9 +596,9 @@ class RRAE_Trainor_class(Trainor_class):
             ft_kwargs = {}
 
         if "pre_func_inp" not in kwargs:
-            pre_func_inp = lambda x: x
+            self.pre_func_inp = lambda x: x
         else:
-            pre_func_inp = kwargs["pre_func_inp"]
+            self.pre_func_inp = kwargs["pre_func_inp"]
 
         if "tracker" not in training_kwargs:
             training_kwargs["tracker"] = default_tracker
@@ -609,53 +606,66 @@ class RRAE_Trainor_class(Trainor_class):
         key0, key1 = jrandom.split(training_key)
 
         training_kwargs = merge_dicts(kwargs, training_kwargs)
-        model, track_params = super().fit(*args, training_key=key0, **training_kwargs)
-        inp = args[0] if len(args) > 0 else kwargs["input"]
+
+        model, track_params = super().fit(*args, training_key=key0, **training_kwargs)  # train model
+
+        self.track_params = track_params    # Save track parameters in class?
 
         if "batch_size_st" in training_kwargs:
-            batch_size = training_kwargs["batch_size_st"][-1]
+            self.batch_size = training_kwargs["batch_size_st"][-1]
         else:
-            batch_size = 16  # default value
+            self.batch_size = 16  # default value
 
-        all_bases = model.eval_with_batches(
-            inp,
-            batch_size,
-            call_func=lambda x: model.latent(
-                pre_func_inp(x), get_basis_coeffs=True, **track_params
-            )[0],
-            str="Finding train latent space...",
-            end_type="concat",
-            key_idx=0,
-        )
-        
-        if "loss" in ft_kwargs:
-            norm_loss_ = ft_kwargs["loss"]
+        ft_kwargs = merge_dicts(kwargs, ft_kwargs)
+
+        self.fine_tune_basis(None, args=args, kwargs=ft_kwargs, key=key1)       # fine tune basis
+
+
+    def fine_tune_basis(self, basis = None, *, args, kwargs, key):
+
+        if "loss" in kwargs:
+            norm_loss_ = kwargs["loss"]
         else:
             print("Defaulting to L2 norm")    
             norm_loss_ = lambda x1, x2: 100*(jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2))
 
-        basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
 
-        self.basis = basis[:, : track_params["k_max"]]
+        if basis is None:
+            inp = args[0] if len(args) > 0 else kwargs["input"]
+
+            all_bases = self.model.eval_with_batches(
+                inp,
+                self.batch_size,
+                call_func=lambda x: self.model.latent(
+                    self.pre_func_inp(x), get_basis_coeffs=True, **self.track_params
+                )[0],
+                str="Finding train latent space...",
+                end_type="concat",
+                key_idx=0,
+            )
+            basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
+            self.basis = basis[:, : self.track_params["k_max"]]
+        else:
+            self.basis = basis
+        
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, basis):
             model = eqx.combine(diff_model, static_model)
-            pred = model(input, apply_basis=self.basis, inv_norm_out=False)
+            pred = model(input, apply_basis=basis, inv_norm_out=False)  # Note: here was self.basis, thus basis arg was not being used
             aux = {"loss": norm_loss_(pred, out)}
             return norm_loss_(pred, out), aux
 
-        if "loss_type" in ft_kwargs:
+        if "loss_type" in kwargs:
             raise ValueError(
                 "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
             )
 
-        ft_kwargs["loss_type"] = loss_fun
-        ft_kwargs["loss_kwargs"] = {"basis": basis}
-        ft_kwargs = {**kwargs, **ft_kwargs}
+        kwargs["loss_type"] = loss_fun
+        kwargs["loss_kwargs"] = {"basis": self.basis}
         fix_comp = lambda model: model.encode.model
-        print("Fine tuning the basis found ...")
-        super().fit(*args, training_key=key1, fix_comp=fix_comp, **ft_kwargs)
+        print("Fine tuning the basis ...")
+        super().fit(*args, training_key=key, fix_comp=fix_comp, **kwargs)
 
     def evaluate(
         self,
