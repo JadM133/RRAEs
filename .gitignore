@@ -191,7 +191,7 @@ utils.py
 
 
 
-2D_DATA_CIs.npz
+2D_DATA_CIs*.npz
 2D_data_MLP.py
 my_print_utils.py
 my_utils.py
