@@ -38,13 +38,13 @@ def test_fitting(model_cls, sh, lf):
         "loss_kwargs": {
             "lambda_nuc": 0.001,
             "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
+            "loss_type": lf
         },
     }
     try:
         trainor.fit(
             x,
             x,
-            loss_type=lf,
             verbose=False,
             training_key=jrandom.PRNGKey(50),
             **kwargs,
@@ -69,12 +69,11 @@ def test_IRMAE_fitting():
         linear_l=4,
         key=jrandom.PRNGKey(0),
     )
-    kwargs = {"step_st": [2]}
+    kwargs = {"step_st": [2], "loss_type": lf}
     try:
         trainor.fit(
             x,
             x,
-            loss_type=lf,
             verbose=False,
             training_key=jrandom.PRNGKey(50),
             **kwargs,
@@ -98,6 +97,7 @@ def test_Strong_fitting():
     )
     training_kwargs = {
         "step_st": [2],
+        "loss_type": "Strong"
     }
     ft_kwargs = {
         "step_st": [2],
@@ -110,7 +110,6 @@ def test_Strong_fitting():
             training_key=jrandom.PRNGKey(50),
             training_kwargs=training_kwargs,
             ft_kwargs=ft_kwargs,
-            loss_type="Strong"
         )
     except Exception as e:
         assert False, f"Fitting failed with the following exception {repr(e)}"
