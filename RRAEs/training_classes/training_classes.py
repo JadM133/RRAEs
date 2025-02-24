@@ -656,13 +656,19 @@ class RRAE_Trainor_class(Trainor_class):
             aux = {"loss": norm_loss_(pred, out)}
             return norm_loss_(pred, out), aux
 
-        if "loss_type" in kwargs:
-            raise ValueError(
-                "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
-            )
+        # if "loss_type" in kwargs:
+        #     raise ValueError(
+        #         "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
+        #     )
 
-        kwargs["loss_type"] = loss_fun
+        if "loss_type" in kwargs :
+            pass
+        else:
+            print("Defaulting to standard loss")
+            kwargs["loss_type"] = loss_fun
+
         kwargs["loss_kwargs"] = {"basis": self.basis}
+        
         fix_comp = lambda model: model.encode.model
         print("Fine tuning the basis ...")
         super().fit(*args, training_key=key, fix_comp=fix_comp, **kwargs)
