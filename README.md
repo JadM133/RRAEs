@@ -32,6 +32,19 @@ If all the tests pass, you're good to go!
 The library is not coded in MATLAB, so we highly recommend that you use the python codes. However, if you would like to simply get predictions using RRAEs in MATLAB, you can run [MATLAB_runner.m](MATLAB_runner.m) and follow the instructions there.
 
 
+----
+
+### Create sparse repo (Load only required libraries)
+
+````
+git clone -n --depth=1 --filter=tree:0 https://github.com/JadM133/RRAEs.git
+
+cd RRAEs
+
+git sparse-checkout set --no-cone /RRAEs
+
+git checkout main
+````
 
 
 
