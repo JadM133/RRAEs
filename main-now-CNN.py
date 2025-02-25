@@ -198,13 +198,13 @@ if __name__ == "__main__":
                 # **training_kwargs
             )
 
-            preds = trainor.evaluate(
-                x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
-            )
+            # preds = trainor.evaluate(
+            #     x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
+            # )
             # interp_preds = trainor.AE_interpolate(p_train, p_test, x_train, x_test)
-            _10_errors.append(preds["error_test_o"])
-        all_errors.append(np.mean(_10_errors))
-        all_stds.append(np.std(_10_errors))
+            # _10_errors.append(preds["error_test_o"])
+        # all_errors.append(np.mean(_10_errors))
+        # all_stds.append(np.std(_10_errors))
         trainor.save_model()
 
     # Copy the script to the logging folder
