@@ -1,3 +1,5 @@
+
+from __future__ import print_function
 from RRAEs.utilities import my_vmap
 import pdb
 import jax.random as jrandom
@@ -32,6 +34,9 @@ from RRAEs.trackers import (
 )
 
 
+# from prettytable import PrettyTable
+
+
 class Circular_list:
     """
         Creates a list of fixed size.
@@ -50,6 +55,71 @@ class Circular_list:
         for value in self.buffer:
             yield value
 
+
+# class printInfo(PrettyTable):
+#     def __init__(self, window_size, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.set_title = False
+#         self.window_size = window_size
+#         self.index_new = 0
+#         self.index_old = 0
+#         self.firstPrint = True
+        
+#     def add_title(self, titles:list ): # Make title once
+#         if (self.set_title is False):
+#            self.field_names = titles
+#            self.title = "Results"
+#            self.set_title = True
+#            for _ in range(self.window_size):
+#                self.add_row([" "]*len(titles))
+               
+#            print(self)
+#            print(f"\033[{self.window_size}A", end="")
+                      
+#     def add_data_as_circular(self, data:list):
+#         self._rows[self.index_new] = data
+  
+#         # print( "\n".join(self.get_string(start=self.index_new, 
+#         #                                  end=self.index_new+1,
+#         #                                  float_format="3.3").splitlines()[-2:]))
+        
+#         options = self._get_options({})
+   
+#         lines = []
+   
+#         # Get the rows we need to print, taking into account slicing, sorting, etc.
+#         formatted_rows = [self._format_row(row) for row in self._rows[self.index_new : self.index_new+1]]
+        
+#         # Compute column widths
+#         self._compute_widths(formatted_rows, options)
+#         self._hrule = self._stringify_hrule(options)
+   
+
+#         # Add rows
+#         if formatted_rows:
+#             lines.append(
+#                 self._stringify_row(
+#                     formatted_rows[-1],
+#                     options,
+#                     self._stringify_hrule(options, where="bottom_"),
+#                 )
+#             )
+   
+#         # Add bottom of border
+#         lines.append(self._stringify_hrule(options, where="bottom_"))
+   
+#         print("\n".join(lines))
+        
+
+        
+#         self.index_old = self.index_new
+#         self.index_new = (self.index_new + 1) % self.window_size 
+        
+#         # if we move to another printing cycle, push cursor back
+#         # Dirty trick but works on ubuntu...
+#         if (self.index_new - self.index_old) != 1:
+#             print(f"\033[{self.window_size*2}A", end="")
+#             # Factor of 2 is due to the lower line in the table
 
 
 class Trainor_class:
@@ -201,6 +271,19 @@ class Trainor_class:
         # Initialize tracker
         track_params = tracker.init()
         
+        # Info = printInfo(window_size = 5, 
+        #                  float_format="3.3",
+        #                  padding_width = 3)
+        
+        # add_title_flg = False
+        
+        def format_number(n):
+            if isinstance(n, int):
+                return "{:.0f}".format(n)  
+            else:
+                return "{:.3f}".format(n)  
+
+
         
         # Outler Loop
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
@@ -258,6 +341,17 @@ class Trainor_class:
 
                     if (step % print_every) == 0 or step == steps - 1:
                         t_t = 0.0               # Reset Batch execution time
+                        
+                        # if not(add_title_flg):
+                        #     add_title_flg = True
+                        #     titles = ["Epoch", *list(aux.keys()), "Time [s]", "Total Time [s]"]
+                        #     Info.add_title(titles)
+                            
+                        # values = [step, *list(aux.values()), dt, t_all]
+                        
+                        # res = list(map(format_number,values))
+                        
+                        # Info.add_data_as_circular(res)
                         
                         message = ", ".join([f"{k}: {v}" for k, v in aux.items()])
                         
@@ -607,8 +701,10 @@ class RRAE_Trainor_class(Trainor_class):
 
         training_kwargs = merge_dicts(kwargs, training_kwargs)
 
+        st = time.time()
         model, track_params = super().fit(*args, training_key=key0, **training_kwargs)  # train model
-
+        print(f"{time.time() - st}")
+    
         self.track_params = track_params    # Save track parameters in class?
 
         if "batch_size_st" in training_kwargs:
@@ -671,6 +767,7 @@ class RRAE_Trainor_class(Trainor_class):
         
         fix_comp = lambda model: model.encode.model
         print("Fine tuning the basis ...")
+        
         super().fit(*args, training_key=key, fix_comp=fix_comp, **kwargs)
 
     def evaluate(
