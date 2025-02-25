@@ -101,6 +101,8 @@ class Trainor_class:
         fix_comp=lambda _: (),
         tracker=Null_Tracker(),
         stagn_window=20,
+        sharding=None,
+        replicated=None,
         *,
         training_key,
     ):
@@ -133,12 +135,17 @@ class Trainor_class:
         else:
             loss_fun = loss_generator(loss_type, loss)
 
-        @eqx.filter_jit
-        def make_step(model, input, out, opt_state, idx, **loss_kwargs):
+        @eqx.filter_jit(donate="all")
+        def make_step(model, input, out, opt_state, idx, sharding, **loss_kwargs):
+            old_model = model
             diff_model, static_model = eqx.partition(model, filter_spec)
-            (loss, aux), grads = loss_fun(
-                diff_model, static_model, input, out, idx, **loss_kwargs
-            )
+            replicated = sharding.replicate()
+            diff_model, opt_state = eqx.filter_shard((diff_model, opt_state), replicated)
+            static_model = eqx.filter_shard(static_model, replicated)
+            
+            input, out = eqx.filter_shard((input, out), sharding)
+
+            (loss, aux), grads = loss_fun(diff_model, static_model, input, out, idx, **loss_kwargs)
             updates, opt_state = optim.update(grads, opt_state)
             diff_model = eqx.apply_updates(diff_model, updates)
             model = eqx.combine(diff_model, static_model)
@@ -168,7 +175,7 @@ class Trainor_class:
                 t_t = 0
                 optim = optax.adabelief(lr)
                 opt_state = optim.init(filtered_model)
-
+                model = eqx.filter_shard(model, replicated)
                 if (batch_size > input.shape[-1]) or batch_size == -1:
                     batch_size = input.shape[-1]
 
@@ -181,17 +188,19 @@ class Trainor_class:
                     ),
                 ):
                     start = time.perf_counter()
-                    out = self.model.norm_out(pre_func_out(out))
+                    out = self.model.norm_out(pre_func_out(out)).T
+                    input_b = input_b.T
                     input_b = pre_func_inp(input_b)
-
+                    input_b, out = eqx.filter_shard((input_b, out), sharding)
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
 
                     loss, model, opt_state, aux = make_step(
                         model,
-                        input_b.T,
-                        out.T,
+                        input_b,
+                        out,
                         opt_state,
                         idx,
+                        sharding,
                         **step_kwargs,
                     )
 

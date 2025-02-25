@@ -35,7 +35,7 @@ class BaseClass(eqx.Module):
         if self.map_axis is None:
             return self.model(x, *args, **kwargs)
         fn = lambda x: self.model(x, *args, **kwargs)
-        return jax.vmap(fn, in_axes=[self.map_axis], out_axes=self.map_axis)(x)
+        return jax.vmap(fn, in_axes=(self.map_axis,), out_axes=self.map_axis)(x)
 
     def eval_with_batches(
         self,

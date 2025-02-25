@@ -161,12 +161,12 @@ def loss_generator(which=None, norm_loss_=None):
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(
-            diff_model, static_model, input, out, idx, sparsity=0.05, **kwargs
+            diff_model, static_model, input, out, idx, sparsity=0.05, beta=1.0, **kwargs
         ):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, inv_norm_out=False)
             lat = model.latent(input)
-            wv = jnp.array([1.0, 100.0])
+            wv = jnp.array([1.0, beta])
             sparse_term = sparsity * jnp.log(sparsity / (jnp.mean(lat) + 1e-8)) + (
                 1 - sparsity
             ) * jnp.log((1 - sparsity) / (1 - jnp.mean(lat) + 1e-8))

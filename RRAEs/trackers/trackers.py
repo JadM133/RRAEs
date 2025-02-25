@@ -12,6 +12,16 @@ class Null_Tracker:
     def init(self):
         return {}
 
+class RRAE_Null_Tracker:
+    def __init__(self, k_max, *args, **kwargs):
+        self.k_max = k_max
+
+    def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
+        return {"k_max": self.k_max}
+
+    def init(self):
+        return {"k_max": self.k_max}
+
 
 class RRAE_gen_Tracker:
     def __init__(
@@ -58,7 +68,6 @@ class RRAE_gen_Tracker:
         save = False
         break_ = False
         self.prev_k_steps += 1
-        print(self.patience_c)
         if self.init_phase:
             if self.patience_init is not None:
                 if (

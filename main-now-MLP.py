@@ -16,7 +16,8 @@ import numpy as np
 import logging
 import sys
 import os
-from RRAEs.trackers import RRAE_gen_Tracker, RRAE_pars_Tracker
+from RRAEs.trackers import RRAE_gen_Tracker, RRAE_pars_Tracker, RRAE_Null_Tracker
+import jax.nn as jnn
 
 
 # Redirect print statements to logging
@@ -66,7 +67,7 @@ if __name__ == "__main__":
             )
 
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "Strong"
+            method = "Sparse"
 
             match method:
                 case "Strong":
@@ -89,14 +90,14 @@ if __name__ == "__main__":
                     model_cls = Vanilla_AE_MLP
 
             loss_type = (
-                "Strong"  # Specify the loss type, according to the model chosen.
+                "Sparse"  # Specify the loss type, according to the model chosen.
             )
 
             # Step 3: Specify the archietectures' parameters:
             latent_size = 200  # latent space dimension 200
-            k_max = 1  # number of features in the latent space (after the truncated SVD).
+            k_max = 7  # number of features in the latent space (after the truncated SVD).
             
-            adap_type = "pars"
+            adap_type = "None"
 
             log_dir = f"{problem}/{method}_{problem}_{adap_type}"
             
@@ -117,7 +118,7 @@ if __name__ == "__main__":
             # Step 4: Define your trainor, with the model, data, and parameters.
             # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
 
-            trainor = RRAE_Trainor_class(
+            trainor = Trainor_class(
                 x_train,
                 model_cls,
                 latent_size=latent_size,
@@ -130,6 +131,7 @@ if __name__ == "__main__":
                 kwargs_enc={
                     "width_size": 300,
                     "depth": 1,
+                    "final_activation": lambda x: jnn.sigmoid(x)
                 },
                 kwargs_dec={
                     "width_size": 300,
@@ -145,12 +147,13 @@ if __name__ == "__main__":
             # find the basis), and fine-tuning kw arguments (second stage of training with the
             # basis found in the first stage).
             training_kwargs = {
-                "step_st": [100000],  # 7680*data_size/64
+                "step_st": [60000],  # 7680*data_size/64
                 "batch_size_st": [64, 64, 64, 64, 64],
                 "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
-                "tracker": RRAE_pars_Tracker(k_max, eps_perc=1),
+                "loss_kwargs": {"sparsity":0.01}
+                # "tracker": RRAE_Null_Tracker(k_max),
             }
 
             ft_kwargs = {
@@ -165,11 +168,11 @@ if __name__ == "__main__":
                 x_train,
                 y_train,
                 training_key=jrandom.PRNGKey(50),
-                training_kwargs=training_kwargs,
-                ft_kwargs=ft_kwargs,
+                # training_kwargs=training_kwargs,
+                # ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,
                 pre_func_out=pre_func_out,
-                # **training_kwargs
+                **training_kwargs
             )
 
             preds = trainor.evaluate(

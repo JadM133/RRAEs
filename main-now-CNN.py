@@ -17,8 +17,12 @@ import logging
 import sys
 import os
 import jax.nn as jnn
-from RRAEs.trackers import RRAE_gen_Tracker, RRAE_pars_Tracker
-
+from RRAEs.trackers import RRAE_gen_Tracker, RRAE_pars_Tracker, RRAE_Null_Tracker
+import shutil
+import jax.sharding as jshard
+import jax.experimental.mesh_utils as mesh_utils
+import jax
+from jax.sharding import PartitionSpec as P
 
 # Redirect print statements to logging
 class PrintLogger:
@@ -34,13 +38,17 @@ class PrintLogger:
 
 
 if __name__ == "__main__":
+    num_devices = len(jax.devices())
+    devices = mesh_utils.create_device_mesh((1, 1, 1, num_devices))
+    sharding = jshard.PositionalSharding(devices)
+    replicated = sharding.replicate()
     # Step 1: Get the data - replace this with your own data of the same shape.
     all_errors = []
     all_stds = []
-    for data_size in [400]:
+    for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "2d_gaussian_shift_scale"
+            problem = "CelebA"
             (
                 x_train,
                 x_test,
@@ -51,7 +59,7 @@ if __name__ == "__main__":
                 pre_func_inp,
                 pre_func_out,
                 args,
-            ) = get_data(problem, google=data_size)
+            ) = get_data(problem, google=data_size, folder="../")
 
             print(
                 f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)"
@@ -85,14 +93,22 @@ if __name__ == "__main__":
             )
 
             # Step 3: Specify the archietectures' parameters:
-            latent_size = 200  # latent space dimension 200
+            latent_size = 512  # latent space dimension 200
             k_max = (
-                64  # number of features in the latent space (after the truncated SVD).
+                186  # number of features in the latent space (after the truncated SVD).
             )
 
-            adap_type = "gen"
+            adap_type = "None"
 
             log_dir = f"{problem}/{method}_{problem}_{adap_type}"
+            dir_path = log_dir
+            if os.path.exists(dir_path) and os.path.isdir(dir_path):
+                # Remove the directory and its contents
+                shutil.rmtree(dir_path)
+                print(f"The directory {dir_path} has been removed.")
+            else:
+                print(f"The directory {dir_path} does not exist.")
+            
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir)
             else:
@@ -118,8 +134,8 @@ if __name__ == "__main__":
                 k_max=k_max,
                 folder=f"{problem}/{method}_{problem}_{adap_type}/",
                 file=f"{method}_{problem}_{data_size}_{adap_type}.pkl",
-                norm_in="minmax",
-                norm_out="minmax",
+                norm_in="None",
+                norm_out="None",
                 out_train=x_train,
                 kwargs_enc={
                     "width_CNNs": [32, 64],
@@ -127,6 +143,7 @@ if __name__ == "__main__":
                     "kernel_conv": 3,
                     "stride": 2,
                     "padding": 1,
+                    # "final_activation": lambda x: jnn.sigmoid(x)
                 },
                 kwargs_dec={
                     "width_CNNs": [256, 128, 32, 8],
@@ -136,7 +153,7 @@ if __name__ == "__main__":
                     "padding": 1,
                     # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
                 },
-                key=jrandom.PRNGKey(50),
+                key=jrandom.PRNGKey(500),
                 adap_type=adap_type,
             )
 
@@ -145,26 +162,35 @@ if __name__ == "__main__":
             # find the basis), and fine-tuning kw arguments (second stage of training with the
             # basis found in the first stage).
             training_kwargs = {
-                "step_st": [40000],  # 7680*data_size/64
-                "batch_size_st": [64, 64],
+                "step_st": [500, 500],  # 7680*data_size/64
+                "batch_size_st": [144*4*8, 144*4*8],
                 "lr_st": [1e-3, 1e-4, 1e-7, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
-                "tracker": RRAE_gen_Tracker(k_max, perf_loss=1),
+                "sharding": sharding,
+                "replicated": replicated,
+                # "loss_kwargs": {
+                #    "sparsity": 0.001,
+                #    "beta": 100
+                    # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
+                #}
+                "tracker": RRAE_Null_Tracker(k_max) # , perf_loss=12),
             }
 
             ft_kwargs = {
-                "step_st": [500],
-                "batch_size_st": [64],
+                "step_st": [10],
+                "batch_size_st": [144*4*8],
                 "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
+                "sharding": sharding,
+                "replicated": replicated
             }
 
             # Step 6: Train the model and get the predictions.
             trainor.fit(
                 x_train,
                 y_train,
-                training_key=jrandom.PRNGKey(50),
+                training_key=jrandom.PRNGKey(500),
                 training_kwargs=training_kwargs,
                 ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,
