@@ -68,8 +68,8 @@ if __name__ == "__main__":
         k_max=k_max,
         folder=f"{problem}",
         file=f"{method}_{problem}_test.pkl",
-        norm_in="None",
-        norm_out="None",
+        norm_in="minmax",
+        norm_out="minmax",
         out_train=x_train,
         kwargs_enc={
             "width_CNNs": [32, 64, 128],
@@ -129,4 +129,4 @@ if __name__ == "__main__":
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
-    # pdb.set_trace()
+    pdb.set_trace()

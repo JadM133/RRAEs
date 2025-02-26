@@ -249,7 +249,8 @@ class Trainor_class:
                     
                     if step > stagn_window:
                         avg_loss = sum(prev_losses) / stagn_window
-                        
+                    
+                    print(track_params)
                     track_params = tracker(loss, avg_loss, track_params)
 
                     dt = time.perf_counter() - start_time  # Execution time
@@ -579,7 +580,7 @@ class RRAE_Trainor_class(Trainor_class):
                 warnings.warn(
                     "k_max can not be None when using fixed scheme, choose a fixed k_max to use."
                 )
-            default_tracker = RRAE_Null_Tracker(k_init=self.k_init)
+            default_tracker = RRAE_Null_Tracker(k_max=self.k_init)
 
         print("Training RRAEs...")
 

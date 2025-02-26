@@ -867,7 +867,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
             def sf_func(s, x):
                 return jnp.sin(x - s * jnp.pi)
 
-            p_vals = jnp.linspace(0, 1.8, 5)[:-1]  # 18
+            p_vals = jnp.linspace(0, 1.8, 18)[:-1]  # 18
             y_shift = jax.vmap(sf_func, in_axes=[0, None])(p_vals, ts).T
             p_test = jnp.linspace(0, jnp.max(p_vals), 500)[1:-1]
             y_test = jax.vmap(sf_func, in_axes=[0, None])(p_test, ts).T
