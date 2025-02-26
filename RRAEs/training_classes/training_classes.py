@@ -33,8 +33,10 @@ from RRAEs.trackers import (
     RRAE_gen_Tracker,
 )
 
+import jax
 
-# from prettytable import PrettyTable
+
+from prettytable import PrettyTable
 
 
 class Circular_list:
@@ -55,71 +57,112 @@ class Circular_list:
         for value in self.buffer:
             yield value
 
+class Standard_Print():
+    def __init__(self, aux, *args, **kwargs):
+        self.aux = aux
+    
+    def __str__(self):
+        message = ", ".join([f"{k}: {v}" for k, v in self.aux.items()])            
+        return message
+    
+class Pretty_Print(PrettyTable):
+    def __init__(self, aux, window_size=5, format_numbers=True, settings={}):
+        self.aux = aux
+        self.format_numbers = format_numbers
+        self.set_title = False
+        self.first_print = True
+        self.window_size = window_size
+        self.index_new = 0
+        self.index_old = 0
+        super().__init__(**settings)
+        
+    def format_number(self, n):
+        if isinstance(n, int):
+            return "{:.0f}".format(n)  
+        else:
+            return "{:.3f}".format(n)  
+        
+    def __str__(self):
+        data = list(self.aux.values())
+        if self.format_numbers == True:
+            data = list(map(self.format_number, data))
+            
+        if self.first_print == True:
+            titles = list(self.aux.keys())
+            self.field_names = titles
+            self.title = "Results"
+            self.set_title = True
+            for _ in range(self.window_size):
+                self.add_row([" "]*len(titles))
+                
+            self._rows[self.index_new] = data
+            print(super().__str__())
+            print(f"\033[{self.window_size+1}A", end="")
+            self.first_print = False
+            
+            
+        self._rows[self.index_new] = data
+        
+        # This function does a lot of unnecessary things... Removed the parts that I don't want
+        # print( "\n".join(self.get_string(start=self.index_new, 
+        #                                  end=self.index_new+1,
+        #                                  float_format="3.3").splitlines()[-2:]))
+        
+        options = self._get_options({})
+   
+        lines = []
+   
+        # Get the rows we need to print, taking into account slicing, sorting, etc.
+        formatted_rows = [self._format_row(row) for row in self._rows[self.index_new : self.index_new+1]]
+        
+        # Compute column widths
+        self._compute_widths(formatted_rows, options)
+        self._hrule = self._stringify_hrule(options)
+   
+        # Add rows
+        if formatted_rows:
+            lines.append(
+                self._stringify_row(
+                    formatted_rows[-1],
+                    options,
+                    self._stringify_hrule(options, where="bottom_"),
+                )
+            )
+   
+        # Add bottom of border
+        lines.append(self._stringify_hrule(options, where="bottom_"))
+   
+        print("\n".join(lines))
+        
 
-# class printInfo(PrettyTable):
-#     def __init__(self, window_size, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.set_title = False
-#         self.window_size = window_size
-#         self.index_new = 0
-#         self.index_old = 0
-#         self.firstPrint = True
+        # Update indices        
+        self.index_old = self.index_new
+        self.index_new = (self.index_new + 1) % self.window_size 
         
-#     def add_title(self, titles:list ): # Make title once
-#         if (self.set_title is False):
-#            self.field_names = titles
-#            self.title = "Results"
-#            self.set_title = True
-#            for _ in range(self.window_size):
-#                self.add_row([" "]*len(titles))
-               
-#            print(self)
-#            print(f"\033[{self.window_size}A", end="")
-                      
-#     def add_data_as_circular(self, data:list):
-#         self._rows[self.index_new] = data
-  
-#         # print( "\n".join(self.get_string(start=self.index_new, 
-#         #                                  end=self.index_new+1,
-#         #                                  float_format="3.3").splitlines()[-2:]))
-        
-#         options = self._get_options({})
-   
-#         lines = []
-   
-#         # Get the rows we need to print, taking into account slicing, sorting, etc.
-#         formatted_rows = [self._format_row(row) for row in self._rows[self.index_new : self.index_new+1]]
-        
-#         # Compute column widths
-#         self._compute_widths(formatted_rows, options)
-#         self._hrule = self._stringify_hrule(options)
-   
+        # if we move to another printing cycle, push cursor back
+        # Dirty trick but works on ubuntu...
+        if (self.index_new - self.index_old) != 1:
+            print(f"\033[{self.window_size*2}A", end="")
+            # Factor of 2 is due to the lower line in the table
+            
+        return '\033[1A'
 
-#         # Add rows
-#         if formatted_rows:
-#             lines.append(
-#                 self._stringify_row(
-#                     formatted_rows[-1],
-#                     options,
-#                     self._stringify_hrule(options, where="bottom_"),
-#                 )
-#             )
-   
-#         # Add bottom of border
-#         lines.append(self._stringify_hrule(options, where="bottom_"))
-   
-#         print("\n".join(lines))
+class Print_Info(PrettyTable):
+    def __init__(self, print_type="std", aux={}, *args, **kwargs):
+        check = (print_type.lower() == "std")
+        if check == True:
+            self.print_obj = Standard_Print(aux, *args, **kwargs)
+        else:
+            self.print_obj = Pretty_Print(aux, *args, **kwargs)
         
+    def update_aux(self, aux):
+        self.print_obj.aux = aux
+        
+    def __str__(self):
+        return self.print_obj.__str__()
 
-        
-#         self.index_old = self.index_new
-#         self.index_new = (self.index_new + 1) % self.window_size 
-        
-#         # if we move to another printing cycle, push cursor back
-#         # Dirty trick but works on ubuntu...
-#         if (self.index_new - self.index_old) != 1:
-#             print(f"\033[{self.window_size*2}A", end="")
-#             # Factor of 2 is due to the lower line in the table
+            
+                       
 
 
 class Trainor_class:
@@ -192,6 +235,11 @@ class Trainor_class:
         tracker=Null_Tracker(),
         stagn_window=20,
         optimizer=optax.adabelief,
+        verbatim = {
+                    "print_type": "std",
+                    "window_size" : 5,  
+                    "Printer settings":{"padding_width": 3}
+                    },
         *,
         training_key,
     ):
@@ -270,20 +318,9 @@ class Trainor_class:
         
         # Initialize tracker
         track_params = tracker.init()
-        
-        # Info = printInfo(window_size = 5, 
-        #                  float_format="3.3",
-        #                  padding_width = 3)
-        
-        # add_title_flg = False
-        
-        def format_number(n):
-            if isinstance(n, int):
-                return "{:.0f}".format(n)  
-            else:
-                return "{:.3f}".format(n)  
-
-
+            
+        # Initializer printer object
+        print_info = Print_Info(**verbatim)
         
         # Outler Loop
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
@@ -308,7 +345,7 @@ class Trainor_class:
                                 ],
                                 batch_size,
                                 key_idx=training_num,
-                                ),
+                              ),
                    ):
                     start_time = time.perf_counter()             # Start time
                     
@@ -326,8 +363,8 @@ class Trainor_class:
                                                                 idx_b,
                                                                 **step_kwargs,
                                                             )
-
-                    # Add loss to list (maybe store info for plotting?)
+                    
+                    
                     prev_losses.add(loss.item())
                     
                     if step > stagn_window:
@@ -341,28 +378,10 @@ class Trainor_class:
 
                     if (step % print_every) == 0 or step == steps - 1:
                         t_t = 0.0               # Reset Batch execution time
+
+                        print_info.update_aux({"Epoch": step, **aux, "Time [s]": dt, "Total time [s]": t_all})
                         
-                        # if not(add_title_flg):
-                        #     add_title_flg = True
-                        #     titles = ["Epoch", *list(aux.keys()), "Time [s]", "Total Time [s]"]
-                        #     Info.add_title(titles)
-                            
-                        # values = [step, *list(aux.values()), dt, t_all]
-                        
-                        # res = list(map(format_number,values))
-                        
-                        # Info.add_data_as_circular(res)
-                        
-                        message = ", ".join([f"{k}: {v}" for k, v in aux.items()])
-                        
-                        print(
-                                f"Step: {step}, "
-                                + message
-                                + ", "
-                                + f"Step time: {round(dt, 4)}, "
-                                + f"Total elapsed time: {round(t_all, 4)}"
-                             ) 
-                        
+                        print(print_info)
                         
                     if ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
@@ -701,9 +720,7 @@ class RRAE_Trainor_class(Trainor_class):
 
         training_kwargs = merge_dicts(kwargs, training_kwargs)
 
-        st = time.time()
         model, track_params = super().fit(*args, training_key=key0, **training_kwargs)  # train model
-        print(f"{time.time() - st}")
     
         self.track_params = track_params    # Save track parameters in class?
 
