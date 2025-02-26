@@ -26,7 +26,7 @@ import copy
 from functools import partial
 from RRAEs.trackers import (
     Null_Tracker,
-    RRAE_fixed_Tracker,
+    RRAE_Null_Tracker,
     RRAE_pars_Tracker,
     RRAE_gen_Tracker,
 )
@@ -579,7 +579,7 @@ class RRAE_Trainor_class(Trainor_class):
                 warnings.warn(
                     "k_max can not be None when using fixed scheme, choose a fixed k_max to use."
                 )
-            default_tracker = RRAE_fixed_Tracker(k_init=self.k_init)
+            default_tracker = RRAE_Null_Tracker(k_init=self.k_init)
 
         print("Training RRAEs...")
 
