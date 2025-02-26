@@ -129,4 +129,4 @@ if __name__ == "__main__":
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
-    pdb.set_trace()
+    # pdb.set_trace()
