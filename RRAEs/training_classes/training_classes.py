@@ -780,7 +780,7 @@ class RRAE_Trainor_class(Trainor_class):
             print("Defaulting to standard loss")
             kwargs["loss_type"] = loss_fun
 
-        kwargs["loss_kwargs"] = {"basis": self.basis}
+        kwargs.setdefault("loss_kwargs", {}).update({"basis": self.basis})
         
         fix_comp = lambda model: model.encode.model
         print("Fine tuning the basis ...")
