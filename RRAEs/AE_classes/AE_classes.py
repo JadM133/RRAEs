@@ -275,11 +275,12 @@ def latent_func_strong_RRAE(
 
 def latent_func_var_strong_RRAE(
     y,
-    k_max,
+    k_max=None,
     apply_basis=None,
     get_basis_coeffs=False,
     get_coeffs=False,
     ret=False,
+    novar=False,
     *args,
     **kwargs,
 ):
@@ -298,15 +299,16 @@ def latent_func_var_strong_RRAE(
     y_approx : jnp.array
         The latent space after the truncation.
     """
-    pdb.set_trace()
+    batch_size = y.shape[-1]
     I = jnp.eye(batch_size)
-    G = jrandom.uniform(
-        jrandom.key(inc),
-        (batch_size, batch_size),
-        minval=-0.1,
-        maxval=0.1,
-    )
-    G = G.at[idx_batch, idx_batch].set(0)
+    
+    if not novar:
+        G = np.random.normal(0, 0.05, (batch_size, batch_size))
+        G = I + G
+    else:
+        G = I
+
+    y = y @ G
 
     if apply_basis is not None:
         if get_basis_coeffs:
@@ -383,8 +385,7 @@ class Strong_RRAE_MLP(Autoencoder):
             **kwargs,
         )
 
-
-class Var_Strong_RRAE_MLP(Autoencoder):
+class VAR_Strong_RRAE_MLP(Autoencoder):
     """Subclass of RRAEs with the strong formulation when the input
     is of dimension (data_size, batch_size).
 
@@ -412,17 +413,15 @@ class Var_Strong_RRAE_MLP(Autoencoder):
         kwargs_dec={},
         **kwargs,
     ):
-        raise NotImplementedError
         if "linear_l" in kwargs.keys():
             warnings.warn("linear_l can not be specified for Strong")
             kwargs.pop("linear_l")
 
-        latent_func = latent_func_strong_RRAE
+        latent_func = latent_func_var_strong_RRAE
 
         super().__init__(
             in_size,
             latent_size,
-            k_max,
             _perform_in_latent=latent_func,
             map_latent=False,
             post_proc_func=post_proc_func,
@@ -431,7 +430,6 @@ class Var_Strong_RRAE_MLP(Autoencoder):
             kwargs_dec=kwargs_dec,
             **kwargs,
         )
-
 
 class Vanilla_AE_MLP(Autoencoder):
     """Vanilla Autoencoder.
@@ -766,6 +764,27 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
             width,
             latent_size,
             _perform_in_latent=latent_func,
+            key=key,
+            **kwargs,
+        )
+
+
+class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
+    """Subclass of RRAEs with the strong formulation for inputs of
+    dimension (channels, width, height).
+    """
+
+    def __init__(self, channels, height, width, latent_size, k_max, *, key, basis=None, **kwargs):
+
+        latent_func = latent_func_var_strong_RRAE
+
+        super().__init__(
+            channels,
+            height,
+            width,
+            latent_size,
+            _perform_in_latent=latent_func,
+            basis=basis,
             key=key,
             **kwargs,
         )
