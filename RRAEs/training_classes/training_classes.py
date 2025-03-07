@@ -34,22 +34,22 @@ from RRAEs.trackers import (
 
 class Circular_list:
     """
-        Creates a list of fixed size.
-        Adds elements in a circular manner
+    Creates a list of fixed size.
+    Adds elements in a circular manner
     """
+
     def __init__(self, size):
         self.size = size
-        self.buffer = [0.0] * size  
-        self.index = 0  
+        self.buffer = [0.0] * size
+        self.index = 0
 
     def add(self, value):
-        self.buffer[self.index] = value  
-        self.index = (self.index + 1) % self.size  
-        
+        self.buffer[self.index] = value
+        self.index = (self.index + 1) % self.size
+
     def __iter__(self):
         for value in self.buffer:
             yield value
-
 
 
 class Trainor_class:
@@ -144,9 +144,9 @@ class Trainor_class:
             "training_key": training_key,
         }
 
-        self.all_kwargs = merge_dicts(self.all_kwargs, training_params) # Append dicts
-        
-        model = self.model    # Create alias for model
+        self.all_kwargs = merge_dicts(self.all_kwargs, training_params)  # Append dicts
+
+        model = self.model  # Create alias for model
 
         fn = lambda x: x if fn is None else fn
 
@@ -159,25 +159,22 @@ class Trainor_class:
         # Make step funciton
         @eqx.filter_jit
         def make_step(model, input, out, opt_state, idx, **loss_kwargs):
-            diff_model, static_model = eqx.partition(model, filter_spec) # Split model into differential and static portions
-            
+            diff_model, static_model = eqx.partition(
+                model, filter_spec
+            )  # Split model into differential and static portions
+
             # Compute (loss, auxiliar vars) and gradient
             (loss, aux), grads = loss_fun(
-                                              diff_model, 
-                                              static_model, 
-                                              input, 
-                                              out, 
-                                              idx, 
-                                              **loss_kwargs
-                                          )
-            
+                diff_model, static_model, input, out, idx, **loss_kwargs
+            )
+
             # Perform back-propagation
             updates, opt_state = optim.update(grads, opt_state)
             diff_model = eqx.apply_updates(diff_model, updates)
-            
+
             # Recombine differential and static portions
             model = eqx.combine(diff_model, static_model)
-            
+
             return loss, model, opt_state, aux
 
         # Create filter for splitting the model into differential and static portions
@@ -190,101 +187,95 @@ class Trainor_class:
         filtered_model = eqx.filter(diff_model, eqx.is_inexact_array)
 
         # Loop variables
-        t_all = 0.0   # Total time
+        t_all = 0.0  # Total time
         avg_loss = jnp.inf
-        training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]       
-        
+        training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
+
         # Window to store averages
         store_window = min(stagn_window, sum(step_st))
-        prev_losses = Circular_list(store_window)       
-        
+        prev_losses = Circular_list(store_window)
+
         # Initialize tracker
         track_params = tracker.init()
-        
-        
+
         # Outler Loop
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
             try:
-                t_t = 0.0                                       # Zero time
-                optim = optimizer(lr)                           # Create optimizer
-                opt_state = optim.init(filtered_model)          # Initialize optimizer
+                t_t = 0.0  # Zero time
+                optim = optimizer(lr)  # Create optimizer
+                opt_state = optim.init(filtered_model)  # Initialize optimizer
 
                 if (batch_size > input.shape[-1]) or batch_size == -1:
                     print(f"Setting batch size to: {input.shape[-1]}")
                     batch_size = input.shape[-1]
 
                 # Inner loop (batch)
-                for step, (input_b, out_b, idx_b) in \
-                zip(
+                for step, (input_b, out_b, idx_b) in zip(
                     range(steps),
                     dataloader(
-                                [
-                                    input.T, 
-                                    output.T, 
-                                    jnp.arange(0, input.shape[-1], 1)
-                                ],
-                                batch_size,
-                                key_idx=training_num,
-                                ),
-                   ):
-                    start_time = time.perf_counter()             # Start time
-                    
-                    out_b = self.model.norm_out(pre_func_out(out_b))    # Pre-process batch out values
-                    input_b = pre_func_inp(input_b)              # Pre-process batch input values 
+                        [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
+                        batch_size,
+                        key_idx=training_num,
+                    ),
+                ):
+                    start_time = time.perf_counter()  # Start time
+
+                    out_b = self.model.norm_out(
+                        pre_func_out(out_b)
+                    )  # Pre-process batch out values
+                    input_b = pre_func_inp(input_b)  # Pre-process batch input values
 
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
 
                     # Compute loss
                     loss, model, opt_state, aux = make_step(
-                                                                model,
-                                                                input_b.T,
-                                                                out_b.T,
-                                                                opt_state,
-                                                                idx_b,
-                                                                **step_kwargs,
-                                                            )
+                        model,
+                        input_b.T,
+                        out_b.T,
+                        opt_state,
+                        idx_b,
+                        **step_kwargs,
+                    )
 
                     # Add loss to list (maybe store info for plotting?)
                     prev_losses.add(loss.item())
-                    
+
                     if step > stagn_window:
                         avg_loss = sum(prev_losses) / stagn_window
-                    
-                    print(track_params)
+
                     track_params = tracker(loss, avg_loss, track_params)
 
                     dt = time.perf_counter() - start_time  # Execution time
-                    t_t += dt                   # Batch execution time
-                    t_all += dt                 # Total execution time  
+                    t_t += dt  # Batch execution time
+                    t_all += dt  # Total execution time
 
                     if (step % print_every) == 0 or step == steps - 1:
-                        t_t = 0.0               # Reset Batch execution time
-                        
+                        t_t = 0.0  # Reset Batch execution time
+
                         message = ", ".join([f"{k}: {v}" for k, v in aux.items()])
-                        
+
                         print(
-                                f"Step: {step}, "
-                                + message
-                                + ", "
-                                + f"Step time: {round(dt, 4)}, "
-                                + f"Total elapsed time: {round(t_all, 4)}"
-                             ) 
-                        
-                        
+                            f"Step: {step}, "
+                            + message
+                            + ", "
+                            + f"Step time: {round(dt, 4)}, "
+                            + f"Total elapsed time: {round(t_all, 4)}"
+                        )
+
                     if ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
                             raise ValueError("Loss is nan, stopping training...")
-                            
+
                         self.model = model
-                        
+
                         orig = (
-                                    f"checkpoint_{step}"
-                                    if not jnp.isnan(loss)
-                                    else "checkpoint_bf_nan"
-                               )
-                        
+                            f"checkpoint_{step}"
+                            if not jnp.isnan(loss)
+                            else "checkpoint_bf_nan"
+                        )
+
                         checkpoint_filename = f"{orig}_0.pkl"
-                        
+
                         if os.path.exists(checkpoint_filename):
                             i = 1
                             new_filename = f"{orig}_{i}.pkl"
@@ -297,7 +288,7 @@ class Trainor_class:
                 pass
 
         model = eqx.nn.inference_mode(model)
-        
+
         self.model = model
         self.batch_size = batch_size
         self.t_all = t_all
@@ -608,9 +599,11 @@ class RRAE_Trainor_class(Trainor_class):
 
         training_kwargs = merge_dicts(kwargs, training_kwargs)
 
-        model, track_params = super().fit(*args, training_key=key0, **training_kwargs)  # train model
+        model, track_params = super().fit(
+            *args, training_key=key0, **training_kwargs
+        )  # train model
 
-        self.track_params = track_params    # Save track parameters in class?
+        self.track_params = track_params  # Save track parameters in class?
 
         if "batch_size_st" in training_kwargs:
             self.batch_size = training_kwargs["batch_size_st"][-1]
@@ -619,17 +612,19 @@ class RRAE_Trainor_class(Trainor_class):
 
         ft_kwargs = merge_dicts(kwargs, ft_kwargs)
 
-        self.fine_tune_basis(None, args=args, kwargs=ft_kwargs, key=key1)       # fine tune basis
+        self.fine_tune_basis(
+            None, args=args, kwargs=ft_kwargs, key=key1
+        )  # fine tune basis
 
-
-    def fine_tune_basis(self, basis = None, *, args, kwargs, key):
+    def fine_tune_basis(self, basis=None, *, args, kwargs, key):
 
         if "loss" in kwargs:
             norm_loss_ = kwargs["loss"]
         else:
-            print("Defaulting to L2 norm")    
-            norm_loss_ = lambda x1, x2: 100*(jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2))
-
+            print("Defaulting to L2 norm")
+            norm_loss_ = lambda x1, x2: 100 * (
+                jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2)
+            )
 
         if basis is None:
             inp = args[0] if len(args) > 0 else kwargs["input"]
@@ -648,12 +643,13 @@ class RRAE_Trainor_class(Trainor_class):
             self.basis = basis[:, : self.track_params["k_max"]]
         else:
             self.basis = basis
-        
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, basis):
             model = eqx.combine(diff_model, static_model)
-            pred = model(input, apply_basis=basis, inv_norm_out=False)  # Note: here was self.basis, thus basis arg was not being used
+            pred = model(
+                input, apply_basis=basis, inv_norm_out=False
+            )  # Note: here was self.basis, thus basis arg was not being used
             aux = {"loss": norm_loss_(pred, out)}
             return norm_loss_(pred, out), aux
 
