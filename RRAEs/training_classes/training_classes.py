@@ -66,7 +66,7 @@ class Standard_Print():
         return message
     
 class Pretty_Print(PrettyTable):
-    def __init__(self, aux, window_size=5, format_numbers=True, settings={}):
+    def __init__(self, aux, window_size=5, format_numbers=True, printer_settings={}):
         self.aux = aux
         self.format_numbers = format_numbers
         self.set_title = False
@@ -74,7 +74,7 @@ class Pretty_Print(PrettyTable):
         self.window_size = window_size
         self.index_new = 0
         self.index_old = 0
-        super().__init__(**settings)
+        super().__init__(**printer_settings)
         
     def format_number(self, n):
         if isinstance(n, int):
@@ -238,7 +238,7 @@ class Trainor_class:
         verbatim = {
                     "print_type": "std",
                     "window_size" : 5,  
-                    "Printer settings":{"padding_width": 3}
+                    "printer_settings":{"padding_width": 3}
                     },
         *,
         training_key,
