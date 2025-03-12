@@ -303,7 +303,7 @@ def latent_func_var_strong_RRAE(
     I = jnp.eye(batch_size)
     
     if not novar:
-        G = np.random.normal(0, 0.05, (batch_size, batch_size))
+        G = np.random.normal(0, 0.01, (batch_size, batch_size))
         G = I + G
     else:
         G = I
