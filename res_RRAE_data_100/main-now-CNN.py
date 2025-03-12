@@ -68,7 +68,7 @@ if __name__ == "__main__":
             )
 
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "VAR_Strong"
+            method = "Strong"
 
             match method:
                 case "VAR_Strong":

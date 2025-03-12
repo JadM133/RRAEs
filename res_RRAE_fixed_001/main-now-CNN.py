@@ -47,10 +47,10 @@ if __name__ == "__main__":
     print("test", flush=True)
     all_errors = []
     all_stds = []
-    for data_size in [100]:
+    for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "2d_gaussian_shift_scale"
+            problem = "mnist"
             (
                 x_train,
                 x_test,
@@ -99,7 +99,7 @@ if __name__ == "__main__":
             # Step 3: Specify the archietectures' parameters:
             latent_size = 100  # latent space dimension 200
             k_max = (
-                2  # number of features in the latent space (after the truncated SVD).
+                16  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -155,8 +155,8 @@ if __name__ == "__main__":
             # basis found in the first stage).
             training_kwargs = {
                 "flush": True,
-                "step_st": [2000],  # 7680*data_size/64
-                "batch_size_st": [64, 48],
+                "step_st": [20000],  # 7680*data_size/64
+                "batch_size_st": [48, 48],
                 "lr_st": [1e-3, 1e-4, 1e-5, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
@@ -173,8 +173,8 @@ if __name__ == "__main__":
 
             ft_kwargs = {
                 "flush": True,
-                "step_st": [200],
-                "batch_size_st": [64],
+                "step_st": [500],
+                "batch_size_st": [48],
                 "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
                 "sharding": sharding,
@@ -193,9 +193,9 @@ if __name__ == "__main__":
                 # **training_kwargs
             )
 
-            preds = trainor.evaluate(
-                x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
-            )
+            # preds = trainor.evaluate(
+            #     x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
+            # )
             # interp_preds = trainor.AE_interpolate(p_train, p_test, x_train, x_test)
             # _10_errors.append(preds["error_test_o"])
         # all_errors.append(np.mean(_10_errors))

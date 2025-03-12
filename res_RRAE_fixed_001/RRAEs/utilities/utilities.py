@@ -477,7 +477,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
         case "2d_gaussian_shift_scale":
             D = 64  # Dimension of the domain
             Ntr = google  # Number of training samples
-            Nte = 10000  # Number of test samples
+            Nte = google  # Number of test samples
             sigma = 0.2
 
             def gaussian_2d(x, y, x0, y0, sigma):
@@ -500,9 +500,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
             train_data = jnp.stack(train_data, axis=-1)
 
             # Create test data
-            key = jrandom.PRNGKey(0)
-            x0_vals_test = jrandom.uniform(key, (Nte,), minval=-0.5, maxval=0.5)
-            y0_vals_test = jrandom.uniform(key, (Nte,), minval=-0.5, maxval=0.5)
+            x0_vals_test = jnp.linspace(-0.5, 0.5, Nte)
+            y0_vals_test = x0_vals_test  # Moving along the diagonal
             x0_mesh_test = x0_vals_test
             y0_mesh_test = y0_vals_test
 

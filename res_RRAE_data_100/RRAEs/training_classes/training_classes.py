@@ -649,7 +649,7 @@ class RRAE_Trainor_class(Trainor_class):
         call_func=None,
     ):
 
-        call_func = lambda x: self.model(pre_func_inp(x), apply_basis=self.basis, novar=True)
+        call_func = lambda x: self.model(pre_func_inp(x), apply_basis=self.basis)
         res = super().evaluate(
             x_train_o,
             y_train_o,
