@@ -247,9 +247,12 @@ def latent_func_strong_RRAE(
         if get_coeffs:
             return apply_basis.T @ y
         return apply_basis @ apply_basis.T @ y
-
+        
+    k_max = -1 if k_max is None else k_max
+    
     if get_basis_coeffs or get_coeffs:
         u, s, v = stable_SVD(y)
+        
         if isinstance(k_max, int):
             k_max = [k_max]
 
