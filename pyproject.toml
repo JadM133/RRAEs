@@ -5,4 +5,4 @@ build-backend = "hatchling.build"
 [project]
 name = "RRAEs"
 version = "0.1"
-dependencies = ["tqdm", "pytest", "dill", "jax", "jaxlib", "matplotlib", "numpy", "equinox", "optax", "pandas", "jaxtyping"]
+dependencies = ["tqdm", "pytest", "dill", "jax", "jaxlib", "matplotlib", "numpy", "equinox", "optax", "pandas", "jaxtyping", "prettytable"]
