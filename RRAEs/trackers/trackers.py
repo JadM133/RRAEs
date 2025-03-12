@@ -31,6 +31,7 @@ class RRAE_gen_Tracker:
         patience_not_right=500,
         max_steps=1000,
         perf_loss=0,
+        init_steps=jnp.inf,
         eps_0=1,
         eps_perc=5,
         save_steps=20
@@ -62,12 +63,15 @@ class RRAE_gen_Tracker:
         self.max_patience = jnp.inf
         self.save_steps = save_steps
         self.stop_train = False
+        self.init_steps = init_steps
+        self.count_init_steps = 0
 
     def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
         save = False
         break_ = False
         self.prev_k_steps += 1
         if self.init_phase:
+            self.count_init_steps += 1
             if self.patience_init is not None:
                 if (
                     jnp.abs(current_loss - prev_avg_loss) / jnp.abs(prev_avg_loss) * 100
@@ -81,8 +85,11 @@ class RRAE_gen_Tracker:
                         print(f"Ideal loss is {self.ideal_loss}")
                         print("Stagnated")
 
-            if current_loss < self.perf_loss:
-                self.ideal_loss = self.perf_loss
+            if (current_loss < self.perf_loss) or (self.count_init_steps == self.init_steps):
+                if self.perf_loss != 0:
+                    self.ideal_loss = self.perf_loss
+                else:
+                    self.ideal_loss = current_loss
                 self.init_phase = False
                 self.patience_c = 0
                 print(f"Ideal loss is {self.ideal_loss}")
@@ -118,7 +125,6 @@ class RRAE_gen_Tracker:
                         save = True
                         self.converged = True
                         break_ = True
-                        print("adding one and shit")
 
         else:
             if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_perc:

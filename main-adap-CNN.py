@@ -12,6 +12,7 @@ from RRAEs.AE_classes import (
     VAR_AE_CNN,
 )
 from RRAEs.training_classes import RRAE_Trainor_class
+from RRAEs.trackers import RRAE_gen_Tracker, RRAE_Null_Tracker, RRAE_pars_Tracker
 import jax.random as jrandom
 from RRAEs.utilities import get_data
 
@@ -46,22 +47,7 @@ if __name__ == "__main__":
     # Step 3: Specify the initial truncation value. This is what will be your
     # initial latent space size, before being modified by a tracker.
     # Refer below for tips on how to choose this.
-    k_max = 10  # In this case
-
-    # Step 4: Specify your adaptive scheme, choose one of "None", "pars", and "gen".
-    # These mean the following:
-
-    # 1- "None": Fixed scheme, i.e. the k_max you specify above will remain fixed. Use
-    # this wen you're sure of the dimensionality of the latent space that you want to use.
-
-    # 2- "pars": Parsimonious scheme, starts with the k_max specified above, and tries
-    # to decrease the loss as much as possible before incrementing k_max until convergence.
-    # In this case, use a small value of k_max, 1 is usually a suitable choice.
-
-    # 3- "gen": Generic scheme, starts with k_max specified above, and removes modes with
-    # time to converge to the optimal value of k_max. In this case, use a big value of k_max,
-    # usually, k_max=batch_size is a suitbale choice.
-    adap_type = "gen"
+    k_max = 64  # In this case
 
     trainor = RRAE_Trainor_class(
         x_train,
@@ -92,16 +78,21 @@ if __name__ == "__main__":
             # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
         },
         key=jrandom.PRNGKey(50),
-        adap_type=adap_type,
     )
 
     training_kwargs = {
-        "step_st": [2, 2],  # 7680*data_size/64
-        "batch_size_st": [64, 64],
+        "step_st": [2,],  # increase for a very big value
+        "batch_size_st": [64,],
         "lr_st": [1e-3, 1e-4, 1e-7, 1e-8],
         "print_every": 1,
         "loss_type": loss_type,
+        "tracker": RRAE_gen_Tracker(k_init=k_max, init_steps=50)
     }
+
+    # The tracker above will specify the adaptive scheme to be used. Gen means generic and it
+    # is the algorithm that starts with the mlargest possible number of modes and starts decreasing
+    # until stagnation. For this tracker, consider increasing a lot "step_st" since the algorithm
+    # will break training by itself on stagnation.
 
     ft_kwargs = {
         "step_st": [2],
