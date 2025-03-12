@@ -1654,6 +1654,7 @@ class MLP_with_linear(Module, strict=True):
         use_final_bias=True,
         final_activation=_identity,
         linear_l=0,
+        custom_init_fn = None,
         *,
         key,
         **kwargs,
@@ -1682,7 +1683,11 @@ class MLP_with_linear(Module, strict=True):
                     Linear(out_size, out_size, use_bias=False, key=keys[-2])
                 )
 
-        self.layers = tuple(layers)
+        if custom_init_fn is not None:
+            self.layers = custom_init_fn(layers)
+        else:
+            self.layers = tuple(layers)
+
         self.layers_l = tuple(layers_l)
         self.in_size = in_size
         self.out_size = out_size
@@ -1698,6 +1703,7 @@ class MLP_with_linear(Module, strict=True):
             ]
         else:
             self.activation = None
+        
         self.final_activation = final_activation
         self.linear_l = linear_l
         self.use_bias = use_bias

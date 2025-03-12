@@ -250,8 +250,16 @@ def latent_func_strong_RRAE(
 
     if get_basis_coeffs or get_coeffs:
         u, s, v = stable_SVD(y)
-        u_now = u[:, :k_max]
-        coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+        if isinstance(k_max, int):
+            k_max = [k_max]
+
+        u_now = [u[:, :k] for k in k_max]
+        coeffs = [jnp.multiply(v[:k, :], jnp.expand_dims(s[:k], -1)) for k in k_max]
+        
+        if len(k_max) == 1:
+            u_now = u_now[0]
+            coeffs = coeffs[0]
+
         if get_coeffs:
             return coeffs
         return u_now, coeffs
@@ -261,8 +269,15 @@ def latent_func_strong_RRAE(
 
         if k_max is None:
             raise ValueError("k_max was not given when truncation is required.")
+            
+        if isinstance(k_max, int):
+            k_max = [k_max]
         
-        y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
+        y_approx = [(u[..., :k] * s[:k]) @ v[:k] for k in k_max]
+        
+        if len(k_max) == 1:
+            y_approx = y_approx[0]
+
     else:
         y_approx = y
         u_now = None

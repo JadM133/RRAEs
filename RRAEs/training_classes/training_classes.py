@@ -1,3 +1,5 @@
+
+from __future__ import print_function
 from RRAEs.utilities import my_vmap
 import pdb
 import jax.random as jrandom
@@ -31,6 +33,11 @@ from RRAEs.trackers import (
     RRAE_gen_Tracker,
 )
 
+import jax
+
+
+from prettytable import PrettyTable
+
 
 class Circular_list:
     """
@@ -51,6 +58,112 @@ class Circular_list:
         for value in self.buffer:
             yield value
 
+class Standard_Print():
+    def __init__(self, aux, *args, **kwargs):
+        self.aux = aux
+    
+    def __str__(self):
+        message = ", ".join([f"{k}: {v}" for k, v in self.aux.items()])            
+        return message
+    
+class Pretty_Print(PrettyTable):
+    def __init__(self, aux, window_size=5, format_numbers=True, printer_settings={}):
+        self.aux = aux
+        self.format_numbers = format_numbers
+        self.set_title = False
+        self.first_print = True
+        self.window_size = window_size
+        self.index_new = 0
+        self.index_old = 0
+        super().__init__(**printer_settings)
+        
+    def format_number(self, n):
+        if isinstance(n, int):
+            return "{:.0f}".format(n)  
+        else:
+            return "{:.3f}".format(n)  
+        
+    def __str__(self):
+        data = list(self.aux.values())
+        if self.format_numbers == True:
+            data = list(map(self.format_number, data))
+            
+        if self.first_print == True:
+            titles = list(self.aux.keys())
+            self.field_names = titles
+            self.title = "Results"
+            self.set_title = True
+            for _ in range(self.window_size):
+                self.add_row([" "]*len(titles))
+                
+            self._rows[self.index_new] = data
+            print(super().__str__())
+            print(f"\033[{self.window_size+1}A", end="")
+            self.first_print = False
+            
+            
+        self._rows[self.index_new] = data
+        
+        # This function does a lot of unnecessary things... Removed the parts that I don't want
+        # print( "\n".join(self.get_string(start=self.index_new, 
+        #                                  end=self.index_new+1,
+        #                                  float_format="3.3").splitlines()[-2:]))
+        
+        options = self._get_options({})
+   
+        lines = []
+   
+        # Get the rows we need to print, taking into account slicing, sorting, etc.
+        formatted_rows = [self._format_row(row) for row in self._rows[self.index_new : self.index_new+1]]
+        
+        # Compute column widths
+        self._compute_widths(formatted_rows, options)
+        self._hrule = self._stringify_hrule(options)
+   
+        # Add rows
+        if formatted_rows:
+            lines.append(
+                self._stringify_row(
+                    formatted_rows[-1],
+                    options,
+                    self._stringify_hrule(options, where="bottom_"),
+                )
+            )
+   
+        # Add bottom of border
+        lines.append(self._stringify_hrule(options, where="bottom_"))
+   
+        print("\n".join(lines))
+        
+
+        # Update indices        
+        self.index_old = self.index_new
+        self.index_new = (self.index_new + 1) % self.window_size 
+        
+        # if we move to another printing cycle, push cursor back
+        # Dirty trick but works on ubuntu...
+        if (self.index_new - self.index_old) != 1:
+            print(f"\033[{self.window_size*2}A", end="")
+            # Factor of 2 is due to the lower line in the table
+            
+        return '\033[1A'
+
+class Print_Info(PrettyTable):
+    def __init__(self, print_type="std", aux={}, *args, **kwargs):
+        check = (print_type.lower() == "std")
+        if check == True:
+            self.print_obj = Standard_Print(aux, *args, **kwargs)
+        else:
+            self.print_obj = Pretty_Print(aux, *args, **kwargs)
+        
+    def update_aux(self, aux):
+        self.print_obj.aux = aux
+        
+    def __str__(self):
+        return self.print_obj.__str__()
+
+            
+                       
 
 class Trainor_class:
     def __init__(
@@ -122,6 +235,11 @@ class Trainor_class:
         tracker=Null_Tracker(),
         stagn_window=20,
         optimizer=optax.adabelief,
+        verbatim = {
+                    "print_type": "std",
+                    "window_size" : 5,  
+                    "printer_settings":{"padding_width": 3}
+                    },
         *,
         training_key,
     ):
@@ -197,6 +315,9 @@ class Trainor_class:
 
         # Initialize tracker
         track_params = tracker.init()
+            
+        # Initializer printer object
+        print_info = Print_Info(**verbatim)
 
         # Outler Loop
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
@@ -213,31 +334,33 @@ class Trainor_class:
                 for step, (input_b, out_b, idx_b) in zip(
                     range(steps),
                     dataloader(
-                        [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
-                        batch_size,
-                        key_idx=training_num,
-                    ),
-                ):
-                    start_time = time.perf_counter()  # Start time
-
-                    out_b = self.model.norm_out(
-                        pre_func_out(out_b)
-                    )  # Pre-process batch out values
-                    input_b = pre_func_inp(input_b)  # Pre-process batch input values
+                                [
+                                    input.T, 
+                                    output.T, 
+                                    jnp.arange(0, input.shape[-1], 1)
+                                ],
+                                batch_size,
+                                key_idx=training_num,
+                              ),
+                   ):
+                    start_time = time.perf_counter()             # Start time
+                    
+                    out_b = self.model.norm_out(pre_func_out(out_b))    # Pre-process batch out values
+                    input_b = pre_func_inp(input_b)              # Pre-process batch input values 
 
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
 
                     # Compute loss
                     loss, model, opt_state, aux = make_step(
-                        model,
-                        input_b.T,
-                        out_b.T,
-                        opt_state,
-                        idx_b,
-                        **step_kwargs,
-                    )
-
-                    # Add loss to list (maybe store info for plotting?)
+                                                                model,
+                                                                input_b.T,
+                                                                out_b.T,
+                                                                opt_state,
+                                                                idx_b,
+                                                                **step_kwargs,
+                                                            )
+                    
+   
                     prev_losses.add(loss.item())
 
                     if step > stagn_window:
@@ -250,18 +373,12 @@ class Trainor_class:
                     t_all += dt  # Total execution time
 
                     if (step % print_every) == 0 or step == steps - 1:
-                        t_t = 0.0  # Reset Batch execution time
+                        t_t = 0.0               # Reset Batch execution time
 
-                        message = ", ".join([f"{k}: {v}" for k, v in aux.items()])
-
-                        print(
-                            f"Step: {step}, "
-                            + message
-                            + ", "
-                            + f"Step time: {round(dt, 4)}, "
-                            + f"Total elapsed time: {round(t_all, 4)}"
-                        )
-
+                        print_info.update_aux({"Epoch": step, **aux, "Time [s]": dt, "Total time [s]": t_all})
+                        
+                        print(print_info)
+                        
                     if ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
                             raise ValueError("Loss is nan, stopping training...")
@@ -599,11 +716,9 @@ class RRAE_Trainor_class(Trainor_class):
 
         training_kwargs = merge_dicts(kwargs, training_kwargs)
 
-        model, track_params = super().fit(
-            *args, training_key=key0, **training_kwargs
-        )  # train model
-
-        self.track_params = track_params  # Save track parameters in class?
+        model, track_params = super().fit(*args, training_key=key0, **training_kwargs)  # train model
+    
+        self.track_params = track_params    # Save track parameters in class?
 
         if "batch_size_st" in training_kwargs:
             self.batch_size = training_kwargs["batch_size_st"][-1]
@@ -653,15 +768,22 @@ class RRAE_Trainor_class(Trainor_class):
             aux = {"loss": norm_loss_(pred, out)}
             return norm_loss_(pred, out), aux
 
-        if "loss_type" in kwargs:
-            raise ValueError(
-                "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
-            )
+        # if "loss_type" in kwargs:
+        #     raise ValueError(
+        #         "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
+        #     )
 
-        kwargs["loss_type"] = loss_fun
-        kwargs["loss_kwargs"] = {"basis": self.basis}
+        if "loss_type" in kwargs :
+            pass
+        else:
+            print("Defaulting to standard loss")
+            kwargs["loss_type"] = loss_fun
+
+        kwargs.setdefault("loss_kwargs", {}).update({"basis": self.basis})
+        
         fix_comp = lambda model: model.encode.model
         print("Fine tuning the basis ...")
+        
         super().fit(*args, training_key=key, fix_comp=fix_comp, **kwargs)
 
     def evaluate(

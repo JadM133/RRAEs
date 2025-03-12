@@ -179,6 +179,8 @@ for_paper/MNIST
 *.png
 *.gz
 *.pickle
+*.gif
+*.svg
 MNIST/*
 img_align_celeba/*
 *.jpg
@@ -193,5 +195,5 @@ utils.py
 
 2D_DATA_CIs*.npz
 2D_data_MLP.py
-my_print_utils.py
-my_utils.py
+my_*
+gauss*
