@@ -11,6 +11,7 @@ from RRAEs.AE_classes import (
     VAR_AE_MLP,
 )
 from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
+from RRAEs.trackers import RRAE_gen_Tracker, RRAE_Null_Tracker, RRAE_pars_Tracker
 import jax.random as jrandom
 from RRAEs.utilities import get_data
 
@@ -45,22 +46,7 @@ if __name__ == "__main__":
     # Step 3: Specify the initial truncation value. This is what will be your
     # initial latent space size, before being modified by a tracker.
     # Refer below for tips on how to choose this.
-    k_max = 10  # In this case
-
-    # Step 4: Specify your adaptive scheme, choose one of "None", "pars", and "gen".
-    # These mean the following:
-
-    # 1- "None": Fixed scheme, i.e. the k_max you specify above will remain fixed. Use
-    # this wen you're sure of the dimensionality of the latent space that you want to use.
-
-    # 2- "pars": Parsimonious scheme, starts with the k_max specified above, and tries
-    # to decrease the loss as much as possible before incrementing k_max until convergence.
-    # In this case, use a small value of k_max, 1 is usually a suitable choice.
-
-    # 3- "gen": Generic scheme, starts with k_max specified above, and removes modes with
-    # time to converge to the optimal value of k_max. In this case, use a big value of k_max,
-    # usually, k_max=batch_size is a suitbale choice.
-    adap_type = "gen"
+    k_max = 64 # In this case, choose k_max to be the min between latent_size and the batch_size
 
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
@@ -84,7 +70,6 @@ if __name__ == "__main__":
         },
         out_train=x_train,
         key=jrandom.PRNGKey(0),
-        adap_type=adap_type
     )
 
     # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
@@ -97,7 +82,13 @@ if __name__ == "__main__":
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
         "loss_type": loss_type,
+        "tracker": RRAE_gen_Tracker(k_init=k_max, init_steps=200)
     }
+
+    # The tracker above will specify the adaptive scheme to be used. Gen means generic and it
+    # is the algorithm that starts with the mlargest possible number of modes and starts decreasing
+    # until stagnation. For this tracker, consider increasing a lot "step_st" since the algorithm
+    # will break training by itself on stagnation.
 
     ft_kwargs = {
         "step_st": [2], # Increase those to train better

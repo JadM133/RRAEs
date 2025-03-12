@@ -68,8 +68,8 @@ if __name__ == "__main__":
         k_max=k_max,
         folder=f"{problem}",
         file=f"{method}_{problem}_test.pkl",
-        norm_in="None",
-        norm_out="None",
+        norm_in="minmax",
+        norm_out="minmax",
         out_train=x_train,
         kwargs_enc={
             "width_CNNs": [32, 64, 128],
