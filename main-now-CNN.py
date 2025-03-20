@@ -24,8 +24,6 @@ import jax.sharding as jshard
 import jax.experimental.mesh_utils as mesh_utils
 import jax
 from jax.sharding import PartitionSpec as P
-import pdb
-import equinox as eqx
 
 # Redirect print statements to logging
 class PrintLogger:
@@ -39,17 +37,6 @@ class PrintLogger:
     def flush(self):
         pass  # This is needed for compatibility with sys.stdout
 
-norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
-
-@eqx.filter_value_and_grad(has_aux=True)
-def loss_fun(diff_model, static_model, input, out, idx, k_max, **kwargs):
-    model = eqx.combine(diff_model, static_model)
-    pred = model(input, k_max=k_max, inv_norm_out=False)
-    coeffs = model.latent(input, k_max=k_max, get_coeffs=True)
-    # loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
-    aux = {"loss": norm_loss_(pred, out), "k_max":k_max}
-    return norm_loss_(pred, out), aux # + 0.01*loss_coeff, aux
-
 
 if __name__ == "__main__":
     num_devices = len(jax.devices())
@@ -60,10 +47,10 @@ if __name__ == "__main__":
     print("test", flush=True)
     all_errors = []
     all_stds = []
-    for data_size in [600]:
+    for data_size in [None]:
         _10_errors = []
         for j in range(1):
-            problem = "2d_gaussian_shift_scale"
+            problem = "mnist"
             (
                 x_train,
                 x_test,
@@ -112,7 +99,7 @@ if __name__ == "__main__":
             # Step 3: Specify the archietectures' parameters:
             latent_size = 100  # latent space dimension 200
             k_max = (
-                2  # number of features in the latent space (after the truncated SVD).
+                16  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -155,7 +142,7 @@ if __name__ == "__main__":
                     "kernel_conv": 3,
                     "stride": 2,
                     "padding": 1,
-                    # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
+                    "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
                 },
                 key=jrandom.PRNGKey(500),
                 adap_type=adap_type,
@@ -168,11 +155,11 @@ if __name__ == "__main__":
             # basis found in the first stage).
             training_kwargs = {
                 "flush": True,
-                "step_st": [2000],  # 7680*data_size/64
-                "batch_size_st": [64, 48],
-                "lr_st": [1e-3, 1e-4, 1e-5, 1e-8],
+                "step_st": [20000],  # 7680*data_size/64
+                "batch_size_st": [32, 48],
+                "lr_st": [1e-4, 1e-5, 1e-8],
                 "print_every": 1,
-                "loss_type": loss_fun,
+                "loss_type": loss_type,
                 "sharding": sharding,
                 "replicated": replicated,
                 # "loss_kwargs": {
@@ -181,14 +168,14 @@ if __name__ == "__main__":
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
                 # "loss_kwargs": {"beta": 0.0001, "find_weight": lambda model: model.encode.layers[-2].layers[0].weight},
-                "tracker": RRAE_Null_Tracker(k_max) # , perf_loss=12) # , perf_loss=13),
+                "tracker": RRAE_Null_Tracker(k_max), # , perf_loss=42),
             }
 
             ft_kwargs = {
                 "flush": True,
                 "step_st": [0],
-                "batch_size_st": [64],
-                "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
+                "batch_size_st": [32],
+                "lr_st": [1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
                 "sharding": sharding,
                 "replicated": replicated
@@ -205,7 +192,7 @@ if __name__ == "__main__":
                 pre_func_out=pre_func_out,
                 # **training_kwargs
             )
-
+            trainor.save_model()
             preds = trainor.evaluate(
                 x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
             )
@@ -213,7 +200,7 @@ if __name__ == "__main__":
             # _10_errors.append(preds["error_test_o"])
         # all_errors.append(np.mean(_10_errors))
         # all_stds.append(np.std(_10_errors))
-        trainor.save_model()
+        # trainor.save_model()
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
