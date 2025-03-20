@@ -262,7 +262,13 @@ def latent_func_strong_RRAE(
         if k_max is None:
             raise ValueError("k_max was not given when truncation is required.")
         
-        y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
+        coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+        means = jnp.mean(v, axis=1)
+        lower = means - 0.1*means
+        upper = means + 0.1*means
+        clipped_coeffs = np.clip(coeffs, lower, upper)
+        y_approx = u[..., :k_max] @ cipped_coeffs
+        # y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
     else:
         y_approx = y
         u_now = None
@@ -300,10 +306,13 @@ def latent_func_var_strong_RRAE(
         The latent space after the truncation.
     """
     batch_size = y.shape[-1]
-    I = jnp.eye(batch_size)
+    perc_imp = 0.999
+    I = jnp.eye(batch_size) # *perc_imp
     
     if not novar:
-        G = np.random.normal(0, 0.02, (batch_size, batch_size))
+        G = np.random.normal(0, 0.1/64, (batch_size, batch_size))
+        # G = G / (np.sum(G, 0) - np.diag(G))[None] * (1 - perc_imp)
+        # G = G - np.diag(G)
         G = I + G
     else:
         G = I

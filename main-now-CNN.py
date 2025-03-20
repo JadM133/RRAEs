@@ -24,6 +24,8 @@ import jax.sharding as jshard
 import jax.experimental.mesh_utils as mesh_utils
 import jax
 from jax.sharding import PartitionSpec as P
+import pdb
+import equinox as eqx
 
 # Redirect print statements to logging
 class PrintLogger:
@@ -37,6 +39,17 @@ class PrintLogger:
     def flush(self):
         pass  # This is needed for compatibility with sys.stdout
 
+norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
+
+@eqx.filter_value_and_grad(has_aux=True)
+def loss_fun(diff_model, static_model, input, out, idx, k_max, **kwargs):
+    model = eqx.combine(diff_model, static_model)
+    pred = model(input, k_max=k_max, inv_norm_out=False)
+    coeffs = model.latent(input, k_max=k_max, get_coeffs=True)
+    # loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
+    aux = {"loss": norm_loss_(pred, out), "k_max":k_max}
+    return norm_loss_(pred, out), aux # + 0.01*loss_coeff, aux
+
 
 if __name__ == "__main__":
     num_devices = len(jax.devices())
@@ -47,7 +60,7 @@ if __name__ == "__main__":
     print("test", flush=True)
     all_errors = []
     all_stds = []
-    for data_size in [100]:
+    for data_size in [600]:
         _10_errors = []
         for j in range(1):
             problem = "2d_gaussian_shift_scale"
@@ -159,7 +172,7 @@ if __name__ == "__main__":
                 "batch_size_st": [64, 48],
                 "lr_st": [1e-3, 1e-4, 1e-5, 1e-8],
                 "print_every": 1,
-                "loss_type": loss_type,
+                "loss_type": loss_fun,
                 "sharding": sharding,
                 "replicated": replicated,
                 # "loss_kwargs": {
@@ -168,12 +181,12 @@ if __name__ == "__main__":
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
                 # "loss_kwargs": {"beta": 0.0001, "find_weight": lambda model: model.encode.layers[-2].layers[0].weight},
-                "tracker": RRAE_Null_Tracker(k_max) # , perf_loss=13),
+                "tracker": RRAE_Null_Tracker(k_max) # , perf_loss=12) # , perf_loss=13),
             }
 
             ft_kwargs = {
                 "flush": True,
-                "step_st": [200],
+                "step_st": [0],
                 "batch_size_st": [64],
                 "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,

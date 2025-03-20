@@ -621,7 +621,7 @@ class RRAE_Trainor_class(Trainor_class):
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, basis):
             model = eqx.combine(diff_model, static_model)
-            pred = model(input, apply_basis=self.basis, inv_norm_out=False)
+            pred = model(input, apply_basis=self.basis, novar=True, inv_norm_out=False)
             aux = {"loss": norm_loss_(pred, out)}
             return norm_loss_(pred, out), aux
 
