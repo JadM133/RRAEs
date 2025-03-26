@@ -107,7 +107,7 @@ class BaseClass(eqx.Module):
 class Autoencoder(eqx.Module):
     encode: MLP_with_linear
     decode: MLP_with_linear
-    perform_in_latent: callable
+    _perform_in_latent: None
     map_latent: bool
     norm_funcs: list
     inv_norm_funcs: list
@@ -144,6 +144,7 @@ class Autoencoder(eqx.Module):
         latent_size,
         latent_size_after=None,
         _encode=None,
+        _perform_in_latent=None,
         _decode=None,
         map_latent=True,
         *,
@@ -175,8 +176,10 @@ class Autoencoder(eqx.Module):
         else:
             self.encode = _encode
 
-        if not hasattr(self, "perform_in_latent"):
-            self.perform_in_latent = _identity
+        if _perform_in_latent is None:
+            self._perform_in_latent = _identity
+        else:
+            self._perform_in_latent = _perform_in_latent
 
         if _decode is None:
             if "width_size" not in kwargs_dec.keys():
@@ -214,7 +217,6 @@ class Autoencoder(eqx.Module):
 
 
 def latent_func_strong_RRAE(
-    self,
     y,
     k_max=None,
     apply_basis=None,
@@ -278,7 +280,6 @@ def latent_func_strong_RRAE(
 
 
 def latent_func_var_strong_RRAE(
-    self,
     y,
     k_max=None,
     apply_basis=None,
@@ -309,7 +310,7 @@ def latent_func_var_strong_RRAE(
     I = jnp.eye(batch_size) # *perc_imp
     
     if not novar:
-        G = np.random.normal(0, 0.1/batch_size, (batch_size, batch_size))
+        G = np.random.normal(0, 0.1/(144*4), (batch_size, batch_size))
         # G = G / (np.sum(G, 0) - np.diag(G))[None] * (1 - perc_imp)
         # G = G - np.diag(G)
         G = I + G
@@ -379,11 +380,12 @@ class Strong_RRAE_MLP(Autoencoder):
             warnings.warn("linear_l can not be specified for Strong")
             kwargs.pop("linear_l")
 
-        self.perform_in_latent = latent_func_strong_RRAE
+        latent_func = latent_func_strong_RRAE
 
         super().__init__(
             in_size,
             latent_size,
+            _perform_in_latent=latent_func,
             map_latent=False,
             post_proc_func=post_proc_func,
             key=key,
@@ -391,9 +393,6 @@ class Strong_RRAE_MLP(Autoencoder):
             kwargs_dec=kwargs_dec,
             **kwargs,
         )
-    
-    def perform_in_latent(self, y, *args, **kwargs):
-        return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
 class VAR_Strong_RRAE_MLP(Autoencoder):
     """Subclass of RRAEs with the strong formulation when the input
@@ -427,9 +426,12 @@ class VAR_Strong_RRAE_MLP(Autoencoder):
             warnings.warn("linear_l can not be specified for Strong")
             kwargs.pop("linear_l")
 
+        latent_func = latent_func_var_strong_RRAE
+
         super().__init__(
             in_size,
             latent_size,
+            _perform_in_latent=latent_func,
             map_latent=False,
             post_proc_func=post_proc_func,
             key=key,
@@ -437,9 +439,6 @@ class VAR_Strong_RRAE_MLP(Autoencoder):
             kwargs_dec=kwargs_dec,
             **kwargs,
         )
-    
-    def perform_in_latent(self, y, *args, **kwargs):
-        return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
 
 class Vanilla_AE_MLP(Autoencoder):
     """Vanilla Autoencoder.
@@ -465,6 +464,7 @@ class Vanilla_AE_MLP(Autoencoder):
                 )
             kwargs.pop("k_max")
 
+        latent_func = None
         latent_size_after = latent_size
 
         super().__init__(
@@ -474,6 +474,7 @@ class Vanilla_AE_MLP(Autoencoder):
             key=key,
             kwargs_enc=kwargs_enc,
             kwargs_dec=kwargs_dec,
+            _perform_in_latent=latent_func,
             **kwargs,
         )
 
@@ -567,7 +568,7 @@ class Weak_RRAE_MLP(Autoencoder):
         self.v_vt = v_vt_class(latent_size, samples, k_max, key=key)
 
 
-def sample(y, sample_cls, k_max=None, epsilon=None, *args, **kwargs):
+def sample(y, sample_cls, k_max, epsilon=None, *args, **kwargs):
     if epsilon is None:
         new_perform_sample = lambda m, lv: sample_cls(m, lv, *args, **kwargs)
         return jax.vmap(new_perform_sample, in_axes=[-1, -1], out_axes=-1)(*y)
@@ -582,7 +583,6 @@ class VAR_AE_MLP(Autoencoder):
     _sample: Sample
     lin_mean: Linear
     lin_logvar: Linear
-    latent_size: int
 
     def __init__(
         self,
@@ -595,28 +595,28 @@ class VAR_AE_MLP(Autoencoder):
         **kwargs,
     ):
         key, key_m, key_s = jrandom.split(key, 3)
-        self.latent_size = latent_size
+
         self._sample = Sample(sample_dim=latent_size)
         self.lin_mean = Linear(latent_size, latent_size, key=key_m)
         self.lin_logvar = Linear(latent_size, latent_size, key=key_s)
 
+        def perform_in_latent(y, *args, return_dist=False, **kwargs):
+            y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
+                self.lin_logvar, in_axes=-1, out_axes=-1
+            )(y)
+            if return_dist:
+                return y[0], y[1]
+            return sample(y, self._sample, *args, **kwargs)
+
         super().__init__(
             in_size,
             latent_size,
+            _perform_in_latent=perform_in_latent,  # Note: can not define sample as calss method to maintain tree structure
             map_latent=False,
             key=key,
             kwargs_enc=kwargs_enc,
             kwargs_dec=kwargs_dec,
         )
-    
-    def perform_in_latent(self, y, *args, return_dist=False, **kwargs):
-        y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
-            self.lin_logvar, in_axes=-1, out_axes=-1
-        )(y)
-        if return_dist:
-            return y[0], y[1]
-        return sample(y, self._sample, *args, **kwargs)
-    
 
 
 class IRMAE_MLP(Autoencoder):
@@ -683,6 +683,7 @@ class CNN_Autoencoder(Autoencoder):
         width,
         latent_size,
         latent_size_after=None,
+        _perform_in_latent=_identity,
         *,
         key,
         kwargs_enc={},
@@ -718,6 +719,7 @@ class CNN_Autoencoder(Autoencoder):
             None,
             latent_size,
             _encode=_encode,
+            _perform_in_latent=_perform_in_latent,
             map_latent=False,
             _decode=_decode,
             key=key3,
@@ -729,7 +731,6 @@ class VAR_AE_CNN(CNN_Autoencoder):
     _sample: Sample
     lin_mean: Linear
     lin_logvar: Linear
-    latent_size: int
 
     def __init__(self, channels, height, width, latent_size, *, key, **kwargs):
         key, key_m, key_s = jrandom.split(key, 3)
@@ -737,25 +738,24 @@ class VAR_AE_CNN(CNN_Autoencoder):
         self._sample = Sample(sample_dim=latent_size)
         self.lin_mean = Linear(latent_size, latent_size, key=key_m)
         self.lin_logvar = Linear(latent_size, latent_size, key=key_s)
-        self.latent_size = latent_size
+
+        def perform_in_latent(y, *args, return_dist=False, **kwargs):
+            y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
+                self.lin_logvar, in_axes=-1, out_axes=-1
+            )(y)
+            if return_dist:
+                return y[0], y[1]
+            return sample(y, self._sample, *args, **kwargs)
 
         super().__init__(
             channels,
             height,
             width,
             latent_size,
+            _perform_in_latent=perform_in_latent,
             key=key,
             **kwargs,
         )
-    
-    def perform_in_latent(self, y, *args, return_dist=False, **kwargs):
-        y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
-            self.lin_logvar, in_axes=-1, out_axes=-1
-        )(y)
-        if return_dist:
-            return y[0], y[1]
-        return sample(y, self._sample, *args, **kwargs)
-    
 
 
 class Strong_RRAE_CNN(CNN_Autoencoder):
@@ -765,17 +765,17 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
 
     def __init__(self, channels, height, width, latent_size, k_max, *, key, **kwargs):
 
+        latent_func = latent_func_strong_RRAE
+
         super().__init__(
             channels,
             height,
             width,
             latent_size,
+            _perform_in_latent=latent_func,
             key=key,
             **kwargs,
         )
-    
-    def perform_in_latent(self, y, *args, **kwargs):
-        return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
 
 class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
@@ -785,18 +785,18 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
 
     def __init__(self, channels, height, width, latent_size, k_max, *, key, basis=None, **kwargs):
 
+        latent_func = latent_func_var_strong_RRAE
+
         super().__init__(
             channels,
             height,
             width,
             latent_size,
+            _perform_in_latent=latent_func,
             basis=basis,
             key=key,
             **kwargs,
         )
-    
-    def perform_in_latent(self, y, *args, **kwargs):
-        return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
 
 
 class Vanilla_AE_CNN(CNN_Autoencoder):

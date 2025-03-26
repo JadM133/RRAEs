@@ -254,7 +254,7 @@ def loss_generator(which=None, norm_loss_=None):
         def loss_fun(diff_model, static_model, input, out, idx, beta=1.0, **kwargs):
             model = eqx.combine(diff_model, static_model)
             seed = np.random.randint(0, 100000)
-            lat = model.latent_size.attr
+            lat = model.encode.layers[-1].weight.shape[0]
             epsilon = model._sample.create_epsilon(seed, (lat, input.shape[-1]))
             pred = model(input, epsilon=epsilon)
             means, logvars = model.latent(input, epsilon=epsilon, return_dist=True)
@@ -1446,7 +1446,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 None,
                 None,
                 train_images,
-                test_images,
+                test_labels,
                 lambda x: x,
                 lambda x: x,
                 (),

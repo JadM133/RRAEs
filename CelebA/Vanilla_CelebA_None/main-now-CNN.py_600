@@ -1,11 +1,11 @@
 from RRAEs.AE_classes import (
     Strong_RRAE_CNN,
-    VAR_Strong_RRAE_CNN,
     Weak_RRAE_CNN,
     Vanilla_AE_CNN,
     IRMAE_CNN,
     LoRAE_CNN,
     VAR_AE_CNN,
+    Learn_basis_AE_CNN
 )
 from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class  # , Trainor_class
 import jax.random as jrandom
@@ -19,12 +19,7 @@ import sys
 import os
 import jax.nn as jnn
 from RRAEs.trackers import RRAE_gen_Tracker, RRAE_pars_Tracker, RRAE_Null_Tracker
-import shutil
-import jax.sharding as jshard
-import jax.experimental.mesh_utils as mesh_utils
-import jax
-from jax.sharding import PartitionSpec as P
-import equinox as eqx
+
 
 # Redirect print statements to logging
 class PrintLogger:
@@ -38,27 +33,12 @@ class PrintLogger:
     def flush(self):
         pass  # This is needed for compatibility with sys.stdout
 
-norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
-
-@eqx.filter_value_and_grad(has_aux=True)
-def loss_fun(diff_model, static_model, input, out, idx, k_max, **kwargs):
-    model = eqx.combine(diff_model, static_model)
-    pred = model(input, k_max=k_max, inv_norm_out=False)
-    coeffs = model.latent(input, k_max=k_max, get_coeffs=True)
-    loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
-    aux = {"loss": norm_loss_(pred, out), "loss_c":loss_coeff, "k_max":k_max}
-    return norm_loss_(pred, out)+ 0.01*loss_coeff, aux
 
 if __name__ == "__main__":
-    num_devices = len(jax.devices())
-    devices = mesh_utils.create_device_mesh((1, 1, 1, num_devices))
-    sharding = jshard.PositionalSharding(devices)
-    replicated = sharding.replicate()
     # Step 1: Get the data - replace this with your own data of the same shape.
-    print("test", flush=True)
     all_errors = []
     all_stds = []
-    for data_size in [None]:
+    for data_size in [600]:
         _10_errors = []
         for j in range(1):
             problem = "CelebA"
@@ -79,11 +59,9 @@ if __name__ == "__main__":
             )
 
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "VAE"
+            method = "Vanilla"
 
             match method:
-                case "VAR_Strong":
-                    model_cls = VAR_Strong_RRAE_CNN
                 case "Strong":
                     model_cls = Strong_RRAE_CNN
                 case "Weak":
@@ -102,28 +80,35 @@ if __name__ == "__main__":
                     model_cls = VAR_AE_CNN
                 case "Long":
                     model_cls = Vanilla_AE_CNN
+                case "Learn_basis":
+                    model_cls = Learn_basis_AE_CNN
 
             loss_type = (
-                "var"  # Specify the loss type, according to the model chosen.
+                "default"  # Specify the loss type, according to the model chosen.
             )
 
             # Step 3: Specify the archietectures' parameters:
-            latent_size = 186  # latent space dimension 200
+            latent_size = 512  # latent space dimension 200
             k_max = (
-                186  # number of features in the latent space (after the truncated SVD).
+                512  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
 
             log_dir = f"{problem}/{method}_{problem}_{adap_type}"
-            dir_path = log_dir
-            if os.path.exists(dir_path) and os.path.isdir(dir_path):
-                # Remove the directory and its contents
-                shutil.rmtree(dir_path)
-                print(f"The directory {dir_path} has been removed.")
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
             else:
-                print(f"The directory {dir_path} does not exist.")
-
+                with open(
+                    f"{problem}/{method}_{problem}_{adap_type}/log_{data_size}_{adap_type}.txt",
+                    "w",
+                ) as log_file:
+                    log_file.write("")
+            logging.basicConfig(
+                filename=f"{problem}/{method}_{problem}_{adap_type}/log_{data_size}_{adap_type}.txt",
+                level=logging.INFO,
+                format="%(asctime)s - %(levelname)s - %(message)s",
+            )
             # Step 4: Define your trainor, with the model, data, and parameters.
             # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
             trainor = Trainor_class(
@@ -155,55 +140,48 @@ if __name__ == "__main__":
                     "padding": 1,
                     # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
                 },
-                key=jrandom.PRNGKey(500),
+                key=jrandom.PRNGKey(51),
                 adap_type=adap_type,
-                # linear_l=8,
+                # linear_l=5
             )
-
+            # import pdb; pdb.set_trace()
             # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
             # you need to specify training kw arguments (first stage of training with SVD to
             # find the basis), and fine-tuning kw arguments (second stage of training with the
             # basis found in the first stage).
             training_kwargs = {
-                "flush": True,
-                "step_st": [500*4, 500*4],  # 7680*data_size/64
-                "batch_size_st": [144*4, 144*4],
-                "lr_st": [1e-3, 1e-4, 1e-5, 1e-8],
+                "step_st": [500, 500],  # 7680*data_size/64
+                "batch_size_st": [144*2*8, 144*2*8],
+                "lr_st": [1e-4, 1e-5, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
-                "sharding": sharding,
-                "replicated": replicated,
                 # "loss_kwargs": {
                 #    "sparsity": 0.001,
                 #    "beta": 100
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
-                "loss_kwargs": {"beta": 144*4/x_train.shape[-1]},
-                # "tracker": RRAE_Null_Tracker(k_max), # , perf_loss=42),
+                # "tracker": RRAE_Null_Tracker(k_max) #, perf_loss=18),
             }
 
             ft_kwargs = {
-                "flush": True,
-                "step_st": [50],
-                "batch_size_st": [144*4],
+                "step_st": [600],
+                "batch_size_st": [0],
                 "lr_st": [1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
-                "sharding": sharding,
-                "replicated": replicated
             }
 
             # Step 6: Train the model and get the predictions.
             trainor.fit(
                 x_train,
                 y_train,
-                training_key=jrandom.PRNGKey(500),
+                training_key=jrandom.PRNGKey(51),
                 # training_kwargs=training_kwargs,
                 # ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,
                 pre_func_out=pre_func_out,
                 **training_kwargs
             )
-            trainor.save_model()
+
             # preds = trainor.evaluate(
             #     x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
             # )
@@ -211,8 +189,16 @@ if __name__ == "__main__":
             # _10_errors.append(preds["error_test_o"])
         # all_errors.append(np.mean(_10_errors))
         # all_stds.append(np.std(_10_errors))
-        # trainor.save_model()
+        trainor.save_model()
 
+    # Copy the script to the logging folder
+    script_path = os.path.abspath(__file__)
+    destination_path = os.path.join(
+        log_dir, os.path.basename(script_path + f"_{data_size}")
+    )
+    with open(script_path, "r") as src_file:
+        with open(destination_path, "w") as dest_file:
+            dest_file.write(src_file.read())
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
     # pdb.set_trace()
