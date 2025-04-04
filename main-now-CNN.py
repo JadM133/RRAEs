@@ -38,21 +38,6 @@ class PrintLogger:
     def flush(self):
         pass  # This is needed for compatibility with sys.stdout
 
-norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
-
-def lambda_fn(loss, loss_c):
-    return loss_c*jnp.exp(-0.1382*loss)
-
-@eqx.filter_value_and_grad(has_aux=True)
-def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, **kwargs):
-    model = eqx.combine(diff_model, static_model)
-    pred = model(input, k_max=k_max, inv_norm_out=False)
-    coeffs = model.latent(input, k_max=k_max, get_coeffs=True, get_right_sing=True)
-    loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
-    loss_rec = norm_loss_(pred, out)
-    lam = lambda_fn(loss_rec, loss_coeff)
-    aux = {"loss_rec": loss_rec, "loss_c":loss_coeff, "k_max":k_max, "lam":lam}
-    return loss_rec + lam*loss_coeff, aux
 
 if __name__ == "__main__":
     num_devices = len(jax.devices())
@@ -109,7 +94,7 @@ if __name__ == "__main__":
                     model_cls = Vanilla_AE_CNN
 
             loss_type = (
-                "None"  # Specify the loss type, according to the model chosen.
+                "VAR_Strong"  # Specify the loss type, according to the model chosen.
             )
 
             # Step 3: Specify the archietectures' parameters:
@@ -175,7 +160,7 @@ if __name__ == "__main__":
                 "batch_size_st": [64],
                 "lr_st": [1e-3, 1e-4, 1e-5, 1e-8],
                 "print_every": 1,
-                "loss_type": loss_fun,
+                "loss_type": loss_type,
                 "sharding": sharding,
                 "replicated": replicated,
                 # "loss_kwargs": {
@@ -183,7 +168,7 @@ if __name__ == "__main__":
                 #    "beta": 100
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
-                "loss_kwargs": {"beta": 144*4/x_train.shape[-1]},
+                # "loss_kwargs": {"beta": 144*4/x_train.shape[-1]},
                 # "tracker": RRAE_Null_Tracker(k_max), # , perf_loss=42),
             }
 

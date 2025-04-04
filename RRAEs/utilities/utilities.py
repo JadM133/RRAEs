@@ -247,11 +247,32 @@ def loss_generator(which=None, norm_loss_=None):
                 ),
                 aux
             )
+    elif which == "VAR_Strong":
+        norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
 
-    elif which == "var":
+        def lambda_fn(loss, loss_c):
+            return loss_c*jnp.exp(-0.1382*loss)
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, epsilon, beta=1.0, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, **kwargs):
+            model = eqx.combine(diff_model, static_model)
+            pred = model(input, k_max=k_max, inv_norm_out=False)
+            coeffs = model.latent(input, k_max=k_max, get_coeffs=True, get_right_sing=True)
+            loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
+            loss_rec = norm_loss_(pred, out)
+            lam = lambda_fn(loss_rec, loss_coeff)
+            aux = {"loss_rec": loss_rec, "loss_c":loss_coeff, "k_max":k_max, "lam":lam}
+            return loss_rec + lam*loss_coeff, aux
+
+
+    elif which == "var":
+        norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
+
+        def lambda_fn(loss, loss_c):
+            return loss_c*jnp.exp(-0.1382*loss)
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, beta=None, **kwargs):
             model = eqx.combine(diff_model, static_model)
             lat, means, logvars = model.latent(input, epsilon=epsilon, return_lat_dist=True)
             pred = model.decode(lat)
@@ -259,15 +280,15 @@ def loss_generator(which=None, norm_loss_=None):
             kl_loss = jnp.sum(
                 -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
             )
-
+            loss_rec = norm_loss_(pred, out)
             aux = {
-                "loss rec": norm_loss_(pred, out),
+                "loss rec": loss_rec,
                 "loss kl": kl_loss,
             }
-
-            return find_weighted_loss(
-                [norm_loss_(pred, out), kl_loss], weight_vals=wv
-            ), aux
+            if beta is None:
+                beta = lambda_fn(loss_rec, kl_loss)
+            aux["beta"] = beta
+            return loss_rec + beta*kl_loss, aux
         
     elif "Contractive":
 
