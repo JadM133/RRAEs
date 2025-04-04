@@ -61,7 +61,7 @@ if __name__ == "__main__":
     for data_size in [None]:
         _10_errors = []
         for j in range(1):
-            problem = "CelebA"
+            problem = "fashion_mnist"
             (
                 x_train,
                 x_test,
@@ -166,7 +166,7 @@ if __name__ == "__main__":
             # basis found in the first stage).
             training_kwargs = {
                 "flush": True,
-                "step_st": [500*4, 500*4],  # 7680*data_size/64
+                "step_st": [500*8],  # 7680*data_size/64
                 "batch_size_st": [144*4, 144*4],
                 "lr_st": [1e-3, 1e-4, 1e-5, 1e-8],
                 "print_every": 1,
@@ -201,9 +201,14 @@ if __name__ == "__main__":
                 # ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,
                 pre_func_out=pre_func_out,
+                latent_size=latent_size,
                 **training_kwargs
             )
             trainor.save_model()
+            pr = trainor.model(pre_func_inp(x_train[..., 0:1]))
+            # eps = trainor.model._sample.create_epsilon(np.random.randint(0, 200), (trainor.model.latent_size.attr, 1))
+            print(jnp.linalg.norm(pr-pre_func_inp(x_train[..., 0:1]))/jnp.linalg.norm(pre_func_inp(x_train[..., 0:1]))*100)
+
             # preds = trainor.evaluate(
             #     x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
             # )

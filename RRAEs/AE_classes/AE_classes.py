@@ -107,7 +107,7 @@ class BaseClass(eqx.Module):
 class Autoencoder(eqx.Module):
     encode: MLP_with_linear
     decode: MLP_with_linear
-    perform_in_latent: callable
+    _perform_in_latent: callable
     map_latent: bool
     norm_funcs: list
     inv_norm_funcs: list
@@ -175,8 +175,8 @@ class Autoencoder(eqx.Module):
         else:
             self.encode = _encode
 
-        if not hasattr(self, "perform_in_latent"):
-            self.perform_in_latent = _identity
+        if not hasattr(self, "_perform_in_latent"):
+            self._perform_in_latent = _identity
 
         if _decode is None:
             if "width_size" not in kwargs_dec.keys():
@@ -392,7 +392,7 @@ class Strong_RRAE_MLP(Autoencoder):
             **kwargs,
         )
     
-    def perform_in_latent(self, y, *args, **kwargs):
+    def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
 class VAR_Strong_RRAE_MLP(Autoencoder):
@@ -438,7 +438,7 @@ class VAR_Strong_RRAE_MLP(Autoencoder):
             **kwargs,
         )
     
-    def perform_in_latent(self, y, *args, **kwargs):
+    def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
 
 class Vanilla_AE_MLP(Autoencoder):
@@ -609,7 +609,7 @@ class VAR_AE_MLP(Autoencoder):
             kwargs_dec=kwargs_dec,
         )
     
-    def perform_in_latent(self, y, *args, return_dist=False, **kwargs):
+    def _perform_in_latent(self, y, *args, return_dist=False, **kwargs):
         y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
             self.lin_logvar, in_axes=-1, out_axes=-1
         )(y)
@@ -726,7 +726,6 @@ class CNN_Autoencoder(Autoencoder):
 
 
 class VAR_AE_CNN(CNN_Autoencoder):
-    _sample: Sample
     lin_mean: Linear
     lin_logvar: Linear
     latent_size: int
@@ -734,11 +733,9 @@ class VAR_AE_CNN(CNN_Autoencoder):
     def __init__(self, channels, height, width, latent_size, *, key, **kwargs):
         key, key_m, key_s = jrandom.split(key, 3)
 
-        self._sample = Sample(sample_dim=latent_size)
         self.lin_mean = Linear(latent_size, latent_size, key=key_m)
         self.lin_logvar = Linear(latent_size, latent_size, key=key_s)
         self.latent_size = latent_size
-
         super().__init__(
             channels,
             height,
@@ -748,15 +745,24 @@ class VAR_AE_CNN(CNN_Autoencoder):
             **kwargs,
         )
     
-    def perform_in_latent(self, y, *args, return_dist=False, **kwargs):
-        y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
-            self.lin_logvar, in_axes=-1, out_axes=-1
-        )(y)
-        if return_dist:
-            return y[0], y[1]
-        return sample(y, self._sample, *args, **kwargs)
-    
+    def _perform_in_latent(self, y, *args, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
+        mean = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y)
+        logvar = jax.vmap(self.lin_logvar, in_axes=-1, out_axes=-1)(y)
 
+        if return_dist:
+            return mean, logvar
+
+        std = jnp.exp(0.5 * logvar)
+        if epsilon is not None:
+            if len(epsilon.shape) == 4:
+                epsilon = epsilon[0, 0] # to allow tpu sharding
+            z = mean + epsilon * std
+        else:
+            z = mean
+
+        if return_lat_dist:
+            return z, mean, logvar
+        return z
 
 class Strong_RRAE_CNN(CNN_Autoencoder):
     """Subclass of RRAEs with the strong formulation for inputs of
@@ -774,7 +780,7 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
             **kwargs,
         )
     
-    def perform_in_latent(self, y, *args, **kwargs):
+    def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
 
@@ -795,7 +801,7 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
             **kwargs,
         )
     
-    def perform_in_latent(self, y, *args, **kwargs):
+    def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
 
 

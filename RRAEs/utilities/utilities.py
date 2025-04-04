@@ -251,13 +251,10 @@ def loss_generator(which=None, norm_loss_=None):
     elif which == "var":
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, beta=1.0, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, beta=1.0, **kwargs):
             model = eqx.combine(diff_model, static_model)
-            seed = np.random.randint(0, 100000)
-            lat = model.latent_size.attr
-            epsilon = model._sample.create_epsilon(seed, (lat, input.shape[-1]))
-            pred = model(input, epsilon=epsilon)
-            means, logvars = model.latent(input, epsilon=epsilon, return_dist=True)
+            lat, means, logvars = model.latent(input, epsilon=epsilon, return_lat_dist=True)
+            pred = model.decode(lat)
             wv = jnp.array([1.0, beta])
             kl_loss = jnp.sum(
                 -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
@@ -265,7 +262,7 @@ def loss_generator(which=None, norm_loss_=None):
 
             aux = {
                 "loss rec": norm_loss_(pred, out),
-                "loss kl": kl_loss
+                "loss kl": kl_loss,
             }
 
             return find_weighted_loss(
@@ -1385,8 +1382,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
         case "fashion_mnist":
             import pandas
-            x_train = pandas.read_csv("fashion_mnist/fashion-mnist_train.csv").to_numpy().T[1:]
-            x_test = pandas.read_csv("fashion_mnist/fashion-mnist_test.csv").to_numpy().T[1:]
+            x_train = pandas.read_csv("fashin_mnist/fashion-mnist_train.csv").to_numpy().T[1:]
+            x_test = pandas.read_csv("fashin_mnist/fashion-mnist_test.csv").to_numpy().T[1:]
             y_all = jnp.concatenate([x_train, x_test], axis=-1)
             y_all = jnp.reshape(y_all, (1, 28, 28, -1))
             pre_func_in = lambda x: jnp.astype(x, jnp.float32) / 255

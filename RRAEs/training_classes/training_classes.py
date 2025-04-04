@@ -30,6 +30,7 @@ from RRAEs.trackers import (
     RRAE_pars_Tracker,
     RRAE_gen_Tracker,
 )
+import numpy as np
 
 
 class Trainor_class:
@@ -103,6 +104,7 @@ class Trainor_class:
         stagn_window=20,
         sharding=None,
         replicated=None,
+        latent_size=0,
         *,
         training_key,
     ):
@@ -136,16 +138,18 @@ class Trainor_class:
             loss_fun = loss_generator(loss_type, loss)
 
         @eqx.filter_jit(donate="all")
-        def make_step(model, input, out, opt_state, idx, sharding, **loss_kwargs):
+        def make_step(model, input, out, opt_state, idx, epsilon, sharding, **loss_kwargs):
             old_model = model
             diff_model, static_model = eqx.partition(model, filter_spec)
             replicated = sharding.replicate()
             diff_model, opt_state = eqx.filter_shard((diff_model, opt_state), replicated)
             static_model = eqx.filter_shard(static_model, replicated)
             
-            input, out = eqx.filter_shard((input, out), sharding)
+            input, out, epsilon = eqx.filter_shard((input, out, epsilon), sharding)
 
-            (loss, aux), grads = loss_fun(diff_model, static_model, input, out, idx, **loss_kwargs)
+            (loss, aux), grads = loss_fun(diff_model, static_model, input, out, idx, epsilon, **loss_kwargs)
+            # aux["fr"] = fr
+            # aux["fr2"] = fr2
             updates, opt_state = optim.update(grads, opt_state)
             diff_model = eqx.apply_updates(diff_model, updates)
             model = eqx.combine(diff_model, static_model)
@@ -158,7 +162,7 @@ class Trainor_class:
 
         diff_model, _ = eqx.partition(model, filter_spec)
         filtered_model = eqx.filter(diff_model, eqx.is_inexact_array)
-
+        
         t_all = 0
 
         training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
@@ -191,8 +195,13 @@ class Trainor_class:
                     out = self.model.norm_out(pre_func_out(out)).T
                     input_b = input_b.T
                     input_b = pre_func_inp(input_b)
-                    input_b, out = eqx.filter_shard((input_b, out), sharding)
+                    epsilon = np.random.normal(size=(1, 1, latent_size, input_b.shape[-1]))
+                    input_b, out, epsilon = eqx.filter_shard((input_b, out, epsilon), sharding)
+                    
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
+                    lat, mn, st = model.latent(input_b, epsilon=epsilon, return_lat_dist=True)
+                    pr = model.decode(lat)
+                    print(jnp.linalg.norm(pr - out)/jnp.linalg.norm(out)*100)
 
                     loss, model, opt_state, aux = make_step(
                         model,
@@ -200,11 +209,12 @@ class Trainor_class:
                         out,
                         opt_state,
                         idx,
+                        epsilon,
                         sharding,
                         **step_kwargs,
                     )
-
-                    all_losses.append(loss)
+                    
+                    all_losses.append(aux)
                     prev_losses.append(loss)
 
                     if step > stagn_window:
