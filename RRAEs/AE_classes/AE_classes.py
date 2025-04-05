@@ -316,7 +316,7 @@ def latent_func_var_strong_RRAE(
     I = jnp.eye(batch_size) # *perc_imp
     
     if not novar:
-        G = np.random.normal(0, 1, (batch_size, batch_size))
+        G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
         # G = G / (np.sum(G, 0) - np.diag(G))[None] * (1 - perc_imp)
         # G = G - np.diag(G)
         G = I + G

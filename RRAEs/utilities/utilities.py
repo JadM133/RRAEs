@@ -150,7 +150,7 @@ def loss_generator(which=None, norm_loss_=None):
         
     elif which == "Strong":
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, k_max, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, **kwargs):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, k_max=k_max, inv_norm_out=False)
             wv = jnp.array([1.0])
@@ -264,7 +264,7 @@ def loss_generator(which=None, norm_loss_=None):
             loss_coeff = jnp.linalg.norm(sings)
             loss_rec = norm_loss_(pred, out)
             if beta is None:
-                lam = lambda_fn(loss_rec, loss_coeff)
+                lam = sings[0]*(loss_rec < 85) + 0*(loss_rec >= 85) # lambda_fn(loss_rec, loss_coeff)
             else:
                 lam = beta
             aux = {"loss_rec": loss_rec, "loss_c":loss_coeff, "k_max":k_max, "lam":lam, "firt_3_s": sings[:3]} # , "coeffs":coeffs, "tr": jnp.sqrt(input.shape[-1])}
