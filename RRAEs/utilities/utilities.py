@@ -254,14 +254,20 @@ def loss_generator(which=None, norm_loss_=None):
             return loss_c*jnp.exp(-0.1382*loss)
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, beta=None, **kwargs):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, k_max=k_max, inv_norm_out=False)
             coeffs = model.latent(input, k_max=k_max, get_coeffs=True, get_right_sing=True)
-            loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
+            sings = model.latent(input, k_max=k_max, get_coeffs=True, get_sings=True)
+            # loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
+            # loss_coeff = norm_loss_(coeffs, jnp.ones_like(coeffs)/jnp.sqrt(input.shape[-1]))
+            loss_coeff = jnp.linalg.norm(sings)
             loss_rec = norm_loss_(pred, out)
-            lam = lambda_fn(loss_rec, loss_coeff)
-            aux = {"loss_rec": loss_rec, "loss_c":loss_coeff, "k_max":k_max, "lam":lam}
+            if beta is None:
+                lam = lambda_fn(loss_rec, loss_coeff)
+            else:
+                lam = beta
+            aux = {"loss_rec": loss_rec, "loss_c":loss_coeff, "k_max":k_max, "lam":lam, "firt_3_s": sings[:3]} # , "coeffs":coeffs, "tr": jnp.sqrt(input.shape[-1])}
             return loss_rec + lam*loss_coeff, aux
 
 

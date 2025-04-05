@@ -248,7 +248,7 @@ def latent_func_strong_RRAE(
                 raise ValueError("Can not find right singular vector when projecting on basis")
             return apply_basis.T @ y
         return apply_basis @ apply_basis.T @ y
-
+    
     if get_basis_coeffs or get_coeffs:
         u, s, v = stable_SVD(y)
         u_now = u[:, :k_max]
@@ -288,7 +288,9 @@ def latent_func_var_strong_RRAE(
     k_max=None,
     apply_basis=None,
     get_basis_coeffs=False,
+    get_right_sing=False,
     get_coeffs=False,
+    get_sings=False,
     ret=False,
     novar=False,
     *args,
@@ -314,7 +316,7 @@ def latent_func_var_strong_RRAE(
     I = jnp.eye(batch_size) # *perc_imp
     
     if not novar:
-        G = np.random.normal(0, 0.1/batch_size, (batch_size, batch_size))
+        G = np.random.normal(0, 1, (batch_size, batch_size))
         # G = G / (np.sum(G, 0) - np.diag(G))[None] * (1 - perc_imp)
         # G = G - np.diag(G)
         G = I + G
@@ -324,7 +326,7 @@ def latent_func_var_strong_RRAE(
     y = y @ G
 
     if apply_basis is not None:
-        if get_basis_coeffs:
+        if get_basis_coeffs or get_right_sing or get_sings:
             raise ValueError("Can not get SVD and apply basis at the same time.")
         if get_coeffs:
             return apply_basis.T @ y
@@ -334,6 +336,10 @@ def latent_func_var_strong_RRAE(
         u, s, v = stable_SVD(y)
         u_now = u[:, :k_max]
         coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+        if get_sings:
+            return s[:k_max]
+        if get_right_sing:
+            return v[:k_max, :]
         if get_coeffs:
             return coeffs
         return u_now, coeffs

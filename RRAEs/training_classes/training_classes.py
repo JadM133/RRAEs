@@ -210,7 +210,6 @@ class Trainor_class:
                         sharding,
                         **step_kwargs,
                     )
-                    
                     all_losses.append(aux)
                     prev_losses.append(loss)
 

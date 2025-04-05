@@ -51,7 +51,7 @@ if __name__ == "__main__":
     for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "2d_gaussian_shift_scale"
+            problem = "mnist"
             (
                 x_train,
                 x_test,
@@ -67,7 +67,8 @@ if __name__ == "__main__":
             print(
                 f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)"
             )
-
+            # x_train = x_train[..., :144*4]
+            # y_train = x_train
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
             method = "VAR_Strong"
 
@@ -98,9 +99,9 @@ if __name__ == "__main__":
             )
 
             # Step 3: Specify the archietectures' parameters:
-            latent_size = 2  # latent space dimension 200
+            latent_size = 100  # latent space dimension 200
             k_max = (
-                2  # number of features in the latent space (after the truncated SVD).
+                16  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -156,9 +157,9 @@ if __name__ == "__main__":
             # basis found in the first stage).
             training_kwargs = {
                 "flush": True,
-                "step_st": [2000],  # 7680*data_size/64
-                "batch_size_st": [64],
-                "lr_st": [1e-3, 1e-4, 1e-5, 1e-8],
+                "step_st": [20000],  # 7680*data_size/64
+                "batch_size_st": [32],
+                "lr_st": [1e-4, 1e-5, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
                 "sharding": sharding,
@@ -168,15 +169,15 @@ if __name__ == "__main__":
                 #    "beta": 100
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
-                # "loss_kwargs": {"beta": 144*4/x_train.shape[-1]},
+                "loss_kwargs": {"beta": 1},
                 # "tracker": RRAE_Null_Tracker(k_max), # , perf_loss=42),
             }
 
             ft_kwargs = {
                 "flush": True,
-                "step_st": [50],
-                "batch_size_st": [144*4],
-                "lr_st": [1e-5, 1e-6, 1e-7, 1e-8],
+                "step_st": [500],
+                "batch_size_st": [32],
+                "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
                 "sharding": sharding,
                 "replicated": replicated
@@ -187,21 +188,21 @@ if __name__ == "__main__":
                 x_train,
                 y_train,
                 training_key=jrandom.PRNGKey(500),
-                # training_kwargs=training_kwargs,
-                # ft_kwargs=ft_kwargs,
+                training_kwargs=training_kwargs,
+                ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,
                 pre_func_out=pre_func_out,
                 latent_size=latent_size,
-                **training_kwargs
+                # **training_kwargs
             )
             trainor.save_model()
             pr = trainor.model(pre_func_inp(x_train[..., 0:1]))
             # eps = trainor.model._sample.create_epsilon(np.random.randint(0, 200), (trainor.model.latent_size.attr, 1))
             print(jnp.linalg.norm(pr-pre_func_inp(x_train[..., 0:1]))/jnp.linalg.norm(pre_func_inp(x_train[..., 0:1]))*100)
 
-            # preds = trainor.evaluate(
-            #     x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
-            # )
+            preds = trainor.evaluate(
+                x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
+            )
             # interp_preds = trainor.AE_interpolate(p_train, p_test, x_train, x_test)
             # _10_errors.append(preds["error_test_o"])
         # all_errors.append(np.mean(_10_errors))
