@@ -51,7 +51,7 @@ if __name__ == "__main__":
     for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "2d_gaussian_shift_scale"
+            problem = "mnist"
             (
                 x_train,
                 x_test,
@@ -101,7 +101,7 @@ if __name__ == "__main__":
             # Step 3: Specify the archietectures' parameters:
             latent_size = 100  # latent space dimension 200
             k_max = (
-                2  # number of features in the latent space (after the truncated SVD).
+                16  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -157,9 +157,9 @@ if __name__ == "__main__":
             # basis found in the first stage).
             training_kwargs = {
                 "flush": True,
-                "step_st": [2000],  # 7680*data_size/64
-                "batch_size_st": [64],
-                "lr_st": [1e-3, 1e-5, 1e-8],
+                "step_st": [20000],  # 7680*data_size/64
+                "batch_size_st": [32],
+                "lr_st": [1e-4, 1e-5, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
                 "sharding": sharding,
@@ -177,8 +177,8 @@ if __name__ == "__main__":
             ft_kwargs = {
                 "flush": True,
                 "step_st": [500],
-                "batch_size_st": [64],
-                "lr_st": [1e-3, 1e-6, 1e-7, 1e-8],
+                "batch_size_st": [32],
+                "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
                 "sharding": sharding,
                 "replicated": replicated
