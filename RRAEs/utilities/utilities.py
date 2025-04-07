@@ -264,7 +264,7 @@ def loss_generator(which=None, norm_loss_=None):
             loss_coeff = jnp.abs(sings[0])
             loss_rec = norm_loss_(pred, out)
             if beta is None:
-                lam = sings[-1]*(loss_rec < 80) + 0*(loss_rec >= 80) # lambda_fn(loss_rec, loss_coeff)
+                lam = 100*(loss_rec < 80) + 0*(loss_rec >= 80) # lambda_fn(loss_rec, loss_coeff)
             else:
                 lam = beta
             aux = {"loss_rec": loss_rec, "loss_c":loss_coeff, "k_max":k_max, "lam":lam, "first_last": [sings[0], sings[-1]]} # , "coeffs":coeffs, "tr": jnp.sqrt(input.shape[-1])}

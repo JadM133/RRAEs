@@ -321,6 +321,15 @@ def latent_func_var_strong_RRAE(
             raise ValueError("Can not get SVD and apply basis at the same time.")
         if get_coeffs:
             return apply_basis.T @ y
+
+        if not novar:
+            G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
+            G = I + G
+        else:
+            G = I
+
+        y = y @ G
+
         return apply_basis @ apply_basis.T @ y
 
     if get_basis_coeffs or get_coeffs:
