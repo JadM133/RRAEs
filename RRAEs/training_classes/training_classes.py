@@ -602,11 +602,15 @@ class RRAE_Trainor_class(Trainor_class):
         training_kwargs = {**kwargs, **training_kwargs}
         model, track_params = super().fit(*args, training_key=key0, **training_kwargs)
         inp = args[0] if len(args) > 0 else kwargs["input"]
-
+        
+        
         if "batch_size_st" in training_kwargs:
             batch_size = training_kwargs["batch_size_st"][-1]
         else:
             batch_size = 16  # default value
+
+        self.sigma = 1/batch_size
+        self.sings = model.latent(pre_func_inp(inp[..., :batch_size]), get_coeffs=True, get_sings=True, **track_params)
 
         all_bases = model.eval_with_batches(
             inp,

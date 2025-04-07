@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
             ft_kwargs = {
                 "flush": True,
-                "step_st": [500],
+                "step_st": [200],
                 "batch_size_st": [32],
                 "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
