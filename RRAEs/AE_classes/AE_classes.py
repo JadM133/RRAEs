@@ -271,6 +271,7 @@ def latent_func_strong_RRAE(
         # upper = means + 0.1*means
         # clipped_coeffs = np.clip(coeffs, lower, upper)
         # y_approx = u[..., :k_max] @ cipped_coeffs
+        
         y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
     else:
         y_approx = y
@@ -313,19 +314,7 @@ def latent_func_var_strong_RRAE(
     """
     batch_size = y.shape[-1]
     perc_imp = 0.999
-    I = jnp.eye(batch_size) # *perc_imp
-    
-    if not novar:
-        s_det = stable_SVD(y)[1]
-        G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
-        G = G / s_det[-1] # s_det[:, None]
-        # G = G / (np.sum(G, 0) - np.diag(G))[None] * (1 - perc_imp)
-        # G = G - np.diag(G)
-        G = I + G
-    else:
-        G = I
-
-    y = y @ G
+    I = jnp.eye(batch_size) # *perc_imp    
 
     if apply_basis is not None:
         if get_basis_coeffs or get_right_sing or get_sings:
@@ -349,6 +338,15 @@ def latent_func_var_strong_RRAE(
     if k_max != -1:
         u, s, v = stable_SVD(y)
         y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
+
+        if not novar:
+            G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
+            G = I + G
+        else:
+            G = I
+
+        y_approx = y_approx @ G
+
     else:
         y_approx = y
         u_now = None
