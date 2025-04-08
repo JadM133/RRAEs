@@ -70,7 +70,7 @@ if __name__ == "__main__":
             # x_train = x_train[..., :144*4]
             # y_train = x_train
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "Strong"
+            method = "VAR_Strong"
 
             match method:
                 case "VAR_Strong":
@@ -95,7 +95,7 @@ if __name__ == "__main__":
                     model_cls = Vanilla_AE_CNN
 
             loss_type = (
-                "Strong"  # Specify the loss type, according to the model chosen.
+                "VAR_Strong"  # Specify the loss type, according to the model chosen.
             )
 
             # Step 3: Specify the archietectures' parameters:
