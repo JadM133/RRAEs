@@ -328,7 +328,7 @@ def latent_func_var_strong_RRAE(
                 G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
                 eps = jnp.zeros_like(y)
             else:
-                G = epsilon
+                G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
                 eps = jnp.zeros_like(y)
             G = I + G
         else:
@@ -360,7 +360,7 @@ def latent_func_var_strong_RRAE(
                 G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
                 eps = jnp.zeros_like(y_approx)
             else:
-                G = epsilon
+                G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
                 eps = jnp.zeros_like(y_approx)
 
             G = I + G
