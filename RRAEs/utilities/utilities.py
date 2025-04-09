@@ -262,7 +262,8 @@ def loss_generator(which=None, norm_loss_=None):
             # loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
             # loss_coeff = norm_loss_(coeffs, jnp.ones_like(coeffs)/jnp.sqrt(input.shape[-1]))
             sigma = 1/input.shape[-1]
-            loss_coeff = jnp.sum(-0.5*(jnp.log(sigma*sings)-sigma**2*sings**2-sings**2+1))
+            var = sigma**2 * jnp.square(sings)
+            loss_coeff = jnp.sum(-0.5*(jnp.log(var)-var-sings**2+1))
             loss_rec = norm_loss_(pred, out)
             if beta is None:
                 lam = 0.1*(loss_rec < 80) + 0*(loss_rec >= 80) # lambda_fn(loss_rec, loss_coeff)
