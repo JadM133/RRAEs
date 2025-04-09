@@ -294,6 +294,7 @@ def latent_func_var_strong_RRAE(
     get_sings=False,
     ret=False,
     novar=False,
+    epsilon=None,
     *args,
     **kwargs,
 ):
@@ -323,12 +324,18 @@ def latent_func_var_strong_RRAE(
             return apply_basis.T @ y
 
         if not novar:
-            G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
+            if epsilon is None:
+                G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
+                eps = jnp.zeros_like(y)
+            else:
+                G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+                eps = jnp.zeros_like(y)
             G = I + G
         else:
             G = I
+            eps = jnp.zeros_like(y)
 
-        y = y @ G
+        y = y @ G + eps
 
         return apply_basis @ apply_basis.T @ y
 
@@ -349,12 +356,19 @@ def latent_func_var_strong_RRAE(
         y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
 
         if not novar:
-            G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
+            if epsilon is None:
+                G = np.random.normal(0, 1/batch_size, (batch_size, batch_size))
+                eps = jnp.zeros_like(y_approx)
+            else:
+                G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+                eps = jnp.zeros_like(y_approx)
+
             G = I + G
         else:
             G = I
+            eps = jnp.zeros_like(y_approx)
 
-        y_approx = y_approx @ G
+        y_approx = y_approx @ G + eps
 
     else:
         y_approx = y

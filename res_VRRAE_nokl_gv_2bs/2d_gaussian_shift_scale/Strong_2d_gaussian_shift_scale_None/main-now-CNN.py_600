@@ -40,7 +40,7 @@ if __name__ == "__main__":
     for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "mnist"
+            problem = "2d_gaussian_shift_scale"
             (
                 x_train,
                 x_test,
@@ -51,14 +51,14 @@ if __name__ == "__main__":
                 pre_func_inp,
                 pre_func_out,
                 args,
-            ) = get_data(problem, google=data_size, folder="../")
+            ) = get_data(problem, google=data_size)
 
             print(
                 f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)"
             )
 
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "IRMAE"
+            method = "Strong"
 
             match method:
                 case "Strong":
@@ -81,13 +81,13 @@ if __name__ == "__main__":
                     model_cls = Vanilla_AE_CNN
 
             loss_type = (
-                "default"  # Specify the loss type, according to the model chosen.
+                "Strong"  # Specify the loss type, according to the model chosen.
             )
 
             # Step 3: Specify the archietectures' parameters:
-            latent_size = 100  # latent space dimension 200
+            latent_size = 20  # latent space dimension 200
             k_max = (
-                100  # number of features in the latent space (after the truncated SVD).
+                2  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -108,7 +108,7 @@ if __name__ == "__main__":
             )
             # Step 4: Define your trainor, with the model, data, and parameters.
             # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
-            trainor = Trainor_class(
+            trainor = RRAE_Trainor_class(
                 x_train,
                 model_cls,
                 latent_size=latent_size,
@@ -135,21 +135,20 @@ if __name__ == "__main__":
                     "kernel_conv": 3,
                     "stride": 2,
                     "padding": 1,
-                    "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
+                    # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
                 },
-                key=jrandom.PRNGKey(51),
+                key=jrandom.PRNGKey(500),
                 adap_type=adap_type,
-                linear_l=5
             )
-            # import pdb; pdb.set_trace()
+
             # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
             # you need to specify training kw arguments (first stage of training with SVD to
             # find the basis), and fine-tuning kw arguments (second stage of training with the
             # basis found in the first stage).
             training_kwargs = {
                 "step_st": [20000],  # 7680*data_size/64
-                "batch_size_st": [32, 32],
-                "lr_st": [1e-4, 1e-5, 1e-8],
+                "batch_size_st": [48, 48],
+                "lr_st": [1e-3, 1e-4, 1e-7, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
                 # "loss_kwargs": {
@@ -157,13 +156,13 @@ if __name__ == "__main__":
                 #    "beta": 100
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
-                # "tracker": RRAE_Null_Tracker(k_max),
+                "tracker": RRAE_Null_Tracker(k_max),
             }
 
             ft_kwargs = {
-                "step_st": [500],
-                "batch_size_st": [32],
-                "lr_st": [1e-5, 1e-6, 1e-7, 1e-8],
+                "step_st": [400],
+                "batch_size_st": [48],
+                "lr_st": [1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
             }
 
@@ -171,12 +170,12 @@ if __name__ == "__main__":
             trainor.fit(
                 x_train,
                 y_train,
-                training_key=jrandom.PRNGKey(51),
-                # training_kwargs=training_kwargs,
-                # ft_kwargs=ft_kwargs,
+                training_key=jrandom.PRNGKey(500),
+                training_kwargs=training_kwargs,
+                ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,
                 pre_func_out=pre_func_out,
-                **training_kwargs
+                # **training_kwargs
             )
 
             preds = trainor.evaluate(

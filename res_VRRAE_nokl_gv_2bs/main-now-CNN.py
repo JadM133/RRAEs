@@ -51,7 +51,7 @@ if __name__ == "__main__":
     for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "mnist"
+            problem = "2d_gaussian_shift_scale"
             (
                 x_train,
                 x_test,
@@ -97,11 +97,15 @@ if __name__ == "__main__":
             loss_type = (
                 "VAR_Strong"  # Specify the loss type, according to the model chosen.
             )
-
-            # Step 3: Specify the archietectures' parameters:
-            latent_size = 100  # latent space dimension 200
+            match loss_type:
+                case "VAR_Strong":
+                    eps_fn = lambda lat, bs: np.random.normal(0, 2/bs, size=(1, 1, bs, bs))
+                case "var":
+                    eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
+           # Step 3: Specify the archietectures' parameters:
+            latent_size = 200  # latent space dimension 200
             k_max = (
-                16  # number of features in the latent space (after the truncated SVD).
+                2  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -157,9 +161,9 @@ if __name__ == "__main__":
             # basis found in the first stage).
             training_kwargs = {
                 "flush": True,
-                "step_st": [20000],  # 7680*data_size/64
-                "batch_size_st": [32],
-                "lr_st": [1e-4, 1e-5, 1e-8],
+                "step_st": [2000],  # 7680*data_size/64
+                "batch_size_st": [64],
+                "lr_st": [1e-3, 1e-5, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
                 "sharding": sharding,
@@ -170,6 +174,7 @@ if __name__ == "__main__":
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
                 "loss_kwargs": {"beta": None},
+                "eps_fn": eps_fn
                 # "tracker": RRAE_Null_Tracker(k_max), # , perf_loss=42),
             }
 
@@ -177,8 +182,8 @@ if __name__ == "__main__":
             ft_kwargs = {
                 "flush": True,
                 "step_st": [200],
-                "batch_size_st": [32],
-                "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
+                "batch_size_st": [64],
+                "lr_st": [1e-3, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
                 "sharding": sharding,
                 "replicated": replicated
@@ -196,6 +201,7 @@ if __name__ == "__main__":
                 pre_func_inp=pre_func_inp,
                 pre_func_out=pre_func_out,
                 latent_size=latent_size,
+
                 # **training_kwargs
             )
 

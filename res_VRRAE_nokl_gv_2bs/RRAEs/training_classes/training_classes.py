@@ -104,6 +104,7 @@ class Trainor_class:
         stagn_window=20,
         sharding=None,
         replicated=None,
+        eps_fn=lambda lat, bs: None,
         latent_size=0,
         *,
         training_key,
@@ -195,7 +196,7 @@ class Trainor_class:
                     out = self.model.norm_out(pre_func_out(out)).T
                     input_b = input_b.T
                     input_b = pre_func_inp(input_b)
-                    epsilon = np.random.normal(size=(1, 1, latent_size, input_b.shape[-1]))
+                    epsilon = eps_fn(latent_size, input_b.shape[-1])
                     input_b, out, epsilon = eqx.filter_shard((input_b, out, epsilon), sharding)
                     
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
