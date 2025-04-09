@@ -256,7 +256,7 @@ def loss_generator(which=None, norm_loss_=None):
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, beta=None, **kwargs):
             model = eqx.combine(diff_model, static_model)
-            pred = model(input, k_max=k_max, inv_norm_out=False)
+            pred = model(input, epsilon=epsilon, k_max=k_max, inv_norm_out=False)
             coeffs = model.latent(input, k_max=k_max, get_coeffs=True, get_right_sing=True)
             sings = model.latent(input, k_max=k_max, get_coeffs=True, get_sings=True)
             # loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
