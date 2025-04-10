@@ -261,12 +261,13 @@ def loss_generator(which=None, norm_loss_=None):
             sings = model.latent(input, k_max=k_max, get_coeffs=True, get_sings=True)
             # loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
             # loss_coeff = norm_loss_(coeffs, jnp.ones_like(coeffs)/jnp.sqrt(input.shape[-1]))
-            sigma = 1/input.shape[-1]
-            var = sigma**2 * jnp.square(sings)
-            loss_coeff = jnp.sum(-0.5*(jnp.log(var)-var-sings**2+1))
+            # sigma = 1/input.shape[-1]
+            # var = sigma**2 * jnp.square(sings)
+            # loss_coeff = jnp.sum(-0.5*(jnp.log(var)-var-sings**2+1))
+            loss_coeff = jnp.linalg.norm(1/sings)
             loss_rec = norm_loss_(pred, out)
             if beta is None:
-                lam = 0*(loss_rec < 80) + 0*(loss_rec >= 80) # lambda_fn(loss_rec, loss_coeff)
+                lam = 10 # *(loss_rec < 80) + 0*(loss_rec >= 80) # lambda_fn(loss_rec, loss_coeff)
             else:
                 lam = beta
             aux = {"loss_rec": loss_rec, "loss_c":loss_coeff, "k_max":k_max, "lam":lam, "first_last": [sings[0], sings[-1]]} # , "coeffs":coeffs, "tr": jnp.sqrt(input.shape[-1])}
