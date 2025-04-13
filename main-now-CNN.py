@@ -51,7 +51,7 @@ if __name__ == "__main__":
     for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "CelebA"
+            problem = "mnist"
             (
                 x_train,
                 x_test,
@@ -70,7 +70,7 @@ if __name__ == "__main__":
             # x_train = x_train[..., :144*4]
             # y_train = x_train
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "VAR_Strong"
+            method = "VAE"
 
             match method:
                 case "VAR_Strong":
@@ -95,17 +95,17 @@ if __name__ == "__main__":
                     model_cls = Vanilla_AE_CNN
 
             loss_type = (
-                "VAR_Strong"  # Specify the loss type, according to the model chosen.
+                "var"  # Specify the loss type, according to the model chosen.
             )
             match loss_type:
                 case "VAR_Strong":
-                    eps_fn = lambda lat, bs: np.random.normal(0, 10/bs, size=(1, 1, bs, bs))
+                    eps_fn = lambda lat, bs: np.random.normal(0, 5/bs, size=(1, 1, bs, bs))
                 case "var":
                     eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
            # Step 3: Specify the archietectures' parameters:
-            latent_size = 512  # latent space dimension 200
+            latent_size = 16  # latent space dimension 200
             k_max = (
-                186  # number of features in the latent space (after the truncated SVD).
+                16  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
             # Step 4: Define your trainor, with the model, data, and parameters.
             # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
-            trainor = RRAE_Trainor_class(
+            trainor = Trainor_class(
                 x_train,
                 model_cls,
                 latent_size=latent_size,
@@ -161,7 +161,7 @@ if __name__ == "__main__":
             # basis found in the first stage).
             training_kwargs = {
                 "flush": True,
-                "step_st": [4000],  # 7680*data_size/64
+                "step_st": [2000],  # 7680*data_size/64
                 "batch_size_st": [144*4],
                 "lr_st": [1e-3, 1e-5, 1e-8],
                 "print_every": 1,
@@ -173,7 +173,7 @@ if __name__ == "__main__":
                 #    "beta": 100
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
-                "loss_kwargs": {"beta": None},
+                "loss_kwargs": {"beta": 0.0001},
                 "eps_fn": eps_fn
                 # "tracker": RRAE_Null_Tracker(k_max), # , perf_loss=42),
             }
@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
             ft_kwargs = {
                 "flush": True,
-                "step_st": [200],
+                "step_st": [1000],
                 "batch_size_st": [144*4],
                 "lr_st": [1e-3, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,
@@ -197,13 +197,12 @@ if __name__ == "__main__":
                 x_train,
                 y_train,
                 training_key=jrandom.PRNGKey(500),
-                training_kwargs=training_kwargs,
-                ft_kwargs=ft_kwargs,
+                # training_kwargs=training_kwargs,
+                # ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,
                 pre_func_out=pre_func_out,
                 latent_size=latent_size,
-
-                # **training_kwargs
+                **training_kwargs
             )
 
             trainor.save_model()
