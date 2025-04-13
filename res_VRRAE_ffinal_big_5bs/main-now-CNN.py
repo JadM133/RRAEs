@@ -51,7 +51,7 @@ if __name__ == "__main__":
     for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "CelebA"
+            problem = "mnist"
             (
                 x_train,
                 x_test,
@@ -99,13 +99,13 @@ if __name__ == "__main__":
             )
             match loss_type:
                 case "VAR_Strong":
-                    eps_fn = lambda lat, bs: np.random.normal(0, 10/bs, size=(1, 1, bs, bs))
+                    eps_fn = lambda lat, bs: np.random.normal(0, 5/bs, size=(1, 1, bs, bs))
                 case "var":
                     eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
            # Step 3: Specify the archietectures' parameters:
-            latent_size = 512  # latent space dimension 200
+            latent_size = 100  # latent space dimension 200
             k_max = (
-                186  # number of features in the latent space (after the truncated SVD).
+                16  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -161,7 +161,7 @@ if __name__ == "__main__":
             # basis found in the first stage).
             training_kwargs = {
                 "flush": True,
-                "step_st": [4000],  # 7680*data_size/64
+                "step_st": [2000],  # 7680*data_size/64
                 "batch_size_st": [144*4],
                 "lr_st": [1e-3, 1e-5, 1e-8],
                 "print_every": 1,
@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
             ft_kwargs = {
                 "flush": True,
-                "step_st": [200],
+                "step_st": [1000],
                 "batch_size_st": [144*4],
                 "lr_st": [1e-3, 1e-6, 1e-7, 1e-8],
                 "print_every": 1,

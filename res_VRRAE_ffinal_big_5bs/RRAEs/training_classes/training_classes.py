@@ -612,17 +612,12 @@ class RRAE_Trainor_class(Trainor_class):
 
         self.sigma = 1/batch_size
         self.sings = model.latent(pre_func_inp(inp[..., :batch_size]), get_coeffs=True, get_sings=True, **track_params)
-        
-        if "eps_fn" in training_kwargs:
-            eps_fn = training_kwargs["eps_fn"]
-        else:
-            eps_fn = None
 
         all_bases = model.eval_with_batches(
             inp,
             batch_size,
             call_func=lambda x: model.latent(
-                pre_func_inp(x), eps_fn=eps_fn, get_basis_coeffs=True, **track_params
+                pre_func_inp(x), get_basis_coeffs=True, **track_params
             )[0],
             str="Finding train latent space...",
             end_type="concat",
@@ -637,7 +632,7 @@ class RRAE_Trainor_class(Trainor_class):
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, epsilon, basis):
             model = eqx.combine(diff_model, static_model)
-            pred = model(input, apply_basis=self.basis, inv_norm_out=False)
+            pred = model(input, epsilon=epsilon, apply_basis=self.basis, inv_norm_out=False)
             aux = {"loss": norm_loss_(pred, out)}
             return norm_loss_(pred, out), aux
 
