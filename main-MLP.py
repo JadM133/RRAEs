@@ -101,7 +101,7 @@ if __name__ == "__main__":
     )
 
     interp_preds = trainor.AE_interpolate(p_train, p_test, x_train, x_test)
-    trainor.save()
+    trainor.save_model()
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.
