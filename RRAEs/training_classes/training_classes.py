@@ -384,7 +384,7 @@ class Trainor_class:
                     if (step % print_every) == 0 or step == steps - 1:
                         t_t = 0.0               # Reset Batch execution time
 
-                        print_info.update_aux({"Epoch": step, **aux, "Time [s]": dt, "Total time [s]": t_all})
+                        print_info.update_aux({"Batch": step, **aux, "Time [s]": dt, "Total time [s]": t_all})
                         
                         print(print_info)
                         

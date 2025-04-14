@@ -27,9 +27,9 @@ def test_save():  # Only to test if saving/loading is causing a problem
         key=jrandom.PRNGKey(0),
     )
 
-    trainor.save("test_")
+    trainor.save_model("test_")
     new_trainor = RRAE_Trainor_class()
-    new_trainor.load("test_", erase=True)
+    new_trainor.load_model("test_", erase=True)
     try:
         pr = new_trainor.model(data[..., 0:1], k_max=2)
     except Exception as e:
@@ -52,9 +52,9 @@ def test_save_with_final_act():
         key=jrandom.PRNGKey(0),
     )
 
-    trainor.save("test_")
+    trainor.save_model("test_")
     new_trainor = RRAE_Trainor_class()
-    new_trainor.load("test_", erase=True)
+    new_trainor.load_model("test_", erase=True)
     try:
         pr = new_trainor.model(data[..., 0:1], k_max=2)
         assert jnp.max(pr) <= 1.0, "Final activation not working"

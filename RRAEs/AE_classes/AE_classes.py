@@ -424,8 +424,6 @@ class Strong_RRAE_MLP(Autoencoder):
             warnings.warn("linear_l can not be specified for Strong")
             kwargs.pop("linear_l")
 
-        self.perform_in_latent = latent_func_strong_RRAE
-
         super().__init__(
             in_size,
             latent_size,
