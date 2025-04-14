@@ -171,7 +171,7 @@ class Trainor_class:
         in_train=None,
         model_cls=None,
         map_axis=None,
-        folder=None,
+        folder="",
         file=None,
         out_train=None,
         norm_in="None",
@@ -203,7 +203,7 @@ class Trainor_class:
         }
 
         self.folder = folder
-        if folder is not None:
+        if folder != "":
             if not os.path.exists(folder):
                 os.makedirs(folder)
         self.file = file
@@ -234,12 +234,14 @@ class Trainor_class:
         fix_comp=lambda _: (),
         tracker=Null_Tracker(),
         stagn_window=20,
+        eps_fn=lambda bs: None,
         optimizer=optax.adabelief,
         verbatim = {
                     "print_type": "std",
                     "window_size" : 5,  
                     "printer_settings":{"padding_width": 3}
                     },
+        save_losses=False,
         *,
         training_key,
     ):
@@ -276,14 +278,14 @@ class Trainor_class:
 
         # Make step funciton
         @eqx.filter_jit
-        def make_step(model, input, out, opt_state, idx, **loss_kwargs):
+        def make_step(model, input, out, opt_state, idx, epsilon, **loss_kwargs):
             diff_model, static_model = eqx.partition(
                 model, filter_spec
             )  # Split model into differential and static portions
 
             # Compute (loss, auxiliar vars) and gradient
             (loss, aux), grads = loss_fun(
-                diff_model, static_model, input, out, idx, **loss_kwargs
+                diff_model, static_model, input, out, idx=idx, epsilon=epsilon, **loss_kwargs
             )
 
             # Perform back-propagation
@@ -319,6 +321,9 @@ class Trainor_class:
         # Initializer printer object
         print_info = Print_Info(**verbatim)
 
+        if save_losses:
+            all_losses = []
+
         # Outler Loop
         for steps, lr, batch_size in zip(step_st, lr_st, batch_size_st):
             try:
@@ -347,7 +352,7 @@ class Trainor_class:
                     
                     out_b = self.model.norm_out(pre_func_out(out_b))    # Pre-process batch out values
                     input_b = pre_func_inp(input_b)              # Pre-process batch input values 
-
+                    epsilon = eps_fn(input_b.shape[-1])
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
 
                     # Compute loss
@@ -357,10 +362,14 @@ class Trainor_class:
                                                                 out_b.T,
                                                                 opt_state,
                                                                 idx_b,
+                                                                epsilon,
                                                                 **step_kwargs,
                                                             )
                     
-   
+
+                    if save_losses:
+                        all_losses.append(aux)
+
                     prev_losses.add(loss.item())
 
                     if step > stagn_window:
@@ -396,13 +405,25 @@ class Trainor_class:
                         if os.path.exists(checkpoint_filename):
                             i = 1
                             new_filename = f"{orig}_{i}.pkl"
-                            while os.path.exists(new_filename):
+                            while self.path_exists(new_filename):
                                 i += 1
                                 new_filename = f"{orig}_{i}.pkl"
                             checkpoint_filename = new_filename
-                        self.save(checkpoint_filename)
+                        self.save_model(checkpoint_filename)
+                        last_saved = checkpoint_filename
+
             except KeyboardInterrupt:
                 pass
+        
+        if save_losses:
+            orig = "all_losses"
+            new_filename = f"{orig}_0.pkl"
+            i = 0
+            while self.path_exists(new_filename):
+                i += 1
+                new_filename = f"{orig}_{i}.pkl"
+
+            self.save_object(all_losses, new_filename)
 
         model = eqx.nn.inference_mode(model)
 
@@ -613,7 +634,10 @@ class Trainor_class:
             "y_pred_interp_test": y_pred_interp_test,
         }
 
-    def save(self, filename=None, erase=False, **kwargs):
+    def path_exists(self, filename):
+        return os.path.exists(os.path.join(self.folder, filename))
+
+    def save_model(self, filename=None, erase=False, **kwargs):
         """Saves the trainor class."""
         if filename is None:
             if (self.folder is None) or (self.file is None):
@@ -623,6 +647,7 @@ class Trainor_class:
                 shutil.rmtree(self.folder)
                 os.makedirs(self.folder)
         else:
+            filename = os.path.join(self.folder, filename)
             if not os.path.exists(filename):
                 with open(filename, "a") as temp_file:
                     pass
@@ -637,10 +662,20 @@ class Trainor_class:
             dill.dump(attr, f)
         print(f"Model saved in {filename}")
 
-    def load(self, filename, erase=False, **fn_kwargs):
+    def save_object(self, obj, filename):
+        filename = os.path.join(self.folder, filename)
+        with open(filename, "wb") as f:
+            dill.dump(obj, f)
+        print(f"Object saved in {filename}")
+
+    def load_model(self, filename=None, erase=False, **fn_kwargs):
         """NOTE: fn_kwargs defines the functions of the model
         (e.g. final_activation, inner activation), if
         needed to be saved/loaded on different devices/OS."""
+
+        filename = self.file if filename is None else filename
+        filename = os.path.join(self.folder, filename)
+
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
@@ -760,7 +795,7 @@ class RRAE_Trainor_class(Trainor_class):
             self.basis = basis
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, basis):
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, basis):
             model = eqx.combine(diff_model, static_model)
             pred = model(
                 input, apply_basis=basis, inv_norm_out=False
@@ -798,7 +833,7 @@ class RRAE_Trainor_class(Trainor_class):
         call_func=None,
     ):
 
-        call_func = lambda x: self.model(pre_func_inp(x), apply_basis=self.basis)
+        call_func = lambda x: self.model(pre_func_inp(x), apply_basis=self.basis, novar=True)
         res = super().evaluate(
             x_train_o,
             y_train_o,

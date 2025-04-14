@@ -40,7 +40,7 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         kwargs,
-    ) = get_data(problem)
+    ) = get_data(problem, train_size=10, test_size=1,)
 
     # C is channels, D0 is width, D1 is height, and Ntr is the number of training samples.
     print(f"Shape of data is {x_train.shape} (C x D0 x D1 x Ntr).")

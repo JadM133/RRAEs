@@ -141,7 +141,7 @@ def loss_generator(which=None, norm_loss_=None):
     if (which == "default") or (which == "Vanilla"):
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, **kwargs):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, inv_norm_out=False)
             wv = jnp.array([1.0])
@@ -150,7 +150,7 @@ def loss_generator(which=None, norm_loss_=None):
         
     elif which == "Strong":
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, k_max, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, *, k_max, **kwargs):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, k_max=k_max, inv_norm_out=False)
             wv = jnp.array([1.0])
@@ -161,12 +161,12 @@ def loss_generator(which=None, norm_loss_=None):
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(
-            diff_model, static_model, input, out, idx, sparsity=0.05, **kwargs
+            diff_model, static_model, input, out, *, sparsity=0.05, beta=1.0, **kwargs
         ):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, inv_norm_out=False)
             lat = model.latent(input)
-            wv = jnp.array([1.0, 100.0])
+            wv = jnp.array([1.0, beta])
             sparse_term = sparsity * jnp.log(sparsity / (jnp.mean(lat) + 1e-8)) + (
                 1 - sparsity
             ) * jnp.log((1 - sparsity) / (1 - jnp.mean(lat) + 1e-8))
@@ -213,7 +213,7 @@ def loss_generator(which=None, norm_loss_=None):
             static_model,
             input,
             out,
-            idx,
+            *,
             lambda_nuc=0.001,
             norm_loss=None,
             find_layer=None,
@@ -247,44 +247,60 @@ def loss_generator(which=None, norm_loss_=None):
                 ),
                 aux
             )
+    elif which == "VAR_Strong":
+        norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
 
-    elif which == "var":
+        def lambda_fn(loss, loss_c):
+            return loss_c*jnp.exp(-0.1382*loss)
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, beta=1.0, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, *, epsilon, k_max, beta=None, **kwargs):
             model = eqx.combine(diff_model, static_model)
-            seed = np.random.randint(0, 100000)
-            lat = model.encode.layers[-1].weight.shape[0]
-            epsilon = model._sample.create_epsilon(seed, (lat, input.shape[-1]))
-            pred = model(input, epsilon=epsilon)
-            means, logvars = model.latent(input, epsilon=epsilon, return_dist=True)
+            pred = model(input, epsilon=epsilon, k_max=k_max, inv_norm_out=False)
+            loss_rec = norm_loss_(pred, out)
+            aux = {"loss_rec": loss_rec, "k_max":k_max}
+            return loss_rec, aux
+
+
+    elif which == "var":
+        norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
+
+        def lambda_fn(loss, loss_c):
+            return loss_c*jnp.exp(-0.1382*loss)
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(diff_model, static_model, input, out, *, epsilon, beta=None, **kwargs):
+            model = eqx.combine(diff_model, static_model)
+            lat, means, logvars = model.latent(input, epsilon=epsilon, return_lat_dist=True)
+            pred = model.decode(lat)
             wv = jnp.array([1.0, beta])
             kl_loss = jnp.sum(
                 -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
             )
-
+            loss_rec = norm_loss_(pred, out)
             aux = {
-                "loss rec": norm_loss_(pred, out),
-                "loss kl": kl_loss
+                "loss rec": loss_rec,
+                "loss kl": kl_loss,
             }
-
-            return find_weighted_loss(
-                [norm_loss_(pred, out), kl_loss], weight_vals=wv
-            ), aux
+            if beta is None:
+                beta = lambda_fn(loss_rec, kl_loss)
+            aux["beta"] = beta
+            return loss_rec + beta*kl_loss, aux
         
     elif "Contractive":
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, idx, beta=1.0, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, *, beta=1.0, find_weight=None, **kwargs):
+            assert find_weight is not None
             model = eqx.combine(diff_model, static_model)
             lat = model.latent(input)
             pred = model(input, inv_norm_out=False)
-            W = model.encode.layers[-1].weight
+            W = find_weight(model)
             dh = lat * (1 - lat)
             dh = dh.T
             loss_contr = jnp.sum(jnp.matmul(dh**2, jnp.square(W)))
             wv = jnp.array([1.0, beta])
-            aux = {"loss": norm_loss_(pred, out)}
+            aux = {"loss": norm_loss_(pred, out), "cont": loss_contr}
             return find_weighted_loss([norm_loss_(pred, out), loss_contr], weight_vals=wv), aux
     else:
         raise ValueError(f"{which} is an Unknown loss type")
@@ -469,14 +485,14 @@ def divide_return(
     )
 
 
-def get_data(problem, folder=None, google=True, **kwargs):
+def get_data(problem, folder=None, train_size=1000, test_size=10000, **kwargs):
     """Function that generates the examples presented in the paper."""
 
     match problem:
         case "2d_gaussian_shift_scale":
             D = 64  # Dimension of the domain
-            Ntr = 200  # Number of training samples
-            Nte = 200  # Number of test samples
+            Ntr = train_size  # Number of training samples
+            Nte = test_size  # Number of test samples
             sigma = 0.2
 
             def gaussian_2d(x, y, x0, y0, sigma):
@@ -499,8 +515,9 @@ def get_data(problem, folder=None, google=True, **kwargs):
             train_data = jnp.stack(train_data, axis=-1)
 
             # Create test data
-            x0_vals_test = jnp.linspace(-0.5, 0.5, Nte)
-            y0_vals_test = x0_vals_test  # Moving along the diagonal
+            key = jrandom.PRNGKey(0)
+            x0_vals_test = jrandom.uniform(key, (Nte,), minval=-0.5, maxval=0.5)
+            y0_vals_test = jrandom.uniform(key, (Nte,), minval=-0.5, maxval=0.5)
             x0_mesh_test = x0_vals_test
             y0_mesh_test = y0_vals_test
 
@@ -556,6 +573,40 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 (),
             )
 
+        case "CIFAR-10":
+            import pickle
+            import os
+            
+            def load_cifar10_batch(cifar10_dataset_folder_path, batch_id):
+                with open(os.path.join(cifar10_dataset_folder_path, 'data_batch_' + str(batch_id)), mode='rb') as file:
+                    batch = pickle.load(file, encoding='latin1')
+                features = batch['data'].reshape((len(batch['data']), 3, 32, 32)).transpose(0, 2, 3, 1)
+                labels = batch['labels']
+                return features, labels
+
+            def load_cifar10(cifar10_dataset_folder_path):
+                x_train = []
+                y_train = []
+                for batch_id in range(1, 6):
+                    features, labels = load_cifar10_batch(cifar10_dataset_folder_path, batch_id)
+                    x_train.extend(features)
+                    y_train.extend(labels)
+                x_train = jnp.array(x_train)
+                y_train = jnp.array(y_train)
+                with open(os.path.join(cifar10_dataset_folder_path, 'test_batch'), mode='rb') as file:
+                    batch = pickle.load(file, encoding='latin1')
+                x_test = batch['data'].reshape((len(batch['data']), 3, 32, 32)).transpose(0, 2, 3, 1)
+                y_test = jnp.array(batch['labels'])
+                return x_train, x_test, y_train, y_test
+
+            cifar10_dataset_folder_path = folder
+            x_train, x_test, y_train, y_test = load_cifar10(cifar10_dataset_folder_path)
+            pre_func_in = lambda x: jnp.array(x, dtype=jnp.float32) / 255.0
+            pre_func_out = lambda x: jnp.array(x, dtype=jnp.float32) / 255.0
+            x_train = jnp.swapaxes(x_train, 0, -1)
+            x_test = jnp.swapaxes(x_test, 0, -1)
+            return x_train, x_test, None, None, x_train, x_test, pre_func_in, pre_func_out, ()
+        
         case "CelebA":
             data_res = 160
             import os
@@ -1349,8 +1400,8 @@ def get_data(problem, folder=None, google=True, **kwargs):
 
         case "fashion_mnist":
             import pandas
-            x_train = pandas.read_csv("fashion_mnist/fashion-mnist_train.csv").to_numpy().T[1:]
-            x_test = pandas.read_csv("fashion_mnist/fashion-mnist_test.csv").to_numpy().T[1:]
+            x_train = pandas.read_csv("fashin_mnist/fashion-mnist_train.csv").to_numpy().T[1:]
+            x_test = pandas.read_csv("fashin_mnist/fashion-mnist_test.csv").to_numpy().T[1:]
             y_all = jnp.concatenate([x_train, x_test], axis=-1)
             y_all = jnp.reshape(y_all, (1, 28, 28, -1))
             pre_func_in = lambda x: jnp.astype(x, jnp.float32) / 255
@@ -1410,7 +1461,7 @@ def get_data(problem, folder=None, google=True, **kwargs):
                 None,
                 None,
                 train_images,
-                test_labels,
+                test_images,
                 lambda x: x,
                 lambda x: x,
                 (),
