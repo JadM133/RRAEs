@@ -39,7 +39,6 @@ if __name__ == "__main__":
         pre_func_out,
         args,
     ) = get_data(problem, train_size=10, test_size=1)
-    ) = get_data(problem, train_size=10, test_size=1)
 
     print(
         f"Shape of data is {x_train.shape} (C x D0 x D1 x Ntr) and {x_test.shape} (C x D0 x D1 x Nt)"
