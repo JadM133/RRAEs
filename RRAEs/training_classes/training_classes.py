@@ -670,8 +670,7 @@ class RRAE_Trainor_class(Trainor_class):
     def __init__(self, *args, adapt=False, k_max=None, adap_type="None", **kwargs):
         self.k_init = k_max
         self.adap_type = adap_type
-        if k_max is not None:
-            kwargs["k_max"] = k_max
+        kwargs["k_max"] = k_max
         super().__init__(*args, **kwargs)
         self.adapt = adapt
 
