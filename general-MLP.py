@@ -59,7 +59,7 @@ if __name__ == "__main__":
         **kwargs,
     )
     preds = trainor.evaluate(inp, out)  # could give test as well as inp_test, out_test
-    trainor.save()
+    trainor.save_model()
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.

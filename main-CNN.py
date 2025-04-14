@@ -125,7 +125,7 @@ if __name__ == "__main__":
     )
     # NOTE: preds are not saved so uncomment last line if you want to save/plot etc.
 
-    trainor.save(kwargs=kwargs)
+    trainor.save_model(kwargs=kwargs)
 
     # Uncomment the following line if you want to hold the session to check your
     # results in the console.

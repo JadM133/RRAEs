@@ -38,7 +38,7 @@ if __name__ == "__main__":
         pre_func_inp,
         pre_func_out,
         args,
-    ) = get_data(problem, train_size=600, test_size=10000)
+    ) = get_data(problem, train_size=10, test_size=1)
 
     print(
         f"Shape of data is {x_train.shape} (C x D0 x D1 x Ntr) and {x_test.shape} (C x D0 x D1 x Nt)"
@@ -107,8 +107,8 @@ if __name__ == "__main__":
     # basis found in the first stage).
     training_kwargs = {
         "flush": True,
-        "step_st": [2000],
-        "batch_size_st": [300],
+        "step_st": [2],
+        "batch_size_st": [64],
         "lr_st": [1e-3, 1e-5, 1e-8],
         "print_every": 1,
         "loss_type": loss_type,
@@ -119,8 +119,8 @@ if __name__ == "__main__":
 
     ft_kwargs = {
         "flush": True,
-        "step_st": [500],
-        "batch_size_st": [300],
+        "step_st": [2],
+        "batch_size_st": [64],
         "lr_st": [1e-3, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
         "eps_fn": eps_fn
