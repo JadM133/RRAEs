@@ -22,6 +22,42 @@ class RRAE_Null_Tracker:
     def init(self):
         return {"k_max": self.k_max}
 
+class VRRAE_Null_Tracker:
+    def __init__(self, k_max, sigma, *args, **kwargs):
+        self.sigma = sigma
+        self.k_max = k_max
+
+    def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
+        return {"sigma": self.sigma, "k_max": self.k_max}
+
+    def init(self):
+        return {"sigma": self.sigma, "k_max": self.k_max}
+
+
+class VRRAE_sigma_Tracker:
+    def __init__(self, k_max, sigma0=10, sigmaf=3, steps=200, steps_last=1400, jump=3, *args, **kwargs):
+        self.sigma = sigma0
+        self.sigmaf = sigmaf
+        self.jump = jump
+        self.steps = steps
+        self.steps_last = steps_last
+        self.step_c = 0
+        self.k_max = k_max
+        self.st = False
+
+    def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
+        self.step_c += 1
+        if (self.step_c == self.steps) and (self.sigma > self.sigmaf):
+            self.step_c = 0
+            self.sigma = max(self.sigma - self.jump, self.sigmaf)
+        elif (self.step_c == self.steps_last) and (self.sigma == self.sigmaf):
+            self.st = True
+        
+        return {"sigma": self.sigma, "k_max": self.k_max, "stop_train": self.st}
+
+    def init(self):
+        return {"sigma": self.sigma, "k_max": self.k_max}
+
 
 class RRAE_gen_Tracker:
     def __init__(

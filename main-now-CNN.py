@@ -51,7 +51,7 @@ if __name__ == "__main__":
     for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "2d_gaussian_shift_scale"
+            problem = "mnist"
             (
                 x_train,
                 x_test,
@@ -99,13 +99,13 @@ if __name__ == "__main__":
             )
             match loss_type:
                 case "VAR_Strong":
-                    eps_fn = lambda lat, bs: np.random.normal(0, 1/bs, size=(1, 1, bs, bs))
+                    eps_fn = lambda lat, bs: np.random.normal(0, 1, size=(1, 1, k_max, bs))
                 case "var":
                     eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
            # Step 3: Specify the archietectures' parameters:
-            latent_size = 200  # latent space dimension 200
+            latent_size = 100  # latent space dimension 200
             k_max = (
-                2  # number of features in the latent space (after the truncated SVD).
+                16  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -162,7 +162,7 @@ if __name__ == "__main__":
             training_kwargs = {
                 "flush": True,
                 "step_st": [2000],  # 7680*data_size/64
-                "batch_size_st": [64],
+                "batch_size_st": [144*4],
                 "lr_st": [1e-3, 1e-5, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,

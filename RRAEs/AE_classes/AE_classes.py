@@ -323,23 +323,31 @@ def latent_func_var_strong_RRAE(
             raise ValueError("Can not get SVD and apply basis at the same time.")
         if get_coeffs:
             return apply_basis.T @ y
+        
+        # if not novar:
+        #     if epsilon is None:
+        #         G = jnp.identity(batch_size)
+        #         eps = jnp.zeros_like(y)
+        #     else:
+        #         G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+        #         G = G*sigma
+        #         eps = jnp.zeros_like(y)
+        #     G = I + G
+        # else:
+        #     G = I
+        #     eps = jnp.zeros_like(y)
 
-        if not novar:
-            if epsilon is None:
-                G = jnp.identity(batch_size)
-                eps = jnp.zeros_like(y)
-            else:
-                G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
-                G = G*sigma
-                eps = jnp.zeros_like(y)
-            G = I + G
-        else:
-            G = I
-            eps = jnp.zeros_like(y)
+        # y = y @ G + eps
 
-        y = y @ G + eps
 
-        return apply_basis @ apply_basis.T @ y
+        alpha = apply_basis.T @ y
+      
+        if (not novar) and (epsilon is not None):
+            epsilon = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+            epsilon = epsilon*sigma/y.shape[-1]
+            G = jnp.multiply(epsilon, jnp.expand_dims(s[:k_max], -1))
+            alpha = alpha + G
+        return apply_basis @ alpha
 
     if get_basis_coeffs or get_coeffs:
         u, s, v = stable_SVD(y)
@@ -356,30 +364,36 @@ def latent_func_var_strong_RRAE(
     if k_max != -1:
         u, s, v = stable_SVD(y)
         y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
+        alpha = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+        # if not novar:
+            # if epsilon is None:
+            #     G = jnp.identity(batch_size)
+            #     eps = jnp.zeros_like(y_approx)
+            # else:
+            #     G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+            #     G = G*sigma
+            #     eps = jnp.zeros_like(y_approx)
 
-        if not novar:
-            if epsilon is None:
-                G = jnp.identity(batch_size)
-                eps = jnp.zeros_like(y_approx)
-            else:
-                G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
-                G = G*sigma
-                eps = jnp.zeros_like(y_approx)
+            # G = I + G
+        # else:
+            # G = I
+            # eps = jnp.zeros_like(y_approx)
 
-            G = I + G
-        else:
-            G = I
-            eps = jnp.zeros_like(y_approx)
-
-        y_approx = y_approx @ G + eps
-
+        # y_approx = y_approx @ G + eps
+      
+        if (not novar) and (epsilon is not None):
+            epsilon = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+            epsilon = epsilon*sigma/y.shape[-1]
+            G = jnp.multiply(epsilon, jnp.expand_dims(s[:k_max], -1))
+            alpha = alpha + G
+        y_approx = u[..., :k_max] @ alpha
     else:
         y_approx = y
         u_now = None
         coeffs = None
         sigs = None
     if ret:
-        return u_now, coeffs, sigs
+        return G
     return y_approx
 
 
