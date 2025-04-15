@@ -23,8 +23,8 @@ class RRAE_Null_Tracker:
         return {"k_max": self.k_max}
 
 class VRRAE_Null_Tracker:
-    def __init__(self, k_max, sigma0, *args, **kwargs):
-        self.sigma = sigma0
+    def __init__(self, k_max, sigma, *args, **kwargs):
+        self.sigma = sigma
         self.k_max = k_max
 
     def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
