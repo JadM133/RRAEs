@@ -675,13 +675,10 @@ def get_data(problem, folder=None, google=True, **kwargs):
             else:
                 raise ValueError("data is missing")
             data = jnp.expand_dims(data, 0)
-            orig_shape = data.shape[-1]
-            b = min(range(1, orig_shape + 1), key=lambda b: abs((orig_shape + b - 1) // b - google))
-            x_train = data[..., ::b]
-            import numpy as np
-            mask = np.ones(data.shape[-1], dtype=bool)
-            mask[::b] = False  # Mark indices used in x as False
-            x_test = data[..., mask]
+            data = jrandom.permutation(jrandom.key(100), data, axis=-1)
+            perc = 0.8
+            x_train = data[..., : int(perc * data.shape[-1])]
+            x_test = data[..., int(perc * data.shape[-1]) :]
             return (
                 x_train,
                 x_test,

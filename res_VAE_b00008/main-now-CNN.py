@@ -48,11 +48,10 @@ if __name__ == "__main__":
     print("test", flush=True)
     all_errors = []
     all_stds = []
-    data_size = 100
-    for seed in [0, 1, 2, 3, 4]:
+    for data_size in [600]:
         _10_errors = []
         for j in range(1):
-            problem = "Circle"
+            problem = "mnist"
             (
                 x_train,
                 x_test,
@@ -71,7 +70,7 @@ if __name__ == "__main__":
             # x_train = x_train[..., :144*4]
             # y_train = x_train
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "VAR_Strong"
+            method = "VAE"
 
             match method:
                 case "VAR_Strong":
@@ -96,7 +95,7 @@ if __name__ == "__main__":
                     model_cls = Vanilla_AE_CNN
 
             loss_type = (
-                "VAR_Strong"  # Specify the loss type, according to the model chosen.
+                "var"  # Specify the loss type, according to the model chosen.
             )
             match loss_type:
                 case "VAR_Strong":
@@ -104,9 +103,9 @@ if __name__ == "__main__":
                 case "var":
                     eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
            # Step 3: Specify the archietectures' parameters:
-            latent_size = 200  # latent space dimension 200
+            latent_size = 16  # latent space dimension 200
             k_max = (
-                4  # number of features in the latent space (after the truncated SVD).
+                16  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -122,7 +121,7 @@ if __name__ == "__main__":
 
             # Step 4: Define your trainor, with the model, data, and parameters.
             # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
-            trainor = RRAE_Trainor_class(
+            trainor = Trainor_class(
                 x_train,
                 model_cls,
                 latent_size=latent_size,
@@ -131,7 +130,7 @@ if __name__ == "__main__":
                 channels=x_train.shape[0],
                 k_max=k_max,
                 folder=f"{problem}/{method}_{problem}_{adap_type}/",
-                file=f"{method}_{problem}_{seed}.pkl",
+                file=f"{method}_{problem}_{data_size}_{adap_type}.pkl",
                 norm_in="None",
                 norm_out="None",
                 out_train=x_train,
@@ -151,7 +150,7 @@ if __name__ == "__main__":
                     "padding": 1,
                     # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
                 },
-                key=jrandom.PRNGKey(500+seed),
+                key=jrandom.PRNGKey(500),
                 adap_type=adap_type,
                 # linear_l=8,
             )
@@ -163,7 +162,7 @@ if __name__ == "__main__":
             training_kwargs = {
                 "flush": True,
                 "step_st": [2000],  # 7680*data_size/64
-                "batch_size_st": [64],
+                "batch_size_st": [144*4],
                 "lr_st": [1e-3, 1e-5, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
@@ -174,9 +173,9 @@ if __name__ == "__main__":
                 #    "beta": 100
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
-                "loss_kwargs": {"beta": 0.005},
+                "loss_kwargs": {"beta": 0.0008},
                 "eps_fn": eps_fn,
-                "tracker": VRRAE_sigma_Tracker(k_max, sigma0=5, sigmaf=0, jump=3, steps=300, steps_last=1000), # , perf_loss=42),
+                "tracker": VRRAE_Null_Tracker(k_max, sigma=5), # , perf_loss=42),
             }
 
 
@@ -197,13 +196,13 @@ if __name__ == "__main__":
             trainor.fit(
                 x_train,
                 y_train,
-                training_key=jrandom.PRNGKey(500+seed),
-                training_kwargs=training_kwargs,
-                ft_kwargs=ft_kwargs,
+                training_key=jrandom.PRNGKey(500),
+                # training_kwargs=training_kwargs,
+                # ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,
                 pre_func_out=pre_func_out,
                 latent_size=latent_size,
-                # **training_kwargs
+                **training_kwargs
             )
 
             trainor.save_model()
