@@ -18,7 +18,7 @@ import logging
 import sys
 import os
 import jax.nn as jnn
-from RRAEs.trackers import RRAE_gen_Tracker, RRAE_pars_Tracker, RRAE_Null_Tracker
+from RRAEs.trackers import RRAE_gen_Tracker, RRAE_pars_Tracker, RRAE_Null_Tracker, VRRAE_sigma_Tracker
 import shutil
 import jax.sharding as jshard
 import jax.experimental.mesh_utils as mesh_utils
@@ -99,7 +99,7 @@ if __name__ == "__main__":
             )
             match loss_type:
                 case "VAR_Strong":
-                    eps_fn = lambda lat, bs: np.random.normal(0, 3/bs, size=(1, 1, bs, bs))
+                    eps_fn = lambda lat, bs: np.random.normal(0, 1/bs, size=(1, 1, bs, bs))
                 case "var":
                     eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
            # Step 3: Specify the archietectures' parameters:
@@ -174,8 +174,8 @@ if __name__ == "__main__":
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
                 "loss_kwargs": {"beta": 0.005},
-                "eps_fn": eps_fn
-                # "tracker": RRAE_Null_Tracker(k_max), # , perf_loss=42),
+                "eps_fn": eps_fn,
+                "tracker": VRRAE_sigma_Tracker(k_max), # , perf_loss=42),
             }
 
 

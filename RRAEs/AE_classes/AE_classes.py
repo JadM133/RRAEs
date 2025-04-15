@@ -295,6 +295,7 @@ def latent_func_var_strong_RRAE(
     ret=False,
     novar=False,
     epsilon=None,
+    sigma=1,
     *args,
     **kwargs,
 ):
@@ -329,6 +330,7 @@ def latent_func_var_strong_RRAE(
                 eps = jnp.zeros_like(y)
             else:
                 G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+                G = G*sigma
                 eps = jnp.zeros_like(y)
             G = I + G
         else:
@@ -361,6 +363,7 @@ def latent_func_var_strong_RRAE(
                 eps = jnp.zeros_like(y_approx)
             else:
                 G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+                G = G*sigma
                 eps = jnp.zeros_like(y_approx)
 
             G = I + G

@@ -99,7 +99,7 @@ if __name__ == "__main__":
             )
             match loss_type:
                 case "VAR_Strong":
-                    eps_fn = lambda lat, bs: np.random.normal(0, 1/bs, size=(1, 1, bs, bs))
+                    eps_fn = lambda lat, bs: np.random.normal(0, 8/bs, size=(1, 1, bs, bs))
                 case "var":
                     eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
            # Step 3: Specify the archietectures' parameters:
