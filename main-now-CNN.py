@@ -48,10 +48,10 @@ if __name__ == "__main__":
     print("test", flush=True)
     all_errors = []
     all_stds = []
-    for data_size in [600]:
+    for seed in [0, 1, 2, 3, 4]:
         _10_errors = []
         for j in range(1):
-            problem = "mnist"
+            problem = "2d_gaussian_shift_scale"
             (
                 x_train,
                 x_test,
@@ -105,7 +105,7 @@ if __name__ == "__main__":
            # Step 3: Specify the archietectures' parameters:
             latent_size = 100  # latent space dimension 200
             k_max = (
-                16  # number of features in the latent space (after the truncated SVD).
+                2  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -130,7 +130,7 @@ if __name__ == "__main__":
                 channels=x_train.shape[0],
                 k_max=k_max,
                 folder=f"{problem}/{method}_{problem}_{adap_type}/",
-                file=f"{method}_{problem}_{data_size}_{adap_type}.pkl",
+                file=f"{method}_{problem}_{seed}.pkl",
                 norm_in="None",
                 norm_out="None",
                 out_train=x_train,
@@ -150,7 +150,7 @@ if __name__ == "__main__":
                     "padding": 1,
                     # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
                 },
-                key=jrandom.PRNGKey(500),
+                key=jrandom.PRNGKey(500+seed),
                 adap_type=adap_type,
                 # linear_l=8,
             )
@@ -162,7 +162,7 @@ if __name__ == "__main__":
             training_kwargs = {
                 "flush": True,
                 "step_st": [2000],  # 7680*data_size/64
-                "batch_size_st": [144*4],
+                "batch_size_st": [64],
                 "lr_st": [1e-3, 1e-5, 1e-8],
                 "print_every": 1,
                 "loss_type": loss_type,
@@ -175,7 +175,7 @@ if __name__ == "__main__":
                 #}
                 "loss_kwargs": {"beta": 0.005},
                 "eps_fn": eps_fn,
-                "tracker": VRRAE_Null_Tracker(k_max, sigma=5), # , perf_loss=42),
+                "tracker": VRRAE_sigma_Tracker(k_max, sigma0=5, sigmaf=0, jump=3, steps=300, steps_last=1000), # , perf_loss=42),
             }
 
 
@@ -196,7 +196,7 @@ if __name__ == "__main__":
             trainor.fit(
                 x_train,
                 y_train,
-                training_key=jrandom.PRNGKey(500),
+                training_key=jrandom.PRNGKey(500+seed),
                 training_kwargs=training_kwargs,
                 ft_kwargs=ft_kwargs,
                 pre_func_inp=pre_func_inp,

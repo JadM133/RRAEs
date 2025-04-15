@@ -257,7 +257,7 @@ def loss_generator(which=None, norm_loss_=None):
         def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, sigma=1, beta=None, **kwargs):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, epsilon=epsilon, sigma=sigma, k_max=k_max, inv_norm_out=False)
-            # coeffs = model.latent(input, k_max=k_max, get_coeffs=True, get_right_sing=True)
+            # G = model.latent(input, k_max=k_max, epsilon=epsilon, sigma=sigma, ret=True)
             # sings = model.latent(input, k_max=k_max, get_coeffs=True, get_sings=True)
             # loss_coeff = norm_loss_(coeffs, jnp.repeat(jnp.mean(coeffs, 1, keepdims=True), coeffs.shape[-1], 1))
             # loss_coeff = norm_loss_(coeffs, jnp.ones_like(coeffs)/jnp.sqrt(input.shape[-1]))
@@ -270,7 +270,7 @@ def loss_generator(which=None, norm_loss_=None):
             #     lam = 10 # *(loss_rec < 80) + 0*(loss_rec >= 80) # lambda_fn(loss_rec, loss_coeff)
             # else:
             #     lam = beta
-            aux = {"loss_rec": loss_rec, "k_max":k_max, "sigma": sigma} # , "first_last": [sings[0], sings[-1]]} # , "coeffs":coeffs, "tr": jnp.sqrt(input.shape[-1])}
+            aux = {"loss_rec": loss_rec, "k_max":k_max, "sigma": sigma} # , "G": G[:, 0]} # , "first_last": [sings[0], sings[-1]]} # , "coeffs":coeffs, "tr": jnp.sqrt(input.shape[-1])}
             return loss_rec, aux
 
 
