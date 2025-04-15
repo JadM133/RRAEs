@@ -707,7 +707,7 @@ class RRAE_Trainor_class(Trainor_class):
         self.adap_type = adap_type
         if k_max is not None:
             kwargs["k_max"] = k_max
-            
+
         super().__init__(*args, **kwargs)
         self.adapt = adapt
 
@@ -763,10 +763,11 @@ class RRAE_Trainor_class(Trainor_class):
             self.batch_size = 16  # default value
 
         ft_kwargs = merge_dicts(kwargs, ft_kwargs)
-
-        self.fine_tune_basis(
-            None, args=args, kwargs=ft_kwargs, key=key1
-        )  # fine tune basis
+        
+        if ft_kwargs:
+            self.fine_tune_basis(
+                None, args=args, kwargs=ft_kwargs, key=key1
+            )  # fine tune basis
 
     def fine_tune_basis(self, basis=None, *, args, kwargs, key):
 
