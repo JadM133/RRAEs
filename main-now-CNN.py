@@ -48,6 +48,7 @@ if __name__ == "__main__":
     print("test", flush=True)
     all_errors = []
     all_stds = []
+    data_size = 100
     for seed in [0, 1, 2, 3, 4]:
         _10_errors = []
         for j in range(1):
