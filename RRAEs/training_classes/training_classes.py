@@ -668,13 +668,16 @@ class Trainor_class:
             dill.dump(obj, f)
         print(f"Object saved in {filename}")
 
-    def load_model(self, filename=None, erase=False, **fn_kwargs):
+    def load_model(self, filename=None, erase=False, path=None, **fn_kwargs):
         """NOTE: fn_kwargs defines the functions of the model
         (e.g. final_activation, inner activation), if
         needed to be saved/loaded on different devices/OS."""
 
-        filename = self.file if filename is None else filename
-        filename = os.path.join(self.folder, filename)
+        if path == None:
+            filename = self.file if filename is None else filename
+            filename = os.path.join(self.folder, filename)
+        else:
+            filename = path
 
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
