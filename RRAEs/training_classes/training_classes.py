@@ -668,13 +668,16 @@ class Trainor_class:
             dill.dump(obj, f)
         print(f"Object saved in {filename}")
 
-    def load_model(self, filename=None, erase=False, **fn_kwargs):
+    def load_model(self, filename=None, erase=False, path=None, **fn_kwargs):
         """NOTE: fn_kwargs defines the functions of the model
         (e.g. final_activation, inner activation), if
         needed to be saved/loaded on different devices/OS."""
 
-        filename = self.file if filename is None else filename
-        filename = os.path.join(self.folder, filename)
+        if path == None:
+            filename = self.file if filename is None else filename
+            filename = os.path.join(self.folder, filename)
+        else:
+            filename = path
 
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
@@ -705,7 +708,9 @@ class RRAE_Trainor_class(Trainor_class):
     def __init__(self, *args, adapt=False, k_max=None, adap_type="None", **kwargs):
         self.k_init = k_max
         self.adap_type = adap_type
-        kwargs["k_max"] = k_max
+        if k_max is not None:
+            kwargs["k_max"] = k_max
+
         super().__init__(*args, **kwargs)
         self.adapt = adapt
 
@@ -761,10 +766,11 @@ class RRAE_Trainor_class(Trainor_class):
             self.batch_size = 16  # default value
 
         ft_kwargs = merge_dicts(kwargs, ft_kwargs)
-
-        self.fine_tune_basis(
-            None, args=args, kwargs=ft_kwargs, key=key1
-        )  # fine tune basis
+        
+        if ft_kwargs:
+            self.fine_tune_basis(
+                None, args=args, kwargs=ft_kwargs, key=key1
+            )  # fine tune basis
 
     def fine_tune_basis(self, basis=None, *, args, kwargs, key):
 
