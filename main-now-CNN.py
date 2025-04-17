@@ -6,6 +6,7 @@ from RRAEs.AE_classes import (
     IRMAE_CNN,
     LoRAE_CNN,
     VAR_AE_CNN,
+    VAR_VAE_Strong_RRAE_CNN
 )
 from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class  # , Trainor_class
 import jax.random as jrandom
@@ -49,10 +50,10 @@ if __name__ == "__main__":
     all_errors = []
     all_stds = []
     data_size = 100
-    for seed in [0, 1, 2, 3, 4]:
+    for seed in [0]:
         _10_errors = []
         for j in range(1):
-            problem = "Circle"
+            problem = "2d_gaussian_shift_scale"
             (
                 x_train,
                 x_test,
@@ -71,11 +72,13 @@ if __name__ == "__main__":
             # x_train = x_train[..., :144*4]
             # y_train = x_train
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "VAR_Strong"
+            method = "VRRAE-VAE"
 
             match method:
                 case "VAR_Strong":
                     model_cls = VAR_Strong_RRAE_CNN
+                case "VRRAE-VAE":
+                    model_cls = VAR_VAE_Strong_RRAE_CNN
                 case "Strong":
                     model_cls = Strong_RRAE_CNN
                 case "Weak":
@@ -96,17 +99,20 @@ if __name__ == "__main__":
                     model_cls = Vanilla_AE_CNN
 
             loss_type = (
-                "VAR_Strong"  # Specify the loss type, according to the model chosen.
+                "VRRAE-VAE"  # Specify the loss type, according to the model chosen.
             )
-            match loss_type:
+            match method:
                 case "VAR_Strong":
                     eps_fn = lambda lat, bs: np.random.normal(0, 1, size=(1, 1, k_max, bs))
-                case "var":
+                case "VAE":
                     eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
+                case "VRRAE-VAE":
+                    eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, k_max, bs))
+
            # Step 3: Specify the archietectures' parameters:
             latent_size = 200  # latent space dimension 200
             k_max = (
-                4  # number of features in the latent space (after the truncated SVD).
+                2  # number of features in the latent space (after the truncated SVD).
             )
 
             adap_type = "None"
@@ -174,9 +180,9 @@ if __name__ == "__main__":
                 #    "beta": 100
                     # "find_layer": lambda model: model.encode.layers[-2].layers[-1].weight,
                 #}
-                "loss_kwargs": {"beta": 0.005},
+                "loss_kwargs": {"beta": 0.001},
                 "eps_fn": eps_fn,
-                "tracker": VRRAE_sigma_Tracker(k_max, sigma0=5, sigmaf=0, jump=3, steps=300, steps_last=1000), # , perf_loss=42),
+                # "tracker": VRRAE_sigma_Tracker(k_max, sigma0=5, sigmaf=0, jump=3, steps=300, steps_last=1000), # , perf_loss=42),
             }
 
 
@@ -207,9 +213,6 @@ if __name__ == "__main__":
             )
 
             trainor.save_model()
-            pr = trainor.model(pre_func_inp(x_train[..., 0:1]))
-            # eps = trainor.model._sample.create_epsilon(np.random.randint(0, 200), (trainor.model.latent_size.attr, 1))
-            print(jnp.linalg.norm(pr-pre_func_inp(x_train[..., 0:1]))/jnp.linalg.norm(pre_func_inp(x_train[..., 0:1]))*100)
 
             preds = trainor.evaluate(
                 x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out

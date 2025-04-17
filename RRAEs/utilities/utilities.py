@@ -274,7 +274,7 @@ def loss_generator(which=None, norm_loss_=None):
             return loss_rec, aux
 
 
-    elif which == "var":
+    elif which == "VAE":
         norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
 
         def lambda_fn(loss, loss_c):
@@ -298,7 +298,31 @@ def loss_generator(which=None, norm_loss_=None):
                 beta = lambda_fn(loss_rec, kl_loss)
             aux["beta"] = beta
             return loss_rec + beta*kl_loss, aux
-        
+
+    elif which == "VRRAE-VAE":
+        norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
+
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, beta=None, **kwargs):
+            model = eqx.combine(diff_model, static_model)
+            lat, means, logvars = model.latent(input, epsilon=epsilon, k_max=k_max, return_lat_dist=True)
+            pred = model.decode(lat)
+            wv = jnp.array([1.0, beta])
+            kl_loss = jnp.sum(
+                -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
+            )
+            loss_rec = norm_loss_(pred, out)
+            aux = {
+                "loss rec": loss_rec,
+                "loss kl": kl_loss,
+            }
+            if beta is None:
+                beta = lambda_fn(loss_rec, kl_loss)
+            aux["beta"] = beta
+            return loss_rec + beta*kl_loss, aux
+
+
+
     elif "Contractive":
 
         @eqx.filter_value_and_grad(has_aux=True)
