@@ -36,6 +36,7 @@ class BaseClass(eqx.Module):
             return self.model(x, *args, **kwargs)
         fn = lambda x: self.model(x, *args, **kwargs)
         return jax.vmap(fn, in_axes=(self.map_axis,), out_axes=self.map_axis)(x)
+        return jax.vmap(fn, in_axes=(self.map_axis,), out_axes=self.map_axis)(x)
 
     def eval_with_batches(
         self,
@@ -107,6 +108,7 @@ class BaseClass(eqx.Module):
 class Autoencoder(eqx.Module):
     encode: MLP_with_linear
     decode: MLP_with_linear
+    _perform_in_latent: callable
     _perform_in_latent: callable
     map_latent: bool
     norm_funcs: list
@@ -242,8 +244,10 @@ def latent_func_strong_RRAE(
     """
     if apply_basis is not None:
         if get_basis_coeffs:
-            raise ValueError("Can not get SVD and apply basis at the same time.")
+            return apply_basis, apply_basis.T @ y
         if get_coeffs:
+            if get_right_sing:
+                raise ValueError("Can not find right singular vector when projecting on basis")
             if get_right_sing:
                 raise ValueError("Can not find right singular vector when projecting on basis")
             return apply_basis.T @ y
@@ -265,6 +269,8 @@ def latent_func_strong_RRAE(
             coeffs = coeffs[0]
 
         if get_coeffs:
+            if get_right_sing:
+                return v[:k_max, :]
             if get_right_sing:
                 return v[:k_max, :]
             return coeffs
@@ -304,8 +310,8 @@ def latent_func_var_strong_RRAE(
     get_coeffs=False,
     get_sings=False,
     ret=False,
-    novar=False,
     epsilon=None,
+    sigma=1,
     *args,
     **kwargs,
 ):
@@ -325,35 +331,30 @@ def latent_func_var_strong_RRAE(
         The latent space after the truncation.
     """
     batch_size = y.shape[-1]
-    perc_imp = 0.999
-    I = jnp.eye(batch_size) # *perc_imp    
+    I = jnp.eye(batch_size) # *perc_imp     
 
     if apply_basis is not None:
         if get_basis_coeffs or get_right_sing or get_sings:
             raise ValueError("Can not get SVD and apply basis at the same time.")
         if get_coeffs:
             return apply_basis.T @ y
-
-        if not novar:
-            if epsilon is None:
-                G = jnp.identity(batch_size)
-                eps = jnp.zeros_like(y)
-            else:
-                G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
-                eps = jnp.zeros_like(y)
-            G = I + G
-        else:
-            G = I
-            eps = jnp.zeros_like(y)
-
-        y = y @ G + eps
-
-        return apply_basis @ apply_basis.T @ y
+        alpha = apply_basis.T @ y
+      
+        if epsilon is not None:
+            epsilon = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+            epsilon = epsilon*sigma/y.shape[-1]
+            G = jnp.multiply(epsilon, jnp.expand_dims(s[:k_max], -1))
+            alpha = alpha + G
+        return apply_basis @ alpha
 
     if get_basis_coeffs or get_coeffs:
         u, s, v = stable_SVD(y)
         u_now = u[:, :k_max]
         coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+        if get_sings:
+            return s[:k_max]
+        if get_right_sing:
+            return v[:k_max, :]
         if get_sings:
             return s[:k_max]
         if get_right_sing:
@@ -365,29 +366,21 @@ def latent_func_var_strong_RRAE(
     if k_max != -1:
         u, s, v = stable_SVD(y)
         y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
-
-        if not novar:
-            if epsilon is None:
-                G = jnp.identity(batch_size)
-                eps = jnp.zeros_like(y_approx)
-            else:
-                G = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
-                eps = jnp.zeros_like(y_approx)
-
-            G = I + G
-        else:
-            G = I
-            eps = jnp.zeros_like(y_approx)
-
-        y_approx = y_approx @ G + eps
-
+        alpha = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
+      
+        if epsilon is not None:
+            epsilon = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
+            epsilon = epsilon*sigma/y.shape[-1]
+            G = jnp.multiply(epsilon, jnp.expand_dims(s[:k_max], -1))
+            alpha = alpha + G
+        y_approx = u[..., :k_max] @ alpha
     else:
         y_approx = y
         u_now = None
         coeffs = None
         sigs = None
     if ret:
-        return u_now, coeffs, sigs
+        return G
     return y_approx
 
 
@@ -438,7 +431,7 @@ class Strong_RRAE_MLP(Autoencoder):
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
-class VAR_Strong_RRAE_MLP(Autoencoder):
+class VAR_Strong_v3_RRAE_MLP(Autoencoder):
     """Subclass of RRAEs with the strong formulation when the input
     is of dimension (data_size, batch_size).
 
@@ -659,7 +652,6 @@ class VAR_AE_MLP(Autoencoder):
         if return_dist:
             return y[0], y[1]
         return sample(y, self._sample, *args, **kwargs)
-    
 
 
 class IRMAE_MLP(Autoencoder):
@@ -828,6 +820,60 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
 
 
 class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
+    lin_mean: Linear
+    lin_logvar: Linear
+    typ: int
+
+    def __init__(self, channels, height, width, latent_size, k_max, typ="eye", *, key, **kwargs):
+        key, key_m, key_s = jrandom.split(key, 3)
+
+        self.lin_mean = Linear(k_max, k_max, key=key_m)
+        self.lin_logvar = Linear(k_max, k_max, key=key_s)
+        self.typ = typ
+        super().__init__(
+            channels,
+            height,
+            width,
+            latent_size,
+            key=key,
+            **kwargs,
+        )
+    
+    def _perform_in_latent(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
+        
+        apply_basis = kwargs.get("apply_basis")
+        
+        if kwargs.get("get_coeffs") or kwargs.get("get_basis_coeffs"):
+            if return_dist or return_lat_dist:
+                raise ValueError
+            return latent_func_strong_RRAE(self, y, k_max, apply_basis=apply_basis, **kwargs)
+
+        basis, coeffs = latent_func_strong_RRAE(self, y, k_max=k_max, get_basis_coeffs=True, apply_basis=apply_basis)
+        if self.typ == "eye":
+            mean = coeffs
+        elif self.typ == "trainable":
+            mean = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(coeffs)
+        else:
+            raise ValueError("typ must be either 'eye' or 'trainable'")
+        
+        logvar = jax.vmap(self.lin_logvar, in_axes=-1, out_axes=-1)(coeffs)
+
+        if return_dist:
+            return mean, logvar
+
+        std = jnp.exp(0.5 * logvar)
+        if epsilon is not None:
+            if len(epsilon.shape) == 4:
+                epsilon = epsilon[0, 0] # to allow tpu sharding
+            z = mean + epsilon * std
+        else:
+            z = mean
+
+        if return_lat_dist:
+            return basis @ z, mean, logvar
+        return basis @ z
+
+class VAR_Strong_v3_RRAE_CNN(CNN_Autoencoder):
     """Subclass of RRAEs with the strong formulation for inputs of
     dimension (channels, width, height).
     """

@@ -198,4 +198,6 @@ utils.py
 my_*
 gauss*2d_gaussian_shift_scale/*
 2d_gaussian_shift_scale_ready/*
+skf_ft/*2d_gaussian_shift_scale/*
+2d_gaussian_shift_scale_ready/*
 skf_ft/*

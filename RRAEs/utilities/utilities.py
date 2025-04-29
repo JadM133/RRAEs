@@ -167,6 +167,7 @@ def loss_generator(which=None, norm_loss_=None):
             pred = model(input, inv_norm_out=False)
             lat = model.latent(input)
             wv = jnp.array([1.0, beta])
+            wv = jnp.array([1.0, beta])
             sparse_term = sparsity * jnp.log(sparsity / (jnp.mean(lat) + 1e-8)) + (
                 1 - sparsity
             ) * jnp.log((1 - sparsity) / (1 - jnp.mean(lat) + 1e-8))
@@ -247,11 +248,8 @@ def loss_generator(which=None, norm_loss_=None):
                 ),
                 aux
             )
-    elif which == "VAR_Strong":
+    elif which == "VAR_Strong_v3":
         norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
-
-        def lambda_fn(loss, loss_c):
-            return loss_c*jnp.exp(-0.1382*loss)
 
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, *, epsilon, k_max, beta=None, **kwargs):
@@ -261,15 +259,36 @@ def loss_generator(which=None, norm_loss_=None):
             aux = {"loss_rec": loss_rec, "k_max":k_max}
             return loss_rec, aux
 
+    elif which == "VAR_Strong":
+        norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
 
-    elif which == "var":
+        @eqx.filter_value_and_grad(has_aux=True)
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, k_max, beta=None, **kwargs):
+            model = eqx.combine(diff_model, static_model)
+            lat, means, logvars = model.latent(input, epsilon=epsilon, k_max=k_max, return_lat_dist=True)
+            pred = model.decode(lat)
+            wv = jnp.array([1.0, beta])
+            kl_loss = jnp.sum(
+                -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
+            )
+            loss_rec = norm_loss_(pred, out)
+            aux = {
+                "loss rec": loss_rec,
+                "loss kl": kl_loss,
+            }
+            if beta is None:
+                beta = lambda_fn(loss_rec, kl_loss)
+            aux["beta"] = beta
+            return loss_rec + beta*kl_loss, aux
+
+    elif which == "VAE":
         norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
 
         def lambda_fn(loss, loss_c):
             return loss_c*jnp.exp(-0.1382*loss)
 
         @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(diff_model, static_model, input, out, *, epsilon, beta=None, **kwargs):
+        def loss_fun(diff_model, static_model, input, out, idx, epsilon, beta=None, **kwargs):
             model = eqx.combine(diff_model, static_model)
             lat, means, logvars = model.latent(input, epsilon=epsilon, return_lat_dist=True)
             pred = model.decode(lat)
@@ -296,10 +315,12 @@ def loss_generator(which=None, norm_loss_=None):
             lat = model.latent(input)
             pred = model(input, inv_norm_out=False)
             W = find_weight(model)
+            W = find_weight(model)
             dh = lat * (1 - lat)
             dh = dh.T
             loss_contr = jnp.sum(jnp.matmul(dh**2, jnp.square(W)))
             wv = jnp.array([1.0, beta])
+            aux = {"loss": norm_loss_(pred, out), "cont": loss_contr}
             aux = {"loss": norm_loss_(pred, out), "cont": loss_contr}
             return find_weighted_loss([norm_loss_(pred, out), loss_contr], weight_vals=wv), aux
     else:
@@ -663,10 +684,13 @@ def get_data(problem, folder=None, train_size=1000, test_size=10000, **kwargs):
             else:
                 raise ValueError("data is missing")
             data = jnp.expand_dims(data, 0)
-            data = jrandom.permutation(jrandom.key(100), data, axis=-1)
-            perc = 0.8
-            x_train = data[..., : int(perc * data.shape[-1])]
-            x_test = data[..., int(perc * data.shape[-1]) :]
+            orig_shape = data.shape[-1]
+            b = min(range(1, orig_shape + 1), key=lambda b: abs((orig_shape + b - 1) // b - google))
+            x_train = data[..., ::b]
+            import numpy as np
+            mask = np.ones(data.shape[-1], dtype=bool)
+            mask[::b] = False  # Mark indices used in x as False
+            x_test = data[..., mask]
             return (
                 x_train,
                 x_test,

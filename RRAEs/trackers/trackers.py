@@ -21,15 +21,41 @@ class RRAE_Null_Tracker:
     def init(self):
         return {"k_max": self.k_max}
 
-class RRAE_Null_Tracker:
-    def __init__(self, k_max, *args, **kwargs):
+class VRRAE_Null_Tracker:
+    def __init__(self, k_max, sigma, *args, **kwargs):
+        self.sigma = sigma
         self.k_max = k_max
 
     def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
-        return {"k_max": self.k_max}
+        return {"sigma": self.sigma, "k_max": self.k_max}
 
     def init(self):
-        return {"k_max": self.k_max}
+        return {"sigma": self.sigma, "k_max": self.k_max}
+
+
+class VRRAE_sigma_Tracker:
+    def __init__(self, k_max, sigma0=10, sigmaf=3, steps=200, steps_last=1400, jump=3, *args, **kwargs):
+        self.sigma = sigma0
+        self.sigmaf = sigmaf
+        self.jump = jump
+        self.steps = steps
+        self.steps_last = steps_last
+        self.step_c = 0
+        self.k_max = k_max
+        self.st = False
+
+    def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
+        self.step_c += 1
+        if (self.step_c == self.steps) and (self.sigma > self.sigmaf):
+            self.step_c = 0
+            self.sigma = max(self.sigma - self.jump, self.sigmaf)
+        elif (self.step_c == self.steps_last) and (self.sigma == self.sigmaf):
+            self.st = True
+        
+        return {"sigma": self.sigma, "k_max": self.k_max, "stop_train": self.st}
+
+    def init(self):
+        return {"sigma": self.sigma, "k_max": self.k_max}
 
 
 class RRAE_gen_Tracker:
@@ -41,7 +67,6 @@ class RRAE_gen_Tracker:
         patience_not_right=500,
         max_steps=1000,
         perf_loss=0,
-        init_steps=jnp.inf,
         eps_0=1,
         eps_perc=5,
         save_steps=20
@@ -49,7 +74,6 @@ class RRAE_gen_Tracker:
 
         self.patience_c_conv = 0
         self.patience_c = 0
-        self.steps_c = 0
         self.steps_c = 0
         self.k_now = k_init
 
@@ -74,15 +98,12 @@ class RRAE_gen_Tracker:
         self.max_patience = jnp.inf
         self.save_steps = save_steps
         self.stop_train = False
-        self.init_steps = init_steps
-        self.count_init_steps = 0
 
     def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
         save = False
         break_ = False
         self.prev_k_steps += 1
         if self.init_phase:
-            self.count_init_steps += 1
             if self.patience_init is not None:
                 if (
                     jnp.abs(current_loss - prev_avg_loss) / jnp.abs(prev_avg_loss) * 100
@@ -95,12 +116,9 @@ class RRAE_gen_Tracker:
                         self.ideal_loss = prev_avg_loss
                         print(f"Ideal loss is {self.ideal_loss}")
                         print("Stagnated")
-
-            if (current_loss < self.perf_loss) or (self.count_init_steps == self.init_steps):
-                if self.perf_loss != 0:
-                    self.ideal_loss = self.perf_loss
-                else:
-                    self.ideal_loss = current_loss
+            
+            if current_loss < self.perf_loss:
+                self.ideal_loss = self.perf_loss
                 self.init_phase = False
                 self.patience_c = 0
                 print(f"Ideal loss is {self.ideal_loss}")
@@ -136,7 +154,8 @@ class RRAE_gen_Tracker:
                         save = True
                         self.converged = True
                         break_ = True
-
+                        print("adding one and shit")
+                        
         else:
             if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_perc:
                 self.patience_c += 1
@@ -146,16 +165,7 @@ class RRAE_gen_Tracker:
                     save = True
                     self.stop_train = True
                     print("Stopping training")
-            if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_perc:
-                self.patience_c += 1
-                if self.patience_c == self.patience:
-                    self.patience_c = 0
-                    self.prev_k_steps = 0
-                    save = True
-                    self.stop_train = True
-                    print("Stopping training")
 
-        return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
         return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
 
     def init(self):
@@ -177,15 +187,12 @@ class RRAE_pars_Tracker:
 
         self.patience = patience
         self.eps = eps_perc
-        self.eps = eps_perc
         self.patience_c = 0
         self.change_prot = False
         self.loss_prev_mode = jnp.inf
         self.wait_counter = 0
         self.max_wait = max_wait
         self.k_now = k_init
-        self.converged = False
-        self.stop_train = False
         self.converged = False
         self.stop_train = False
 
@@ -199,7 +206,7 @@ class RRAE_pars_Tracker:
                 if self.patience_c == self.patience:
                     self.patience_c = 0
                     save = True
-
+                
                     if jnp.abs(prev_avg_loss - self.loss_prev_mode)/jnp.abs(self.loss_prev_mode)*100 <  self.eps:
                         import pdb; pdb.set_trace()
                         self.k_now -= 1
@@ -217,9 +224,20 @@ class RRAE_pars_Tracker:
                     self.prev_k_steps = 0
                     save = True
                     self.stop_train = True
-                    print("Stopping training")
-
+                    print("Stopping training")    
+        
         return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
+
+    def init(self):
+        return {"k_max": self.k_now}
+
+
+class RRAE_fixed_Tracker:
+    def __init__(self, k_init):
+        self.k_now = k_init
+
+    def __call__(self, *args, **kwargs):
+        return {"k_max": self.k_now}
 
     def init(self):
         return {"k_max": self.k_now}

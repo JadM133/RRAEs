@@ -162,8 +162,6 @@ class Print_Info(PrettyTable):
     def __str__(self):
         return self.print_obj.__str__()
 
-            
-                       
 
 class Trainor_class:
     def __init__(
@@ -234,7 +232,7 @@ class Trainor_class:
         fix_comp=lambda _: (),
         tracker=Null_Tracker(),
         stagn_window=20,
-        eps_fn=lambda bs: None,
+        eps_fn=lambda lat, bs: None,
         optimizer=optax.adabelief,
         verbatim = {
                     "print_type": "std",
@@ -242,6 +240,7 @@ class Trainor_class:
                     "printer_settings":{"padding_width": 3}
                     },
         save_losses=False,
+        latent_size=0,
         *,
         training_key,
     ):
@@ -349,17 +348,18 @@ class Trainor_class:
                               ),
                    ):
                     start_time = time.perf_counter()             # Start time
-                    
-                    out_b = self.model.norm_out(pre_func_out(out_b))    # Pre-process batch out values
+                    input_b = input_b.T
+                    out_b = self.model.norm_out(pre_func_out(out_b)).T    # Pre-process batch out values
                     input_b = pre_func_inp(input_b)              # Pre-process batch input values 
-                    epsilon = eps_fn(input_b.shape[-1])
+                    epsilon = eps_fn(latent_size, input_b.shape[-1])
+
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
 
                     # Compute loss
                     loss, model, opt_state, aux = make_step(
                                                                 model,
-                                                                input_b.T,
-                                                                out_b.T,
+                                                                input_b,
+                                                                out_b,
                                                                 opt_state,
                                                                 idx_b,
                                                                 epsilon,
@@ -409,6 +409,9 @@ class Trainor_class:
                                 i += 1
                                 new_filename = f"{orig}_{i}.pkl"
                             checkpoint_filename = new_filename
+                        self.save_model(checkpoint_filename)
+                        last_saved = checkpoint_filename
+
                         self.save_model(checkpoint_filename)
                         last_saved = checkpoint_filename
 
@@ -648,6 +651,7 @@ class Trainor_class:
                 os.makedirs(self.folder)
         else:
             filename = os.path.join(self.folder, filename)
+            filename = os.path.join(self.folder, filename)
             if not os.path.exists(filename):
                 with open(filename, "a") as temp_file:
                     pass
@@ -803,9 +807,7 @@ class RRAE_Trainor_class(Trainor_class):
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, epsilon, basis):
             model = eqx.combine(diff_model, static_model)
-            pred = model(
-                input, apply_basis=basis, inv_norm_out=False
-            )  # Note: here was self.basis, thus basis arg was not being used
+            pred = model(input, epsilon=epsilon, apply_basis=basis, inv_norm_out=False)
             aux = {"loss": norm_loss_(pred, out)}
             return norm_loss_(pred, out), aux
 
@@ -839,7 +841,7 @@ class RRAE_Trainor_class(Trainor_class):
         call_func=None,
     ):
 
-        call_func = lambda x: self.model(pre_func_inp(x), apply_basis=self.basis, novar=True)
+        call_func = lambda x: self.model(pre_func_inp(x), apply_basis=self.basis, epsilon=None)
         res = super().evaluate(
             x_train_o,
             y_train_o,
