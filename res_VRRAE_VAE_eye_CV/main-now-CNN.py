@@ -136,6 +136,7 @@ if __name__ == "__main__":
                 width=x_train.shape[2],
                 channels=x_train.shape[0],
                 k_max=k_max,
+                typ="eye",
                 folder=f"{problem}/{method}_{problem}_{seed}/",
                 file=f"{method}_{problem}_{seed}.pkl",
                 norm_in="None",

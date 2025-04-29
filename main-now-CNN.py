@@ -53,7 +53,7 @@ if __name__ == "__main__":
     for seed in [0, 1, 2, 3, 4]:
         _10_errors = []
         for j in range(1):
-            problem = "2d_gaussian_shift_scale"
+            problem = "CIFAR-10"
             (
                 x_train,
                 x_test,
@@ -72,7 +72,7 @@ if __name__ == "__main__":
             # x_train = x_train[..., :144*4]
             # y_train = x_train
             # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-            method = "VRRAE-VAE"
+            method = "VAR_Strong"
 
             match method:
                 case "VAR_Strong":
@@ -99,7 +99,7 @@ if __name__ == "__main__":
                     model_cls = Vanilla_AE_CNN
 
             loss_type = (
-                "VRRAE-VAE"  # Specify the loss type, according to the model chosen.
+                "VAR_Strong"  # Specify the loss type, according to the model chosen.
             )
             match method:
                 case "VAR_Strong":
@@ -136,6 +136,7 @@ if __name__ == "__main__":
                 width=x_train.shape[2],
                 channels=x_train.shape[0],
                 k_max=k_max,
+                typ="eye",
                 folder=f"{problem}/{method}_{problem}_{seed}/",
                 file=f"{method}_{problem}_{seed}.pkl",
                 norm_in="None",
@@ -182,7 +183,7 @@ if __name__ == "__main__":
                 #}
                 "loss_kwargs": {"beta": 0.001},
                 "eps_fn": eps_fn,
-                # "tracker": VRRAE_sigma_Tracker(k_max, sigma0=5, sigmaf=0, jump=3, steps=300, steps_last=1000), # , perf_loss=42),
+                "tracker": VRRAE_Null_Tracker(k_max, sigma=1) # 0=5, sigmaf=0, jump=3, steps=300, steps_last=1000), # , perf_loss=42),
             }
 
 
