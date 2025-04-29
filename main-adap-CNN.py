@@ -86,7 +86,7 @@ if __name__ == "__main__":
         "lr_st": [1e-3, 1e-4, 1e-7, 1e-8],
         "print_every": 1,
         "loss_type": loss_type,
-        "tracker": RRAE_gen_Tracker(k_init=k_max, init_steps=50)
+        "tracker": RRAE_gen_Tracker(k_init=k_max, patience_init=50)
     }
 
     # The tracker above will specify the adaptive scheme to be used. Gen means generic and it
