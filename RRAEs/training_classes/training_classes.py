@@ -174,20 +174,18 @@ class Trainor_class:
         out_train=None,
         norm_in="None",
         norm_out="None",
-        model_create_func=None,
+        count=1,
         **kwargs,
     ):
         if model_cls is not None:
-            if model_create_func is None:
-                self.model = Norm(
-                    BaseClass(model_cls(**kwargs), map_axis=map_axis),
-                    in_train=in_train,
-                    out_train=out_train,
-                    norm_in=norm_in,
-                    norm_out=norm_out,
-                )
-            else:
-                self.model = model_create_func(model_cls, map_axis, in_train, out_train, norm_in, norm_out, **kwargs)
+            self.model = Norm(
+                BaseClass(model_cls(**kwargs, count=count), map_axis=map_axis, count=count),
+                in_train=in_train,
+                out_train=out_train,
+                norm_in=norm_in,
+                norm_out=norm_out,
+            )
+            
             params_in = self.model.params_in
             params_out = self.model.params_out
         else:

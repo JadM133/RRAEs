@@ -28,7 +28,7 @@ class BaseClass(eqx.Module):
     model: eqx.Module
     count: int
 
-    def __init__(self, model, map_axis=None, count=1, *args, **kwargs):
+    def __init__(self, model, map_axis=None, *args, count=1, **kwargs):
         self.map_axis = map_axis
         self.model = model
         self.count = count
@@ -117,6 +117,7 @@ class Autoencoder(eqx.Module):
     map_latent: bool
     norm_funcs: list
     inv_norm_funcs: list
+    count: int
 
     """Abstract base class for all Autoencoders.
 
@@ -154,6 +155,7 @@ class Autoencoder(eqx.Module):
         map_latent=True,
         *,
         key,
+        count=1,
         kwargs_enc={},
         kwargs_dec={},
         **kwargs,
@@ -176,7 +178,7 @@ class Autoencoder(eqx.Module):
                 key=key_e,
                 **kwargs_enc,
             )
-            self.encode = BaseClass(model_cls, -1)
+            self.encode = BaseClass(model_cls, -1, count=count)
 
         else:
             self.encode = _encode
@@ -196,10 +198,11 @@ class Autoencoder(eqx.Module):
                 key=key_d,
                 **kwargs_dec,
             )
-            self.decode = BaseClass(model_cls, -1)
+            self.decode = BaseClass(model_cls, -1, count=count)
         else:
             self.decode = _decode
 
+        self.count = count
         self.map_latent = map_latent
         self.inv_norm_funcs = ["decode"]
         self.norm_funcs = ["encode", "latent"]
@@ -209,7 +212,9 @@ class Autoencoder(eqx.Module):
             new_perform_in_latent = lambda x: self._perform_in_latent(
                 x, *args, **kwargs
             )
-            return jax.vmap(new_perform_in_latent, in_axes=[-1], out_axes=-1)(y)
+            for _ in range(self.count):
+                new_perform_in_latent = jax.vmap(new_perform_in_latent, in_axes=-1, out_axes=-1) 
+            return new_perform_in_latent(y)
         return self._perform_in_latent(y, *args, **kwargs)
 
     def __call__(self, x, *args, **kwargs):
@@ -724,6 +729,7 @@ class CNN_Autoencoder(Autoencoder):
         latent_size_after=None,
         *,
         key,
+        count=1,
         kwargs_enc={},
         kwargs_dec={},
         **kwargs,
@@ -741,7 +747,7 @@ class CNN_Autoencoder(Autoencoder):
             key=key1,
             **kwargs_enc,
         )
-        _encode = BaseClass(encode, -1)
+        _encode = BaseClass(encode, -1, count=count)
 
         decode = MLP_with_CNNs_trans(
             width=width,
@@ -751,7 +757,7 @@ class CNN_Autoencoder(Autoencoder):
             key=key2,
             **kwargs_dec,
         )
-        _decode = BaseClass(decode, -1)
+        _decode = BaseClass(decode, -1, count=count)
 
         super().__init__(
             None,
@@ -760,6 +766,7 @@ class CNN_Autoencoder(Autoencoder):
             map_latent=False,
             _decode=_decode,
             key=key3,
+            count=count,
             **kwargs,
         )
 
@@ -769,11 +776,10 @@ class VAR_AE_CNN(CNN_Autoencoder):
     lin_logvar: Linear
     latent_size: int
 
-    def __init__(self, channels, height, width, latent_size, *, key, **kwargs):
+    def __init__(self, channels, height, width, latent_size, *, key, count=1, **kwargs):
         key, key_m, key_s = jrandom.split(key, 3)
-
-        self.lin_mean = Linear(latent_size, latent_size, key=key_m)
-        self.lin_logvar = Linear(latent_size, latent_size, key=key_s)
+        self.lin_mean = BaseClass(Linear(latent_size, latent_size, key=key_m), -1, count=count)
+        self.lin_logvar = BaseClass(Linear(latent_size, latent_size, key=key_s), -1, count=count)
         self.latent_size = latent_size
         super().__init__(
             channels,
@@ -781,12 +787,13 @@ class VAR_AE_CNN(CNN_Autoencoder):
             width,
             latent_size,
             key=key,
+            count=count,
             **kwargs,
         )
     
     def _perform_in_latent(self, y, *args, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
-        mean = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y)
-        logvar = jax.vmap(self.lin_logvar, in_axes=-1, out_axes=-1)(y)
+        mean = self.lin_mean(y)
+        logvar = self.lin_logvar(y)
 
         if return_dist:
             return mean, logvar
@@ -828,11 +835,11 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
     lin_logvar: Linear
     typ: int
 
-    def __init__(self, channels, height, width, latent_size, k_max, typ="eye", *, key, **kwargs):
+    def __init__(self, channels, height, width, latent_size, k_max, typ="eye", *, key, count=1, **kwargs):
         key, key_m, key_s = jrandom.split(key, 3)
 
-        self.lin_mean = Linear(k_max, k_max, key=key_m)
-        self.lin_logvar = Linear(k_max, k_max, key=key_s)
+        self.lin_mean = BaseClass(Linear(k_max, k_max, key=key_m), -1, count=count)
+        self.lin_logvar = BaseClass(Linear(k_max, k_max, key=key_s), -1, count=count)
         self.typ = typ
         super().__init__(
             channels,
@@ -840,6 +847,7 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
             width,
             latent_size,
             key=key,
+            count=count,
             **kwargs,
         )
     
@@ -856,11 +864,11 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
         if self.typ == "eye":
             mean = coeffs
         elif self.typ == "trainable":
-            mean = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(coeffs)
+            mean = self.lin_mean(coeffs)
         else:
             raise ValueError("typ must be either 'eye' or 'trainable'")
         
-        logvar = jax.vmap(self.lin_logvar, in_axes=-1, out_axes=-1)(coeffs)
+        logvar = self.lin_logvar(coeffs)
 
         if return_dist:
             return mean, logvar
