@@ -26,17 +26,21 @@ _identity = doc_repr(lambda x, *args, **kwargs: x, "lambda x: x")
 class BaseClass(eqx.Module):
     map_axis: int
     model: eqx.Module
+    count: int
 
-    def __init__(self, model, map_axis=None, *args, **kwargs):
+    def __init__(self, model, map_axis=None, count=1, *args, **kwargs):
         self.map_axis = map_axis
         self.model = model
+        self.count = count
 
     def __call__(self, x, *args, **kwargs):
         if self.map_axis is None:
             return self.model(x, *args, **kwargs)
         fn = lambda x: self.model(x, *args, **kwargs)
-        return jax.vmap(fn, in_axes=(self.map_axis,), out_axes=self.map_axis)(x)
-        return jax.vmap(fn, in_axes=(self.map_axis,), out_axes=self.map_axis)(x)
+        for _ in range(self.count):
+            fn = jax.vmap(fn, in_axes=(self.map_axis,), out_axes=self.map_axis)
+        out = fn(x)
+        return out
 
     def eval_with_batches(
         self,
