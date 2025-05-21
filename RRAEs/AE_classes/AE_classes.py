@@ -113,7 +113,6 @@ class Autoencoder(eqx.Module):
     encode: MLP_with_linear
     decode: MLP_with_linear
     _perform_in_latent: callable
-    perform_in_latent: callable
 
     """Abstract base class for all Autoencoders.
 
@@ -183,9 +182,7 @@ class Autoencoder(eqx.Module):
             self._perform_in_latent = _identity
 
         if map_latent:
-            self.perform_in_latent = BaseClass(self._perform_in_latent)
-        else:
-            self.perform_in_latent = self._perform_in_latent
+            self._perform_in_latent = BaseClass(self._perform_in_latent)
             
         if _decode is None:
             if "width_size" not in kwargs_dec.keys():
@@ -205,7 +202,10 @@ class Autoencoder(eqx.Module):
 
     def __call__(self, x, *args, **kwargs):
         return self.decode(self.perform_in_latent(self.encode(x), *args, **kwargs))
-
+        
+    def perform_in_latent(x, *args, **kwargs):
+        return self._perform_in_latent(x, *args, **kwargs)
+        
     def latent(self, x, *args, **kwargs):
         return self.perform_in_latent(self.encode(x), *args, **kwargs)
 
