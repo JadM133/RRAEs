@@ -179,7 +179,7 @@ class Trainor_class:
     ):
         if model_cls is not None:
             self.model = Norm(
-                BaseClass(model_cls(**kwargs, count=count), map_axis=map_axis, count=count),
+                BaseClass(model_cls(**kwargs), map_axis=map_axis, count=count),
                 in_train=in_train,
                 out_train=out_train,
                 norm_in=norm_in,
