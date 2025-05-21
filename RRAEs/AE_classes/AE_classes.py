@@ -183,6 +183,11 @@ class Autoencoder(eqx.Module):
         if not hasattr(self, "_perform_in_latent"):
             self._perform_in_latent = _identity
 
+        if map_latent:
+            self.perform_in_latent = BaseClass(self._perform_in_latent)
+        else:
+            self.perform_in_latent = self._perform_in_latent
+            
         if _decode is None:
             if "width_size" not in kwargs_dec.keys():
                 kwargs_dec["width_size"] = 64
@@ -200,16 +205,6 @@ class Autoencoder(eqx.Module):
             self.decode = _decode
 
         self.map_latent = map_latent
-
-    def perform_in_latent(self, y, *args, **kwargs):
-        if self.map_latent:
-            new_perform_in_latent = lambda x: self._perform_in_latent(
-                x, *args, **kwargs
-            )
-            for _ in range(self.count):
-                new_perform_in_latent = jax.vmap(new_perform_in_latent, in_axes=-1, out_axes=-1) 
-            return new_perform_in_latent(y)
-        return self._perform_in_latent(y, *args, **kwargs)
 
     def __call__(self, x, *args, **kwargs):
         return self.decode(self.perform_in_latent(self.encode(x), *args, **kwargs))
