@@ -215,6 +215,22 @@ class Autoencoder(eqx.Module):
         return self.perform_in_latent(self.encode(x), *args, **kwargs)
 
 
+class Test_AE_for_Norm(Autoencoder):
+    def __init__(
+        self,
+        in_size,
+        latent_size,
+        **kwargs,
+    ):
+
+        super().__init__(
+            in_size,
+            latent_size,
+            _encode=_identity,
+            _decode=_identity,
+            **kwargs,
+        )
+
 def latent_func_strong_RRAE(
     self,
     y,
