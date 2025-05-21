@@ -86,7 +86,6 @@ if __name__ == "__main__":
             "padding": 1,
             # "final_activation": lambda x: jnn.sigmoid(x), # x of shape (C, D, D)
         },
-        count=1,
         key=jrandom.PRNGKey(500),
     )
 
