@@ -63,6 +63,7 @@ if __name__ == "__main__":
             "depth": 6,
         },
         out_train=x_train,
+        count=1,
         key=jrandom.PRNGKey(0),
     )
 
