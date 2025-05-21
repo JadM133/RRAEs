@@ -113,8 +113,7 @@ class Autoencoder(eqx.Module):
     encode: MLP_with_linear
     decode: MLP_with_linear
     _perform_in_latent: callable
-    _perform_in_latent: callable
-    map_latent: bool
+    perform_in_latent: callable
 
     """Abstract base class for all Autoencoders.
 
@@ -203,8 +202,6 @@ class Autoencoder(eqx.Module):
             self.decode = BaseClass(model_cls, -1, count=count)
         else:
             self.decode = _decode
-
-        self.map_latent = map_latent
 
     def __call__(self, x, *args, **kwargs):
         return self.decode(self.perform_in_latent(self.encode(x), *args, **kwargs))
