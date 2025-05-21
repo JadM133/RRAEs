@@ -203,7 +203,7 @@ class Autoencoder(eqx.Module):
     def __call__(self, x, *args, **kwargs):
         return self.decode(self.perform_in_latent(self.encode(x), *args, **kwargs))
         
-    def perform_in_latent(x, *args, **kwargs):
+    def perform_in_latent(self, x, *args, **kwargs):
         return self._perform_in_latent(x, *args, **kwargs)
         
     def latent(self, x, *args, **kwargs):
