@@ -115,9 +115,6 @@ class Autoencoder(eqx.Module):
     _perform_in_latent: callable
     _perform_in_latent: callable
     map_latent: bool
-    norm_funcs: list
-    inv_norm_funcs: list
-    count: int
 
     """Abstract base class for all Autoencoders.
 
@@ -202,10 +199,7 @@ class Autoencoder(eqx.Module):
         else:
             self.decode = _decode
 
-        self.count = count
         self.map_latent = map_latent
-        self.inv_norm_funcs = ["decode"]
-        self.norm_funcs = ["encode", "latent"]
 
     def perform_in_latent(self, y, *args, **kwargs):
         if self.map_latent:
