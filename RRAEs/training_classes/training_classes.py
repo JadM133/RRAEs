@@ -690,14 +690,15 @@ class Trainor_class:
             self.all_kwargs = dill.load(f)
             self.model_cls = self.all_kwargs["model_cls"]
             kwargs = self.all_kwargs["kwargs"]
-            self.map_axis = self.all_kwargs["map_axis"]
+            self.call_map_axis = self.all_kwargs["call_map_axis"]
+            self.call_map_count = self.all_kwargs["call_map_count"]
             self.params_in = self.all_kwargs["params_in"]
             self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
             kwargs.update(fn_kwargs)
             self.model = Norm(
-                BaseClass(self.model_cls(**kwargs), map_axis=self.map_axis),
+                BaseClass(self.model_cls(**kwargs), map_axis=self.call_map_axis, count=self.call_map_count),
                 norm_in=self.norm_in,
                 norm_out=self.norm_out,
                 params_in=self.params_in,
