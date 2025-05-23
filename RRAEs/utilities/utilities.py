@@ -290,12 +290,12 @@ def loss_generator(which=None, norm_loss_=None):
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, epsilon, beta=None, **kwargs):
             model = eqx.combine(diff_model, static_model)
-            lat, means, logvars = model.latent(input, epsilon=epsilon, return_lat_dist=True)
+            lat, means, logvars = model.latent(input, epsilon=epsilon, length=input.shape[3], return_lat_dist=True)
             pred = model.decode(lat)
-            lat, means, logvars = model.latent(input, return_lat_dist=True)
+            lat, means, logvars = model.latent(input, length=input.shape[3], return_lat_dist=True)
             pred2 = model.decode(lat)
             pred3 = model(input[:, :, :, 0:1], length=input.shape[3])
-            pred4 = model(input)
+            pred4 = model(input, length=input.shape[3])
             wv = jnp.array([1.0, beta])
             kl_loss = jnp.sum(
                 -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))

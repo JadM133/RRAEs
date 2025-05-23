@@ -168,18 +168,18 @@ class Trainor_class:
         self,
         in_train=None,
         model_cls=None,
-        map_axis=None,
         folder="",
         file=None,
         out_train=None,
         norm_in="None",
         norm_out="None",
         call_map_count=0,
+        call_map_axis=0,
         **kwargs,
     ):
         if model_cls is not None:
             self.model = Norm(
-                BaseClass(model_cls(**kwargs), map_axis=map_axis, count=call_map_count),
+                BaseClass(model_cls(**kwargs), map_axis=call_map_axis, count=call_map_count),
                 in_train=in_train,
                 out_train=out_train,
                 norm_in=norm_in,
@@ -198,7 +198,8 @@ class Trainor_class:
             "params_out": params_out,
             "norm_in": norm_in,
             "norm_out": norm_out,
-            "map_axis": map_axis,
+            "call_map_axis": call_map_axis,
+            "call_map_count": call_map_count,
             "model_cls": model_cls,
         }
 

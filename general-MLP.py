@@ -35,7 +35,8 @@ if __name__ == "__main__":
         file="saved_model.pkl",
         norm_in="None",
         norm_out="None",
-        map_axis=-1, # The dimension of your data, to parallelize over.
+        call_map_axis=-1, # The dimension of your data, to parallelize over.
+        call_map_count=1,
         key=jrandom.PRNGKey(0),
     )
 

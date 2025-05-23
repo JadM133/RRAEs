@@ -29,8 +29,6 @@ if __name__ == "__main__":
 
     model_cls = Strong_RRAE_MLP
 
-    model_cls = Test_AE_for_Norm
-
     loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
@@ -62,7 +60,6 @@ if __name__ == "__main__":
     )
 
 
-    pdb.set_trace()
     # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
     # you need to specify training kw arguments (first stage of training with SVD to
     # find the basis), and fine-tuning kw arguments (second stage of training with the
