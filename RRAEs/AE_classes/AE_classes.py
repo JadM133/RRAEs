@@ -1,3 +1,4 @@
+from RRAEs.Parent_classes import config # Always keep the first line
 import jax
 import jax.numpy as jnp
 import pdb
@@ -13,209 +14,18 @@ from RRAEs.utilities import (
 import itertools
 import equinox as eqx
 import jax.random as jrandom
-from equinox._doc_utils import doc_repr
 import warnings
 from tqdm import tqdm
 import numpy as np
 from equinox.nn._linear import Linear
+from RRAEs.Parent_classes import BaseClass
+
+_identity = lambda x, *args, **kwargs: x
+
+Parent_Class = config["Parent_Class"]
 
 
-_identity = doc_repr(lambda x, *args, **kwargs: x, "lambda x: x")
-
-
-class BaseClass(eqx.Module):
-    map_axis: int
-    model: eqx.Module
-    count: int
-
-    def __init__(self, model, map_axis=None, *args, count=1, **kwargs):
-        self.map_axis = map_axis
-        self.model = model
-        self.count = count
-
-    def __call__(self, x, *args, **kwargs):
-        if self.map_axis is None:
-            return self.model(x, *args, **kwargs)
-        fn = lambda x: self.model(x, *args, **kwargs)
-        for _ in range(self.count):
-            fn = jax.vmap(fn, in_axes=(self.map_axis,), out_axes=self.map_axis)
-        out = fn(x)
-        return out
-
-    def eval_with_batches(
-        self,
-        x,
-        batch_size,
-        call_func,
-        end_type="concat_and_resort",
-        str=None,
-        *args,
-        key_idx,
-        **kwargs,
-    ):
-        """Works for array input with data as final dim."""
-        idxs = []
-        all_preds = []
-
-        if str is not None:
-            print(str)
-            fn = lambda x, *args, **kwargs: tqdm(x, *args, **kwargs)
-        else:
-            fn = lambda x, *args, **kwargs: x
-
-        if not (isinstance(x, tuple) or isinstance(x, list)):
-            x = [x]
-        x = [el.T for el in x]
-
-        for _, inputs in fn(
-            zip(
-                itertools.count(start=0),
-                dataloader(
-                    [*x, jnp.arange(0, x[0].shape[0], 1)],
-                    batch_size,
-                    key_idx=key_idx,
-                    once=True,
-                ),
-            ),
-            total=int(x[0].shape[-1] / batch_size),
-        ):
-            input_b = inputs[:-1]
-            idx = inputs[-1]
-
-            input_b = [el.T for el in input_b]
-
-            pred = call_func(*input_b, *args, **kwargs)
-            idxs.append(idx)
-            all_preds.append(pred)
-            if end_type == "first":
-                break
-        idxs = jnp.concatenate(idxs)
-        match end_type:
-            case "concat_and_resort":
-                final_pred = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
-            case "concat":
-                final_pred = jnp.concatenate(all_preds, -1)
-            case "mean":
-                final_pred = sum(all_preds) / len(all_preds)
-            case "sum":
-                final_pred = sum(all_preds)
-            case "first":
-                final_pred = all_preds[0]
-            case _:
-                final_pred = all_preds
-        return final_pred
-
-    def __getattr__(self, name: str):
-        return getattr(self.model, name)
-
-
-class Autoencoder(eqx.Module):
-    encode: MLP_with_linear
-    decode: MLP_with_linear
-    _perform_in_latent: callable
-    norm_funcs: list
-    inv_norm_funcs: list
-
-    """Abstract base class for all Autoencoders.
-
-    You can create your own Autoencoder as a subclass of this one.
-    This class is subclass of eqx.Module so it inherits its behavior.
-    First, it is an ABC so abstract methods, etc. can be used. Also,
-    the class itself, as well as its atributes are PyTrees.
-
-    Attributes
-    ----------
-    encode : function
-        The encoding function.
-    decode : function
-        The decoding function.
-    perform_in_latent : function
-        The function that performs operations in the latent space.
-
-    Note
-    -----
-    In general, the methods are expecting to
-    be the following maps:
-
-    - encode: (..., batch_size) -> (latent_size, batch_size)
-    - perform_in_latent: (latent_size, batch_size) -> (latent_size, batch_size)
-    - decode: (latent_size, batch_size) -> (..., batch_size)
-    """
-
-    def __init__(
-        self,
-        in_size,
-        latent_size,
-        latent_size_after=None,
-        _encode=None,
-        _decode=None,
-        map_latent=True,
-        *,
-        key,
-        count=1,
-        kwargs_enc={},
-        kwargs_dec={},
-        **kwargs,
-    ):
-        key_e, key_d = jrandom.split(key)
-
-        if latent_size_after is None:
-            latent_size_after = latent_size
-
-        if _encode is None:
-            if "width_size" not in kwargs_enc.keys():
-                kwargs_enc["width_size"] = 64
-
-            if "depth" not in kwargs_enc.keys():
-                kwargs_enc["depth"] = 1
-
-            model_cls = MLP_with_linear(
-                in_size=in_size,
-                out_size=latent_size,
-                key=key_e,
-                **kwargs_enc,
-            )
-            self.encode = BaseClass(model_cls, -1, count=count)
-
-        else:
-            self.encode = _encode
-
-        if not hasattr(self, "_perform_in_latent"):
-            self._perform_in_latent = _identity
-
-        if map_latent:
-            self._perform_in_latent = BaseClass(self._perform_in_latent)
-            
-        if _decode is None:
-            if "width_size" not in kwargs_dec.keys():
-                kwargs_dec["width_size"] = 64
-            if "depth" not in kwargs_dec.keys():
-                kwargs_dec["depth"] = 6
-
-            model_cls = MLP_with_linear(
-                in_size=latent_size_after,
-                out_size=in_size,
-                key=key_d,
-                **kwargs_dec,
-            )
-            self.decode = BaseClass(model_cls, -1, count=count)
-        else:
-            self.decode = _decode
-
-        self.inv_norm_funcs = ["decode"]
-        self.norm_funcs = ["encode", "latent"]
-
-    def __call__(self, x, *args, **kwargs):
-        return self.decode(self.perform_in_latent(self.encode(x), *args, **kwargs))
-        
-    def perform_in_latent(self, x, *args, **kwargs):
-        return self._perform_in_latent(x, *args, **kwargs)
-        
-    def latent(self, x, *args, **kwargs):
-        return self.perform_in_latent(self.encode(x), *args, **kwargs)
-
-
-class Test_AE_for_Norm(Autoencoder):
+class Test_AE_for_Norm(Parent_Class):
     def __init__(
         self,
         in_size,
@@ -268,18 +78,18 @@ def latent_func_strong_RRAE(
                 raise ValueError("Can not find right singular vector when projecting on basis")
             return apply_basis.T @ y
         return apply_basis @ apply_basis.T @ y
-        
+
     k_max = -1 if k_max is None else k_max
-    
+
     if get_basis_coeffs or get_coeffs:
         u, s, v = stable_SVD(y)
-        
+
         if isinstance(k_max, int):
             k_max = [k_max]
 
         u_now = [u[:, :k] for k in k_max]
         coeffs = [jnp.multiply(v[:k, :], jnp.expand_dims(s[:k], -1)) for k in k_max]
-        
+
         if len(k_max) == 1:
             u_now = u_now[0]
             coeffs = coeffs[0]
@@ -297,12 +107,12 @@ def latent_func_strong_RRAE(
 
         if k_max is None:
             raise ValueError("k_max was not given when truncation is required.")
-            
+
         if isinstance(k_max, int):
             k_max = [k_max]
-        
+
         y_approx = [(u[..., :k] * s[:k]) @ v[:k] for k in k_max]
-        
+
         if len(k_max) == 1:
             y_approx = y_approx[0]
 
@@ -347,7 +157,7 @@ def latent_func_var_strong_RRAE(
         The latent space after the truncation.
     """
     batch_size = y.shape[-1]
-    I = jnp.eye(batch_size) # *perc_imp     
+    I = jnp.eye(batch_size) # *perc_imp
 
     if apply_basis is not None:
         if get_basis_coeffs or get_right_sing or get_sings:
@@ -355,7 +165,7 @@ def latent_func_var_strong_RRAE(
         if get_coeffs:
             return apply_basis.T @ y
         alpha = apply_basis.T @ y
-      
+
         if epsilon is not None:
             epsilon = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
             epsilon = epsilon*sigma/y.shape[-1]
@@ -383,7 +193,7 @@ def latent_func_var_strong_RRAE(
         u, s, v = stable_SVD(y)
         y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
         alpha = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
-      
+
         if epsilon is not None:
             epsilon = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
             epsilon = epsilon*sigma/y.shape[-1]
@@ -400,7 +210,7 @@ def latent_func_var_strong_RRAE(
     return y_approx
 
 
-class Strong_RRAE_MLP(Autoencoder):
+class Strong_RRAE_MLP(Parent_Class):
     """Subclass of RRAEs with the strong formulation when the input
     is of dimension (data_size, batch_size).
 
@@ -443,11 +253,11 @@ class Strong_RRAE_MLP(Autoencoder):
             kwargs_dec=kwargs_dec,
             **kwargs,
         )
-    
+
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
-class VAR_Strong_v3_RRAE_MLP(Autoencoder):
+class VAR_Strong_v3_RRAE_MLP(Parent_Class):
     """Subclass of RRAEs with the strong formulation when the input
     is of dimension (data_size, batch_size).
 
@@ -489,11 +299,11 @@ class VAR_Strong_v3_RRAE_MLP(Autoencoder):
             kwargs_dec=kwargs_dec,
             **kwargs,
         )
-    
+
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
 
-class Vanilla_AE_MLP(Autoencoder):
+class Vanilla_AE_MLP(Parent_Class):
     """Vanilla Autoencoder.
 
     Subclass for the Vanilla AE, basically the strong RRAE with
@@ -530,7 +340,7 @@ class Vanilla_AE_MLP(Autoencoder):
         )
 
 
-class Strong_Dynamics_RRAE_MLP(Autoencoder):
+class Strong_Dynamics_RRAE_MLP(Parent_Class):
     DMD_W: Linear
 
     """Vanilla Autoencoder.
@@ -575,7 +385,7 @@ class Strong_Dynamics_RRAE_MLP(Autoencoder):
         )
 
 
-class Weak_RRAE_MLP(Autoencoder):
+class Weak_RRAE_MLP(Parent_Class):
     v_vt: v_vt_class
 
     """Weak Rank Reduction Autoencoder. We define it as a
@@ -586,7 +396,7 @@ class Weak_RRAE_MLP(Autoencoder):
     -----------------------
     v_vt : v_vt_class
         A class the include two trainable matrices v, and vt
-        that can approximate the latent space in the weak 
+        that can approximate the latent space in the weak
         formulation.
     """
 
@@ -630,7 +440,7 @@ def sample(y, sample_cls, k_max=None, epsilon=None, *args, **kwargs):
         )
 
 
-class VAR_AE_MLP(Autoencoder):
+class VAR_AE_MLP(Parent_Class):
     _sample: Sample
     lin_mean: Linear
     lin_logvar: Linear
@@ -660,7 +470,7 @@ class VAR_AE_MLP(Autoencoder):
             kwargs_enc=kwargs_enc,
             kwargs_dec=kwargs_dec,
         )
-    
+
     def _perform_in_latent(self, y, *args, return_dist=False, **kwargs):
         y = jax.vmap(self.lin_mean, in_axes=-1, out_axes=-1)(y), jax.vmap(
             self.lin_logvar, in_axes=-1, out_axes=-1
@@ -670,7 +480,7 @@ class VAR_AE_MLP(Autoencoder):
         return sample(y, self._sample, *args, **kwargs)
 
 
-class IRMAE_MLP(Autoencoder):
+class IRMAE_MLP(Parent_Class):
     def __init__(
         self,
         in_size,
@@ -726,7 +536,7 @@ class LoRAE_MLP(IRMAE_MLP):
         )
 
 
-class CNN_Autoencoder(Autoencoder):
+class CNN_Autoencoder(Parent_Class):
     def __init__(
         self,
         channels,
@@ -797,7 +607,7 @@ class VAR_AE_CNN(CNN_Autoencoder):
             count=count,
             **kwargs,
         )
-    
+
     def _perform_in_latent(self, y, *args, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
         mean = self.lin_mean(y)
         logvar = self.lin_logvar(y)
@@ -832,7 +642,7 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
             key=key,
             **kwargs,
         )
-    
+
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
@@ -857,11 +667,11 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
             count=count,
             **kwargs,
         )
-    
+
     def _perform_in_latent(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
-        
+
         apply_basis = kwargs.get("apply_basis")
-        
+
         if kwargs.get("get_coeffs") or kwargs.get("get_basis_coeffs"):
             if return_dist or return_lat_dist:
                 raise ValueError
@@ -874,7 +684,7 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
             mean = self.lin_mean(coeffs)
         else:
             raise ValueError("typ must be either 'eye' or 'trainable'")
-        
+
         logvar = self.lin_logvar(coeffs)
 
         if return_dist:
@@ -908,7 +718,7 @@ class VAR_Strong_v3_RRAE_CNN(CNN_Autoencoder):
             key=key,
             **kwargs,
         )
-    
+
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
 
@@ -939,7 +749,7 @@ class Weak_RRAE_CNN(CNN_Autoencoder):
     -----------------------
     v_vt : v_vt_class
         A class the include two trainable matrices v, and vt
-        that can approximate the latent space in the weak 
+        that can approximate the latent space in the weak
         formulation.
     """
 

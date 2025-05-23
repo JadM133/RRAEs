@@ -69,7 +69,7 @@ class Test_AEs_shapes:
         )
         y = model.encode(x)
         assert y.shape == (latent, num_samples)
-        assert len(model.encode.layers[-2].layers_l) == 2
+        assert len(model._encode.layers[-2].layers_l) == 2
         x = model.decode(y)
         assert x.shape == (channels, width, height, num_samples)
 
@@ -78,6 +78,6 @@ class Test_AEs_shapes:
         model = LoRAE_CNN(x.shape[0], x.shape[1], x.shape[2], latent, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, num_samples)
-        assert len(model.encode.layers[-2].layers_l) == 1
+        assert len(model._encode.layers[-2].layers_l) == 1
         x = model.decode(y)
         assert x.shape == (channels, width, height, num_samples)

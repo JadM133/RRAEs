@@ -18,7 +18,7 @@ from RRAEs.utilities import (
 import warnings
 from RRAEs.utilities import v_print
 from RRAEs.interpolation import Objects_Interpolator_nD
-from RRAEs.AE_classes import BaseClass
+from RRAEs.Parent_classes import BaseClass
 from RRAEs.norm import Norm
 import os
 import time
@@ -174,12 +174,12 @@ class Trainor_class:
         out_train=None,
         norm_in="None",
         norm_out="None",
-        count=1,
+        call_map_count=0,
         **kwargs,
     ):
         if model_cls is not None:
             self.model = Norm(
-                BaseClass(model_cls(**kwargs), map_axis=map_axis, count=count),
+                BaseClass(model_cls(**kwargs), map_axis=map_axis, count=call_map_count),
                 in_train=in_train,
                 out_train=out_train,
                 norm_in=norm_in,
@@ -826,7 +826,7 @@ class RRAE_Trainor_class(Trainor_class):
 
         kwargs.setdefault("loss_kwargs", {}).update({"basis": self.basis})
         
-        fix_comp = lambda model: model.encode.model
+        fix_comp = lambda model: model._encode.model
         print("Fine tuning the basis ...")
         
         super().fit(*args, training_key=key, fix_comp=fix_comp, **kwargs)

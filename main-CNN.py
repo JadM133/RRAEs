@@ -1,11 +1,5 @@
 print("GOT TO IMPORT")
-from RRAEs.AE_classes import (
-    Strong_RRAE_CNN,
-    Weak_RRAE_CNN,
-    Vanilla_AE_CNN,
-    IRMAE_CNN,
-    LoRAE_CNN,
-)
+from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class
 import jax.random as jrandom
 import pdb
@@ -55,7 +49,7 @@ if __name__ == "__main__":
     # Step 3: Specify the archietectures' parameters:
     latent_size = 200  # latent space dimension
     k_max = 64  # number of features in the latent space (after the truncated SVD).
-
+    
     # Step 4: Define your trainor, with the model, data, and parameters.
     # Use RRAE_Trainor_class for the Strong RRAEs, and Trainor_class for other architetures.
     trainor = RRAE_Trainor_class(

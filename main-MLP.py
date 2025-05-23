@@ -1,11 +1,4 @@
-from RRAEs.AE_classes import (
-    Strong_RRAE_MLP,
-    Weak_RRAE_MLP,
-    Vanilla_AE_MLP,
-    IRMAE_MLP,
-    LoRAE_MLP,
-    VAR_AE_MLP,
-)
+from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class  # , Trainor_class
 import jax.random as jrandom
 import pdb
@@ -35,6 +28,8 @@ if __name__ == "__main__":
     method = "Strong"
 
     model_cls = Strong_RRAE_MLP
+
+    model_cls = Test_AE_for_Norm
 
     loss_type = "Strong"  # Specify the loss type, according to the model chosen.
 
@@ -66,6 +61,8 @@ if __name__ == "__main__":
         key=jrandom.PRNGKey(0),
     )
 
+
+    pdb.set_trace()
     # Step 5: Define the kw arguments for training. When using the Strong RRAE formulation,
     # you need to specify training kw arguments (first stage of training with SVD to
     # find the basis), and fine-tuning kw arguments (second stage of training with the

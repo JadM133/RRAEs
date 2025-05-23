@@ -1,2 +1,3 @@
-from .AE_classes import *
+from .AE_classes import VAR_AE_CNN
 from .training_classes import *
+

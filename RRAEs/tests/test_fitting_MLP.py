@@ -37,7 +37,7 @@ def test_fitting(model_cls, sh, lf):
     )
     kwargs = {
         "step_st": [2],
-        "loss_kwargs": {"lambda_nuc": 0.001, "find_layer": lambda model: model.encode.layers_l[0].weight},
+        "loss_kwargs": {"lambda_nuc": 0.001, "find_layer": lambda model: model._encode.layers_l[0].weight},
         "loss_type": lf
     }
     try:

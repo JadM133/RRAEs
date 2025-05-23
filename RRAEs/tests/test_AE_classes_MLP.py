@@ -48,7 +48,7 @@ class Test_AEs_shapes:
         model = IRMAE_MLP(x.shape[0], latent, linear_l=2, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
-        assert len(model.encode.layers_l) == 2
+        assert len(model._encode.layers_l) == 2
         x = model.decode(y)
         assert x.shape == (500, dim_D)
 
@@ -57,7 +57,7 @@ class Test_AEs_shapes:
         model = LoRAE_MLP(x.shape[0], latent, key=jrandom.PRNGKey(0))
         y = model.encode(x)
         assert y.shape == (latent, dim_D)
-        assert len(model.encode.layers_l) == 1
+        assert len(model._encode.layers_l) == 1
         x = model.decode(y)
         assert x.shape == (500, dim_D)
 
@@ -77,7 +77,7 @@ class Test_width:
             raise ValueError("Width is not correctly specified")
         assert all(
             [
-                model.encode.layers[i].weight.shape[0] == true_width[i]
+                model._encode.layers[i].weight.shape[0] == true_width[i]
                 for i in range(depth)
             ]
         )
