@@ -292,10 +292,6 @@ def loss_generator(which=None, norm_loss_=None):
             model = eqx.combine(diff_model, static_model)
             lat, means, logvars = model.latent(input, epsilon=epsilon, length=input.shape[3], return_lat_dist=True)
             pred = model.decode(lat)
-            lat, means, logvars = model.latent(input, length=input.shape[3], return_lat_dist=True)
-            pred2 = model.decode(lat)
-            pred3 = model(input[:, :, :, 0:1], length=input.shape[3])
-            pred4 = model(input, length=input.shape[3])
             wv = jnp.array([1.0, beta])
             kl_loss = jnp.sum(
                 -0.5 * (1 + logvars - jnp.square(means) - jnp.exp(logvars))
@@ -304,9 +300,6 @@ def loss_generator(which=None, norm_loss_=None):
             aux = {
                 "loss rec": loss_rec,
                 "loss kl": kl_loss,
-                "l2": norm_loss_(pred2, out),
-                "l3": norm_loss_(pred3, out),
-                "l4": norm_loss_(pred4, out)
             }
             if beta is None:
                 beta = lambda_fn(loss_rec, kl_loss)

@@ -80,6 +80,8 @@ class BaseClass(eqx.Module):
                 final_pred = jnp.concatenate(all_preds, -1)[..., jnp.argsort(idxs)]
             case "concat":
                 final_pred = jnp.concatenate(all_preds, -1)
+            case "stack":
+                final_pred = jnp.stack(all_preds, -1)
             case "mean":
                 final_pred = sum(all_preds) / len(all_preds)
             case "sum":
@@ -187,3 +189,8 @@ class Autoencoder(eqx.Module):
     def latent(self, x, *args, **kwargs):
         return self.perform_in_latent(self.encode(x), *args, **kwargs)
     
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return None, self.latent(x, *args, **kwargs)
+
+    def decode_coeffs(self, c, *args, **kwargs):
+        return self.decode(x, *args, **kwargs)

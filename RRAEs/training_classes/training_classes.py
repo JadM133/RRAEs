@@ -773,8 +773,6 @@ class RRAE_Trainor_class(Trainor_class):
         else:
             self.batch_size = 16  # default value
 
-        ft_kwargs = merge_dicts(kwargs, ft_kwargs)
-        
         if ft_kwargs:
             self.fine_tune_basis(
                 None, args=args, kwargs=ft_kwargs, key=key1
@@ -793,9 +791,15 @@ class RRAE_Trainor_class(Trainor_class):
         if basis is None:
             inp = args[0] if len(args) > 0 else kwargs["input"]
 
+            if "basis_batch_size" in kwargs:
+                basis_batch_size = kwargs["basis_batch_size"]
+                kwargs.pop("basis_batch_size")
+            else:
+                basis_batch_size = self.batch_size
+
             all_bases = self.model.eval_with_batches(
                 inp,
-                self.batch_size,
+                basis_batch_size,
                 call_func=lambda x: self.model.latent(
                     self.pre_func_inp(x), get_basis_coeffs=True, **self.track_params
                 )[0],
@@ -819,7 +823,6 @@ class RRAE_Trainor_class(Trainor_class):
         #     raise ValueError(
         #         "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
         #     )
-
         if "loss_type" in kwargs :
             pass
         else:
@@ -830,7 +833,6 @@ class RRAE_Trainor_class(Trainor_class):
         
         fix_comp = lambda model: model._encode.model
         print("Fine tuning the basis ...")
-        
         super().fit(*args, training_key=key, fix_comp=fix_comp, **kwargs)
 
     def evaluate(

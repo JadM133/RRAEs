@@ -257,6 +257,12 @@ class Strong_RRAE_MLP(Parent_Class):
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
+
+    def decode_coeffs(self, c, basis, *args, **kwargs):
+        return self.decode(basis @ c, *args, **kwargs)
+
 class VAR_Strong_v3_RRAE_MLP(Parent_Class):
     """Subclass of RRAEs with the strong formulation when the input
     is of dimension (data_size, batch_size).
@@ -302,6 +308,12 @@ class VAR_Strong_v3_RRAE_MLP(Parent_Class):
 
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
+
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
+
+    def decode_coeffs(self, c, basis, *args, **kwargs):
+        return self.decode(basis @ c, *args, **kwargs)
 
 class Vanilla_AE_MLP(Parent_Class):
     """Vanilla Autoencoder.
@@ -647,6 +659,12 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
 
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
+
+    def decode_coeffs(self, c, basis, *args, **kwargs):
+        return self.decode(basis @ c, *args, **kwargs)
+
 class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
     lin_mean: Linear
     lin_logvar: Linear
@@ -702,6 +720,12 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
             return basis @ z, mean, logvar
         return basis @ z
 
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
+
+    def decode_coeffs(self, c, basis, *args, **kwargs):
+        return self.decode(basis @ c, *args, **kwargs)
+
 class VAR_Strong_v3_RRAE_CNN(CNN_Autoencoder):
     """Subclass of RRAEs with the strong formulation for inputs of
     dimension (channels, width, height).
@@ -722,6 +746,12 @@ class VAR_Strong_v3_RRAE_CNN(CNN_Autoencoder):
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
 
+
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
+
+    def decode_coeffs(self, c, basis, *args, **kwargs):
+        return self.decode(basis @ c, *args, **kwargs)
 
 class Vanilla_AE_CNN(CNN_Autoencoder):
     """Vanilla Autoencoder.
