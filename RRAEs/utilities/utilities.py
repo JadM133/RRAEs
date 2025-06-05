@@ -5,7 +5,7 @@ from typing import (
     Union,
 )
 from equinox.nn._linear import Linear
-from equinox.nn import Conv2d, ConvTranspose2d
+from equinox.nn import Conv2d, ConvTranspose2d, Conv1d, ConvTranspose1d
 from equinox._module import field, Module
 import equinox as eqx
 import jax.random as jrandom
@@ -1892,6 +1892,12 @@ class Conv2d_(Conv2d):
             kwargs.pop("output_padding")
         super().__init__(*args, **kwargs)
 
+class Conv1d_(Conv1d):
+    def __init__(self, *args, **kwargs):
+        if "output_padding" in kwargs:
+            kwargs.pop("output_padding")
+        super().__init__(*args, **kwargs)
+
 
 class MLCNN(Module, strict=True):
     layers: tuple[eqx.nn.Conv, ...]
@@ -1912,6 +1918,7 @@ class MLCNN(Module, strict=True):
         final_activation=_identity,
         transpose=False,
         output_padding=None,
+        dimension=2,
         *,
         key,
         kwargs_cnn={},
@@ -1929,7 +1936,11 @@ class MLCNN(Module, strict=True):
         CNN_widths_b = [start_dim] + CNN_widths[:-1]
         CNN_keys = jrandom.split(key, CNNs_num)
         layers = []
-        fn = Conv2d_ if not transpose else ConvTranspose2d
+        if dimension == 2:
+            fn = Conv2d_ if not transpose else ConvTranspose2d
+        elif dimension == 1:
+            fn = Conv1d_ if not transpose else ConvTranspose1d
+
         for i in range(len(CNN_widths)):
             layers.append(
                 fn(
@@ -1987,6 +1998,7 @@ class CNNs_with_MLP(eqx.Module, strict=True):
         dilation=1,
         mlp_width=None,
         mlp_depth=0,
+        dimension=2,
         final_activation=_identity,
         *,
         key,
@@ -2021,12 +2033,19 @@ class CNNs_with_MLP(eqx.Module, strict=True):
             width_CNNs,
             CNNs_num,
             key=key1,
+            dimension=dimension,
             final_activation=_relu,
             **kwargs_cnn,
         )
-        final_Ds = mlcnn(jnp.zeros((channels, height, width))).shape[-2:]
+
+        if dimension == 2:
+            final_Ds = mlcnn(jnp.zeros((channels, height, width))).shape[-2:]
+            fD = final_Ds[0] * final_Ds[1]
+        elif dimension == 1:
+            fD = mlcnn(jnp.zeros((channels, height))).shape[-1]
+
         mlp = MLP_with_linear(
-            final_Ds[0] * final_Ds[1] * last_width,
+            fD * last_width,
             out,
             mlp_width,
             mlp_depth,
@@ -2119,8 +2138,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
 
     layers: tuple[MLCNN, Linear]
     start_dim: int
-    first_D0: int
-    first_D1: int
+    d_shape: int
     out_after_mlp: int
     final_act: Callable
 
@@ -2141,6 +2159,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
         final_activation=_identity,
         mlp_width=None,
         mlp_depth=0,
+        dimension=2,
         *,
         key,
         kwargs_cnn={},
@@ -2148,6 +2167,9 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
     ):
         super().__init__()
         assert CNNs_num == len(width_CNNs)
+
+        width = 10 if width is None else width #  a random value to avoid errors
+
         D0s, D1s = prev_D_CNN_trans(
             height,
             width,
@@ -2176,7 +2198,11 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
             output_padding,
             CNNs_num + 1,
         )
-
+        
+        if dimension == 2:
+            self.d_shape = [first_D0, first_D1]
+        elif dimension == 1:
+            self.d_shape = [first_D0]
 
         key1, key2 = jax.random.split(key, 2)
         mlcnn = MLCNN(
@@ -2188,6 +2214,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
             dilation,
             width_CNNs,
             CNNs_num,
+            dimension=dimension,
             transpose=True,
             output_padding=output_padding,
             final_activation=_relu,
@@ -2205,26 +2232,35 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
 
         mlp = MLP_with_linear(
             inp,
-            out_after_mlp * first_D0 * first_D1,
+            out_after_mlp * int(np.prod(self.d_shape)),
             mlp_width,
             mlp_depth,
             key=key2,
             **kwargs_mlp,
         )
-
-        final_conv = Conv2d(
-            width_CNNs[-1],
-            channels,
-            kernel_size=(1 + (final_D0 - height), 1 + (final_D1 - width)),
-            stride=1,
-            padding=0,
-            dilation=1,
-            key=key2,
-        )
+        if dimension == 2:
+            final_conv = Conv2d(
+                width_CNNs[-1],
+                channels,
+                kernel_size=(1 + (final_D0 - height), 1 + (final_D1 - width)),
+                stride=1,
+                padding=0,
+                dilation=1,
+                key=key2,
+            )
+        elif dimension == 1:
+            final_conv = Conv1d(
+                width_CNNs[-1],
+                channels,
+                kernel_size=(1 + (final_D0 - height)),
+                stride=1,
+                padding=0,
+                dilation=1,
+                key=key2,
+            )
 
         self.start_dim = inp
-        self.first_D0 = first_D0
-        self.first_D1 = first_D1
+        
         self.final_act = doc_repr(
             lambda x: final_activation(x), "lambda x: final_activation(x)"
         )
@@ -2233,7 +2269,7 @@ class MLP_with_CNNs_trans(eqx.Module, strict=True):
 
     def __call__(self, x, *args, **kwargs):
         x = self.layers[0](x)
-        x = jnp.reshape(x, (self.out_after_mlp, self.first_D0, self.first_D1))
+        x = jnp.reshape(x, (self.out_after_mlp, *self.d_shape))
         x = self.layers[1](x)
         x = self.layers[2](x)
         x = self.layers[3](x)

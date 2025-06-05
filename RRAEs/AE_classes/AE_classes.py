@@ -126,7 +126,7 @@ def latent_func_strong_RRAE(
     return y_approx
 
 
-def latent_func_var_strong_RRAE(
+def latent_func_var_v3_strong_RRAE(
     self,
     y,
     k_max=None,
@@ -209,6 +209,38 @@ def latent_func_var_strong_RRAE(
         return G
     return y_approx
 
+def latent_func_var_strong_RRAE(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
+    apply_basis = kwargs.get("apply_basis")
+
+    if kwargs.get("get_coeffs") or kwargs.get("get_basis_coeffs"):
+        if return_dist or return_lat_dist:
+            raise ValueError
+        return latent_func_strong_RRAE(self, y, k_max, apply_basis=apply_basis, **kwargs)
+
+    basis, coeffs = latent_func_strong_RRAE(self, y, k_max=k_max, get_basis_coeffs=True, apply_basis=apply_basis)
+    if self.typ == "eye":
+        mean = coeffs
+    elif self.typ == "trainable":
+        mean = self.lin_mean(coeffs)
+    else:
+        raise ValueError("typ must be either 'eye' or 'trainable'")
+
+    logvar = self.lin_logvar(coeffs)
+
+    if return_dist:
+        return mean, logvar
+
+    std = jnp.exp(0.5 * logvar)
+    if epsilon is not None:
+        if len(epsilon.shape) == 4:
+            epsilon = epsilon[0, 0] # to allow tpu sharding
+        z = mean + epsilon * std
+    else:
+        z = mean
+
+    if return_lat_dist:
+        return basis @ z, mean, logvar
+    return basis @ z
 
 class Strong_RRAE_MLP(Parent_Class):
     """Subclass of RRAEs with the strong formulation when the input
@@ -307,7 +339,7 @@ class VAR_Strong_v3_RRAE_MLP(Parent_Class):
         )
 
     def _perform_in_latent(self, y, *args, **kwargs):
-        return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
+        return latent_func_var_v3_strong_RRAE(self, y, *args, **kwargs)
 
     def get_basis_coeffs(self, x, *args, **kwargs):
         return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
@@ -548,6 +580,7 @@ class LoRAE_MLP(IRMAE_MLP):
         )
 
 
+
 class CNN_Autoencoder(Parent_Class):
     def __init__(
         self,
@@ -559,6 +592,7 @@ class CNN_Autoencoder(Parent_Class):
         *,
         key,
         count=1,
+        dimension=2,
         kwargs_enc={},
         kwargs_dec={},
         **kwargs,
@@ -574,6 +608,7 @@ class CNN_Autoencoder(Parent_Class):
             channels=channels,
             out=latent_size,
             key=key1,
+            dimension=dimension,
             **kwargs_enc,
         )
         _encode = BaseClass(encode, -1, count=count)
@@ -584,6 +619,7 @@ class CNN_Autoencoder(Parent_Class):
             inp=latent_size_after,
             channels=channels,
             key=key2,
+            dimension=dimension,
             **kwargs_dec,
         )
         _decode = BaseClass(decode, -1, count=count)
@@ -687,38 +723,7 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
         )
 
     def _perform_in_latent(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
-
-        apply_basis = kwargs.get("apply_basis")
-
-        if kwargs.get("get_coeffs") or kwargs.get("get_basis_coeffs"):
-            if return_dist or return_lat_dist:
-                raise ValueError
-            return latent_func_strong_RRAE(self, y, k_max, apply_basis=apply_basis, **kwargs)
-
-        basis, coeffs = latent_func_strong_RRAE(self, y, k_max=k_max, get_basis_coeffs=True, apply_basis=apply_basis)
-        if self.typ == "eye":
-            mean = coeffs
-        elif self.typ == "trainable":
-            mean = self.lin_mean(coeffs)
-        else:
-            raise ValueError("typ must be either 'eye' or 'trainable'")
-
-        logvar = self.lin_logvar(coeffs)
-
-        if return_dist:
-            return mean, logvar
-
-        std = jnp.exp(0.5 * logvar)
-        if epsilon is not None:
-            if len(epsilon.shape) == 4:
-                epsilon = epsilon[0, 0] # to allow tpu sharding
-            z = mean + epsilon * std
-        else:
-            z = mean
-
-        if return_lat_dist:
-            return basis @ z, mean, logvar
-        return basis @ z
+        return latent_func_var_strong_RRAE(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs)
 
     def get_basis_coeffs(self, x, *args, **kwargs):
         return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
@@ -831,3 +836,85 @@ class LoRAE_CNN(IRMAE_CNN):
         super().__init__(
             channels, height, width, latent_size, linear_l=1, key=key, **kwargs
         )
+
+
+class CNN1D_Autoencoder(CNN_Autoencoder):
+    def __init__(
+        self,
+        channels,
+        input_dim,
+        latent_size,
+        latent_size_after=None,
+        *,
+        key,
+        count=1,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
+        super().__init__(channels,
+            input_dim,
+            None,
+            latent_size,
+            latent_size_after=latent_size_after,
+            key=key,
+            count=count,
+            dimension=1,
+            kwargs_enc=kwargs_enc,
+            kwargs_dec=kwargs_dec,
+        )
+
+class Strong_RRAE_CNN1D(CNN1D_Autoencoder):
+    """Subclass of RRAEs with the strong formulation for inputs of
+    dimension (channels, width, height).
+    """
+
+    def __init__(self, channels, input_dim, latent_size, k_max, *, key, **kwargs):
+
+        super().__init__(
+            channels,
+            input_dim,
+            latent_size,
+            key=key,
+            **kwargs,
+        )
+
+    def _perform_in_latent(self, y, *args, **kwargs):
+        return latent_func_strong_RRAE(self, y, *args, **kwargs)
+
+
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
+
+    def decode_coeffs(self, c, basis, *args, **kwargs):
+        return self.decode(basis @ c, *args, **kwargs)
+
+
+class VAR_Strong_RRAE_CNN1D(CNN1D_Autoencoder):
+    lin_mean: Linear
+    lin_logvar: Linear
+    typ: int
+
+    def __init__(self, channels, input_dim, latent_size, k_max, typ="eye", *, key, count=1, **kwargs):
+        key, key_m, key_s = jrandom.split(key, 3)
+
+        self.lin_mean = BaseClass(Linear(k_max, k_max, key=key_m), -1, count=count)
+        self.lin_logvar = BaseClass(Linear(k_max, k_max, key=key_s), -1, count=count)
+        self.typ = typ
+        super().__init__(
+            channels,
+            input_dim,
+            latent_size,
+            key=key,
+            count=count,
+            **kwargs,
+        )
+
+    def _perform_in_latent(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
+        return latent_func_var_strong_RRAE(self, y, *args, k_max, epsilon, return_dist, return_lat_dist, **kwargs)
+
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
+
+    def decode_coeffs(self, c, basis, *args, **kwargs):
+        return self.decode(basis @ c, *args, **kwargs)
