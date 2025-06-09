@@ -209,7 +209,7 @@ def latent_func_var_v3_strong_RRAE(
         return G
     return y_approx
 
-def latent_func_var_strong_RRAE(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
+def latent_func_var_strong_RRAE(self, y, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
     apply_basis = kwargs.get("apply_basis")
 
     if kwargs.get("get_coeffs") or kwargs.get("get_basis_coeffs"):
@@ -723,7 +723,7 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
         )
 
     def _perform_in_latent(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
-        return latent_func_var_strong_RRAE(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs)
+        return latent_func_var_strong_RRAE(self, y, k_max, epsilon, return_dist, return_lat_dist, **kwargs)
 
     def get_basis_coeffs(self, x, *args, **kwargs):
         return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
@@ -911,7 +911,7 @@ class VAR_Strong_RRAE_CNN1D(CNN1D_Autoencoder):
         )
 
     def _perform_in_latent(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
-        return latent_func_var_strong_RRAE(self, y, *args, k_max, epsilon, return_dist, return_lat_dist, **kwargs)
+        return latent_func_var_strong_RRAE(self, y, k_max, epsilon, return_dist, return_lat_dist, **kwargs)
 
     def get_basis_coeffs(self, x, *args, **kwargs):
         return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
