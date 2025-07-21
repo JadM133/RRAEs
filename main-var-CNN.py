@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
 
     print(
-        f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)"
+        f"Shape of data is {x_train.shape} (C x H x W x Ntr) and {x_test.shape} (C x H x W x Nt)"
     )
 
 
