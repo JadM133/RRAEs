@@ -13,8 +13,10 @@ if __name__ == "__main__":
     all_errors = []
     all_stds = []
     data_size = 100
-
-    problem = "2d_gaussian_shift_scale"
+    # Below is the synthetic dataset, choose "mnist", "CelebA", or "CIFAR-10" for 
+    # the real world data, you will be asked to download a data folder the first
+    # time you use those.
+    problem = "2d_gaussian_shift_scale" 
     (
         x_train,
         x_test,
