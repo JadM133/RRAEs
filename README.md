@@ -10,7 +10,7 @@ RRAEs or Rank reduction autoencoders are autoencoders include an SVD in the late
 
 This library presents all the required classes for creating customized RRAEs and training them (other architectures such as IRMAE and LoRAE are also available).
 
-To reproduce the results of the VRRAE paper, please refer to main-var-CNN.py
+To reproduce the results of the VRRAE paper, please refer to [this file](main-var-CNN.py)
 
 # Help in installation
 
