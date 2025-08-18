@@ -211,7 +211,10 @@ def latent_func_var_v3_strong_RRAE(
 
 def latent_func_var_strong_RRAE(self, y, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
     apply_basis = kwargs.get("apply_basis")
-
+    
+    if "apply_basis" in kwargs:
+        kwargs.pop("apply_basis")
+        
     if kwargs.get("get_coeffs") or kwargs.get("get_basis_coeffs"):
         if return_dist or return_lat_dist:
             raise ValueError
