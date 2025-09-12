@@ -5,7 +5,7 @@ from typing import (
     Union,
 )
 from equinox.nn._linear import Linear
-from equinox.nn import Conv2d, ConvTranspose2d, Conv1d, ConvTranspose1d
+from equinox.nn import Conv2d, ConvTranspose2d, Conv1d, ConvTranspose1d, Conv3d, ConvTranspose3d
 from equinox._module import field, Module
 import equinox as eqx
 import jax.random as jrandom
@@ -2289,3 +2289,378 @@ class Sample(eqx.Module):
 
     def create_epsilon(self, seed, shape):
         return jrandom.normal(jrandom.key(seed), shape)
+        
+
+
+
+
+
+
+class Conv3d_(Conv3d):
+    def __init__(self, *args, **kwargs):
+        if "output_padding" in kwargs:
+            kwargs.pop("output_padding")
+        super().__init__(*args, **kwargs)
+   
+
+class MLCNN3D(Module, strict=True):
+    layers: tuple[eqx.nn.Conv, ...]
+    activation: Callable
+    final_activation: Callable
+
+    def __init__(
+        self,
+        start_dim,
+        out_dim,
+        stride,
+        padding,
+        kernel_conv,
+        dilation,
+        CNN_widths,
+        CNNs_num,
+        activation=_relu,
+        final_activation=_identity,
+        transpose=False,
+        output_padding=None,
+        *,
+        key,
+        kwargs_cnn={},
+        **kwargs,
+    ):
+        """Note: if provided as lists, activations should be one less than widths.
+        The last activation is specified by "final activation"."""
+
+        CNN_widths = (
+            [CNN_widths] * (CNNs_num - 1) + [out_dim]
+            if not isinstance(CNN_widths, list)
+            else CNN_widths
+        )
+
+        CNN_widths_b = [start_dim] + CNN_widths[:-1]
+        CNN_keys = jrandom.split(key, CNNs_num)
+        layers = []
+        fn = Conv3d_ if not transpose else ConvTranspose3d
+        for i in range(len(CNN_widths)):
+            layers.append(
+                fn(
+                    CNN_widths_b[i],
+                    CNN_widths[i],
+                    kernel_size=kernel_conv,
+                    stride=stride,
+                    padding=padding,
+                    dilation=dilation,
+                    output_padding=output_padding,
+                    key=CNN_keys[i],
+                    **kwargs_cnn,
+                )
+            )
+
+        self.layers = tuple(layers)
+
+        self.activation = [
+            filter_vmap(
+                filter_vmap(lambda: activation, axis_size=w), axis_size=CNNs_num
+            )()
+            for w in CNN_widths
+        ]
+
+        self.final_activation = final_activation
+
+    @jax.named_scope("eqx.nn.MLCNN3D")
+    def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
+        for i, (layer, act) in enumerate(zip(self.layers[:-1], self.activation[:-1])):
+            x = layer(x)
+            layer_activation = jtu.tree_map(lambda x: x[i] if is_array(x) else x, act)
+            x = filter_vmap(lambda a, b: a(b))(layer_activation, x)
+        x = self.final_activation(self.layers[-1](x))
+        return x
+
+
+
+class CNN3D_with_MLP(eqx.Module, strict=True):
+    """Class mainly for creating encoders with CNNs.
+    The encoder is composed of multiple CNNs followed by an MLP.
+    """
+
+    layers: tuple[MLCNN3D, Linear]
+
+    def __init__(
+        self,
+        depth,
+        height,                
+        width,
+        out,
+        channels=1,
+        CNNs_num=4,
+        width_CNNs=[32, 64, 128, 256],
+        kernel_conv=3,
+        stride=2,
+        padding=1,
+        dilation=1,
+        mlp_width=None,
+        mlp_depth=0,
+        final_activation=_identity,
+        *,
+        key,
+        kwargs_cnn={},
+        kwargs_mlp={},
+    ):
+        super().__init__()
+
+        if mlp_depth != 0:
+            if mlp_width is not None:
+                assert (
+                    mlp_width >= out
+                ), "Choose a bigger (or equal) MLP width than the latent space in the encoder."
+            else:
+                mlp_width = out
+
+        assert CNNs_num == len(width_CNNs)
+        key1, key2 = jax.random.split(key, 2)
+
+        try:
+            last_width = width_CNNs[-1]
+        except:
+            last_width = width_CNNs
+
+        mlcnn3d = MLCNN3D(
+            channels,
+            last_width,
+            stride,
+            padding,
+            kernel_conv,
+            dilation,
+            width_CNNs,
+            CNNs_num,
+            key=key1,
+            final_activation=_relu,
+            **kwargs_cnn,
+        )
+        final_Ds = mlcnn3d(jnp.zeros((channels, depth, height, width))).shape[-3:]
+        mlp = MLP_with_linear(
+            final_Ds[0] * final_Ds[1] * final_Ds[2] *last_width,
+            out,
+            mlp_width,
+            mlp_depth,
+            key=key2,
+            **kwargs_mlp,
+        )
+        act = lambda x: final_activation(x)
+        self.layers = tuple([mlcnn3d, mlp, act])
+
+    def __call__(self, x, *args, **kwargs):
+        x = self.layers[0](x)
+        x = jnp.expand_dims(jnp.ravel(x), -1)
+        x = self.layers[1](jnp.squeeze(x))
+        x = self.layers[2](x)
+        return x
+
+
+
+
+
+def prev_D_CNN3D_trans(D0, D1, D2, pad, ker, st, dil, outpad, num, all_D0s=[], all_D1s=[], all_D2s=[]):
+    pad = int_to_lst(pad, 3)
+    ker = int_to_lst(ker, 3)
+    st = int_to_lst(st, 3)
+    dil = int_to_lst(dil, 3)
+    outpad = int_to_lst(outpad, 3)
+
+    if num == 0:
+        return all_D0s, all_D1s , all_D2s
+    
+    all_D0s.append(int(jnp.ceil(D0)))
+    all_D1s.append(int(jnp.ceil(D1)))
+    all_D2s.append(int(jnp.ceil(D2)))    
+
+    return prev_D_CNN3D_trans(
+        (D0 + 2 * pad[0] - dil[0] * (ker[0] - 1) - 1 - outpad[0]) / st[0] + 1,
+        (D1 + 2 * pad[1] - dil[1] * (ker[1] - 1) - 1 - outpad[1]) / st[1] + 1,
+        (D2 + 2 * pad[2] - dil[2] * (ker[2] - 1) - 1 - outpad[2]) / st[2] + 1,
+        pad,
+        ker,
+        st,
+        dil,
+        outpad,
+        num - 1,
+    )
+
+
+def find_padding_conv3dT(D, data_dim0, ker, st, dil, outpad):
+
+    return D
+
+
+def next_CNN3D_trans(O0, O1, O2, pad, ker, st, dil, outpad, num, all_D0s=[], all_D1s=[], all_D2s=[]):
+    pad = int_to_lst(pad, 3)
+    ker = int_to_lst(ker, 3)
+    st = int_to_lst(st, 3)
+    dil = int_to_lst(dil, 3)
+    outpad = int_to_lst(outpad, 3)
+
+    if num == 0:
+        return all_D0s, all_D1s, all_D2s
+    
+    all_D0s.append(int(O0))
+    all_D1s.append(int(O1))
+    all_D2s.append(int(O2))
+
+    return next_CNN3D_trans(
+        (O0 - 1) * st[0] + dil[0] * (ker[0] - 1) - 2 * pad[0] + 1 + outpad[0],
+        (O1 - 1) * st[1] + dil[1] * (ker[1] - 1) - 2 * pad[1] + 1 + outpad[1],
+        (O2 - 1) * st[2] + dil[2] * (ker[2] - 1) - 2 * pad[2] + 1 + outpad[2],
+        pad,
+        ker,
+        st,
+        dil,
+        outpad,
+        num - 1,
+    )
+
+
+def is_conv3dT_valid(D0, D1, D2, data_dim0, data_dim1, data_dim2, pad, ker, st, dil, outpad, nums):
+    all_D0s, all_D1s, all_D2s = next_CNN3D_trans(D0, D1, D2, pad, ker, st, dil, outpad, nums, all_D0s=[], all_D1s=[], all_D2s=[])
+    final_D0 = all_D0s[-1]
+    final_D1 = all_D1s[-1]
+    final_D2 = all_D2s[-1]
+    return final_D0 == data_dim0, final_D1 == data_dim1, final_D2 ==data_dim2, final_D0, final_D1, final_D2
+
+
+
+
+class MLP_with_CNN3D_trans(eqx.Module, strict=True):
+    """Class mainly for creating encoders with CNNs.
+    The encoder is composed of multiple CNNs followed by an MLP.
+    """
+
+    layers: tuple[MLCNN3D, Linear]
+    start_dim: int
+    first_D0: int
+    first_D1: int
+    first_D2: int
+    out_after_mlp: int
+    final_act: Callable
+
+    def __init__(
+        self,
+        depth, 
+        height,               
+        width,
+        inp,
+        channels,
+        out_after_mlp=32,
+        CNNs_num=2,
+        width_CNNs=[64, 32],
+        kernel_conv=3,
+        stride=2,
+        padding=1,
+        dilation=1,
+        output_padding=1,
+        final_activation=_identity,
+        mlp_width=None,
+        mlp_depth=0,
+        *,
+        key,
+        kwargs_cnn={},
+        kwargs_mlp={},
+    ):
+		
+        super().__init__()
+        assert CNNs_num == len(width_CNNs)
+        D0s, D1s, D2s = prev_D_CNN3D_trans(
+            depth,
+            height,
+            width,
+            padding,
+            kernel_conv,
+            stride,
+            dilation,
+            output_padding,
+            CNNs_num + 1,
+            all_D0s=[],
+            all_D1s=[],
+            all_D2s=[],            
+        )
+
+        first_D0 = D0s[-1]
+        first_D1 = D1s[-1]
+        first_D2 = D2s[-1]
+
+        _, _, _, final_D0, final_D1, final_D2 = is_conv3dT_valid(
+            first_D0,
+            first_D1,
+            first_D2,
+            depth,            
+            height,
+            width,
+            padding,
+            kernel_conv,
+            stride,
+            dilation,
+            output_padding,
+            CNNs_num + 1,
+        )
+
+
+        key1, key2 = jax.random.split(key, 2)
+        mlcnn3d = MLCNN3D(
+            out_after_mlp,
+            width_CNNs[-1],
+            stride,
+            padding,
+            kernel_conv,
+            dilation,
+            width_CNNs,
+            CNNs_num,
+            transpose=True,
+            output_padding=output_padding,
+            final_activation=_relu,
+            key=key1,
+            **kwargs_cnn,
+        )
+
+        if mlp_depth != 0:
+            if mlp_width is not None:
+                assert (
+                    mlp_width >= inp
+                ), "Choose a bigger (or equal) MLP width than the latent space in decoder."
+            else:
+                mlp_width = inp
+
+        mlp = MLP_with_linear(
+            inp,
+            out_after_mlp * first_D0 * first_D1 * first_D2,
+            mlp_width,
+            mlp_depth,
+            key=key2,
+            **kwargs_mlp,
+        )
+
+        final_conv = Conv3d(
+            width_CNNs[-1],
+            channels,
+            kernel_size=(1 + (final_D0 - depth), 1 + (final_D1 - height), 1 + (final_D2 - width)),
+            stride=1,
+            padding=0,
+            dilation=1,
+            key=key2,
+        )
+
+        self.start_dim = inp
+        self.first_D0 = first_D0
+        self.first_D1 = first_D1
+        self.first_D2 = first_D2
+        self.final_act = doc_repr(
+            lambda x: final_activation(x), "lambda x: final_activation(x)"
+        )
+        self.layers = tuple([mlp, mlcnn3d, final_conv, self.final_act])
+        self.out_after_mlp = out_after_mlp
+
+    def __call__(self, x, *args, **kwargs):
+        print(x.shape)
+        x = self.layers[0](x)
+        x = jnp.reshape(x, (self.out_after_mlp, self.first_D0, self.first_D1, self.first_D2))
+        x = self.layers[1](x)
+        x = self.layers[2](x)
+        x = self.layers[3](x)
+        return x
