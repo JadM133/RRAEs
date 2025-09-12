@@ -7,10 +7,12 @@ from RRAEs.utilities import (
     v_vt_class,
     CNNs_with_MLP,
     MLP_with_CNNs_trans,
+    CNN3D_with_MLP,
+    MLP_with_CNN3D_trans,
     dataloader,
     MLP_with_linear,
     stable_SVD,
-)
+)   
 import itertools
 import equinox as eqx
 import jax.random as jrandom
@@ -638,7 +640,63 @@ class CNN_Autoencoder(Parent_Class):
             **kwargs,
         )
 
+class CNN3D_Autoencoder(Parent_Class):
+    def __init__(
+        self,
+        depth,   # I add the depth
+        width,
+        height,
+        channels,
+        latent_size,
+        k_max=-1,
+        latent_size_after=None,
+        _perform_in_latent=_identity,
+        *,
+        key,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
+        latent_size_after = (
+            latent_size if latent_size_after is None else latent_size_after
+        )
+        key1, key2, key3 = jrandom.split(key, 3)
 
+        encode = CNN3D_with_MLP(
+            depth=depth,       # I add the depth
+            width=width,
+            height=height,
+            channels=channels,
+            out=latent_size,
+            key=key1,
+            **kwargs_enc,
+        )
+        _encode = BaseClass(encode, -1)
+
+        decode = MLP_with_CNN3D_trans(
+            depth=depth,       # I add the depth
+            width=width,
+            height=height,
+            inp=latent_size_after,
+            channels=channels,
+            key=key2,
+            **kwargs_dec,
+        )
+        _decode = BaseClass(decode, -1)
+
+        super().__init__(
+            None,
+            latent_size,
+            k_max=k_max,
+            _encode=_encode,
+            _perform_in_latent=_perform_in_latent,
+            map_latent=False,
+            _decode=_decode,
+            key=key3,
+            **kwargs,
+        )
+        
+        
 class VAR_AE_CNN(CNN_Autoencoder):
     lin_mean: Linear
     lin_logvar: Linear
@@ -704,6 +762,35 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
     def decode_coeffs(self, c, basis, *args, **kwargs):
         return self.decode(basis @ c, *args, **kwargs)
 
+
+class Strong_RRAE_CNN3D(CNN3D_Autoencoder):
+
+    def __init__(self, depth, width, height, channels, latent_size, k_max, *, key, **kwargs):
+
+        super().__init__(
+            depth,
+            width,
+            height,
+            channels,
+            latent_size,
+            k_max,
+            _perform_in_latent=latent_func_strong_RRAE,
+            key=key,
+            **kwargs,
+        )
+    
+    def _perform_in_latent(self, y, *args, **kwargs):
+        return latent_func_strong_RRAE(self, y, *args, **kwargs)
+
+
+    def get_basis_coeffs(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
+
+    def decode_coeffs(self, c, basis, *args, **kwargs):
+        return self.decode(basis @ c, *args, **kwargs)
+        
+        
+        
 class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
     lin_mean: Linear
     lin_logvar: Linear
