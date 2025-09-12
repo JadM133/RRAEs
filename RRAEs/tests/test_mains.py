@@ -23,7 +23,7 @@ def run_script(script_name):
 
 
 @pytest.mark.parametrize(
-    "script_name", ["main-MLP.py", "main-CNN.py", "general-MLP.py", "main-adap-CNN.py", "main-adap-MLP.py", "main-var-CNN.py", "main-CNN1D.py"]
+    "script_name", ["main-MLP.py", "main-CNN.py", "main-CNN3D.py",  "general-MLP.py", "main-adap-CNN.py", "main-adap-MLP.py", "main-var-CNN.py", "main-CNN1D.py"]
 )
 def test_scripts(script_name):
     if os.path.exists(script_name):
