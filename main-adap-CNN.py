@@ -3,14 +3,7 @@
 It is advised to take a look at main-CNN.py first if you haven't already, as some redundant details
 are not explained here. """
 
-from RRAEs.AE_classes import (
-    Strong_RRAE_CNN,
-    Weak_RRAE_CNN,
-    Vanilla_AE_CNN,
-    IRMAE_CNN,
-    LoRAE_CNN,
-    VAR_AE_CNN,
-)
+from RRAEs.AE_classes import RRAE_CNN
 from RRAEs.training_classes import RRAE_Trainor_class
 from RRAEs.trackers import RRAE_gen_Tracker, RRAE_Null_Tracker, RRAE_pars_Tracker
 import jax.random as jrandom
@@ -36,11 +29,11 @@ if __name__ == "__main__":
     print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
 
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-    method = "Strong"
+    method = "RRAE"
 
-    model_cls = Strong_RRAE_CNN
+    model_cls = RRAE_CNN
 
-    loss_type = "Strong"  # Specify the loss type, according to the model chosen.
+    loss_type = "RRAE"  # Specify the loss type, according to the model chosen.
 
     latent_size = 200  # latent space dimension 200
 
@@ -64,14 +57,12 @@ if __name__ == "__main__":
         out_train=x_train,
         kwargs_enc={
             "width_CNNs": [32, 64],
-            "CNNs_num": 2,
             "kernel_conv": 3,
             "stride": 2,
             "padding": 1,
         },
         kwargs_dec={
             "width_CNNs": [256, 128, 32, 8],
-            "CNNs_num": 4,
             "kernel_conv": 3,
             "stride": 2,
             "padding": 1,

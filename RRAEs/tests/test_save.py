@@ -1,18 +1,13 @@
 import jax.random as jrandom
-import pytest
-from RRAEs.AE_classes import Strong_RRAE_CNN
+from RRAEs.AE_classes import RRAE_CNN
 import jax.numpy as jnp
-import equinox as eqx
 from RRAEs.training_classes import RRAE_Trainor_class
-from RRAEs.utilities import find_weighted_loss
-import jax.tree_util as jtu
-import jax
 import jax.nn as jnn
 
 
 def test_save():  # Only to test if saving/loading is causing a problem
     data = jrandom.normal(jrandom.key(0), (1, 28, 28, 1))
-    model_cls = Strong_RRAE_CNN
+    model_cls = RRAE_CNN
 
     trainor = RRAE_Trainor_class(
         data,
@@ -38,7 +33,7 @@ def test_save():  # Only to test if saving/loading is causing a problem
 
 def test_save_with_final_act():
     data = jrandom.normal(jrandom.key(0), (1, 28, 28, 1))
-    model_cls = Strong_RRAE_CNN
+    model_cls = RRAE_CNN
 
     trainor = RRAE_Trainor_class(
         data,

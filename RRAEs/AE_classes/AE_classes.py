@@ -1,47 +1,21 @@
-from RRAEs.Parent_classes import config # Always keep the first line
 import jax
 import jax.numpy as jnp
-import pdb
 from RRAEs.utilities import (
     Sample,
-    v_vt_class,
     CNNs_with_MLP,
     MLP_with_CNNs_trans,
     CNN3D_with_MLP,
     MLP_with_CNN3D_trans,
-    dataloader,
     MLP_with_linear,
     stable_SVD,
 )   
-import itertools
+from RRAEs.wrappers import vmap_wrap
 import equinox as eqx
 import jax.random as jrandom
 import warnings
-from tqdm import tqdm
-import numpy as np
 from equinox.nn._linear import Linear
-from RRAEs.Parent_classes import BaseClass
 
 _identity = lambda x, *args, **kwargs: x
-
-Parent_Class = config["Parent_Class"]
-
-
-class Test_AE_for_Norm(Parent_Class):
-    def __init__(
-        self,
-        in_size,
-        latent_size,
-        **kwargs,
-    ):
-
-        super().__init__(
-            in_size,
-            latent_size,
-            _encode=_identity,
-            _decode=_identity,
-            **kwargs,
-        )
 
 def latent_func_strong_RRAE(
     self,
@@ -127,90 +101,6 @@ def latent_func_strong_RRAE(
         return u_now, coeffs, sigs
     return y_approx
 
-
-def latent_func_var_v3_strong_RRAE(
-    self,
-    y,
-    k_max=None,
-    apply_basis=None,
-    get_basis_coeffs=False,
-    get_right_sing=False,
-    get_coeffs=False,
-    get_sings=False,
-    ret=False,
-    epsilon=None,
-    sigma=1,
-    *args,
-    **kwargs,
-):
-    """Performing the truncated SVD in the latent space.
-
-    Parameters
-    ----------
-    y : jnp.array
-        The latent space.
-    k_max : int
-        The maximum number of modes to keep. If this is -1,
-        the function will return y (i.e. all the modes).
-
-    Returns
-    -------
-    y_approx : jnp.array
-        The latent space after the truncation.
-    """
-    batch_size = y.shape[-1]
-    I = jnp.eye(batch_size) # *perc_imp
-
-    if apply_basis is not None:
-        if get_basis_coeffs or get_right_sing or get_sings:
-            raise ValueError("Can not get SVD and apply basis at the same time.")
-        if get_coeffs:
-            return apply_basis.T @ y
-        alpha = apply_basis.T @ y
-
-        if epsilon is not None:
-            epsilon = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
-            epsilon = epsilon*sigma/y.shape[-1]
-            G = jnp.multiply(epsilon, jnp.expand_dims(s[:k_max], -1))
-            alpha = alpha + G
-        return apply_basis @ alpha
-
-    if get_basis_coeffs or get_coeffs:
-        u, s, v = stable_SVD(y)
-        u_now = u[:, :k_max]
-        coeffs = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
-        if get_sings:
-            return s[:k_max]
-        if get_right_sing:
-            return v[:k_max, :]
-        if get_sings:
-            return s[:k_max]
-        if get_right_sing:
-            return v[:k_max, :]
-        if get_coeffs:
-            return coeffs
-        return u_now, coeffs
-
-    if k_max != -1:
-        u, s, v = stable_SVD(y)
-        y_approx = (u[..., :k_max] * s[:k_max]) @ v[:k_max]
-        alpha = jnp.multiply(v[:k_max, :], jnp.expand_dims(s[:k_max], -1))
-
-        if epsilon is not None:
-            epsilon = epsilon if len(epsilon.shape) == 2 else epsilon[0, 0]
-            epsilon = epsilon*sigma/y.shape[-1]
-            G = jnp.multiply(epsilon, jnp.expand_dims(s[:k_max], -1))
-            alpha = alpha + G
-        y_approx = u[..., :k_max] @ alpha
-    else:
-        y_approx = y
-        u_now = None
-        coeffs = None
-        sigs = None
-    if ret:
-        return G
-    return y_approx
-
 def latent_func_var_strong_RRAE(self, y, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
     apply_basis = kwargs.get("apply_basis")
     
@@ -247,7 +137,100 @@ def latent_func_var_strong_RRAE(self, y, k_max=None, epsilon=None, return_dist=F
         return basis @ z, mean, logvar
     return basis @ z
 
-class Strong_RRAE_MLP(Parent_Class):
+
+class Autoencoder(eqx.Module):
+    _encode: MLP_with_linear
+    _decode: MLP_with_linear
+    _perform_in_latent: callable
+    _perform_in_latent: callable
+    map_latent: bool
+    norm_funcs: list
+    inv_norm_funcs: list
+    count: int
+
+    def __init__(
+        self,
+        in_size,
+        latent_size,
+        latent_size_after=None,
+        _encode=None,
+        _decode=None,
+        map_latent=True,
+        *,
+        key,
+        count=1,
+        kwargs_enc={},
+        kwargs_dec={},
+        **kwargs,
+    ):
+        key_e, key_d = jrandom.split(key)
+        if latent_size_after is None:
+            latent_size_after = latent_size
+
+        if _encode is None:
+            if "width_size" not in kwargs_enc.keys():
+                kwargs_enc["width_size"] = 64
+
+            if "depth" not in kwargs_enc.keys():
+                kwargs_enc["depth"] = 1
+
+            self._encode = MLP_with_linear(
+                in_size=in_size,
+                out_size=latent_size,
+                key=key_e,
+                **kwargs_enc,
+            )
+
+        else:
+            self._encode = _encode
+
+        if not hasattr(self, "_perform_in_latent"):
+            self._perform_in_latent = lambda x, *args, **kwargs: x 
+
+        if _decode is None:
+            if "width_size" not in kwargs_dec.keys():
+                kwargs_dec["width_size"] = 64
+            if "depth" not in kwargs_dec.keys():
+                kwargs_dec["depth"] = 6
+
+            self._decode = MLP_with_linear(
+                in_size=latent_size_after,
+                out_size=in_size,
+                key=key_d,
+                **kwargs_dec,
+            )
+        else:
+            self._decode = _decode
+
+        self.count = count
+        self.map_latent = map_latent
+        self.inv_norm_funcs = ["decode"]
+        self.norm_funcs = ["encode", "latent"]
+
+    def encode(self, x, *args, **kwargs):
+        return self._encode(x, *args, **kwargs)
+    
+    def decode(self, x, *args, **kwargs):
+        return self._decode(x, *args, **kwargs)
+
+    def perform_in_latent(self, y, *args, **kwargs):
+        if self.map_latent:
+            new_perform_in_latent = lambda x: self._perform_in_latent(
+                x, *args, **kwargs
+            )
+            for _ in range(self.count):
+                new_perform_in_latent = jax.vmap(new_perform_in_latent, in_axes=-1, out_axes=-1) 
+            return new_perform_in_latent(y)
+        return self._perform_in_latent(y, *args, **kwargs)
+
+    def __call__(self, x, *args, **kwargs):
+        return self.decode(self.perform_in_latent(self.encode(x), *args, **kwargs))
+
+    def latent(self, x, *args, **kwargs):
+        return self.perform_in_latent(self.encode(x), *args, **kwargs)
+
+
+class RRAE_MLP(Autoencoder):
     """Subclass of RRAEs with the strong formulation when the input
     is of dimension (data_size, batch_size).
 
@@ -293,66 +276,9 @@ class Strong_RRAE_MLP(Parent_Class):
 
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
+    
 
-    def get_basis_coeffs(self, x, *args, **kwargs):
-        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
-
-    def decode_coeffs(self, c, basis, *args, **kwargs):
-        return self.decode(basis @ c, *args, **kwargs)
-
-class VAR_Strong_v3_RRAE_MLP(Parent_Class):
-    """Subclass of RRAEs with the strong formulation when the input
-    is of dimension (data_size, batch_size).
-
-    Attributes
-    ----------
-    encode : MLP_with_linear
-        An MLP as the encoding function.
-    decode : MLP_with_linear
-        An MLP as the decoding function.
-    perform_in_latent : function
-        The function that performs operations in the latent space.
-    k_max : int
-        The maximum number of modes to keep in the latent space.
-    """
-
-    def __init__(
-        self,
-        in_size,
-        latent_size,
-        k_max,
-        post_proc_func=None,
-        *,
-        key,
-        kwargs_enc={},
-        kwargs_dec={},
-        **kwargs,
-    ):
-        if "linear_l" in kwargs.keys():
-            warnings.warn("linear_l can not be specified for Strong")
-            kwargs.pop("linear_l")
-
-        super().__init__(
-            in_size,
-            latent_size,
-            map_latent=False,
-            post_proc_func=post_proc_func,
-            key=key,
-            kwargs_enc=kwargs_enc,
-            kwargs_dec=kwargs_dec,
-            **kwargs,
-        )
-
-    def _perform_in_latent(self, y, *args, **kwargs):
-        return latent_func_var_v3_strong_RRAE(self, y, *args, **kwargs)
-
-    def get_basis_coeffs(self, x, *args, **kwargs):
-        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
-
-    def decode_coeffs(self, c, basis, *args, **kwargs):
-        return self.decode(basis @ c, *args, **kwargs)
-
-class Vanilla_AE_MLP(Parent_Class):
+class Vanilla_AE_MLP(Autoencoder):
     """Vanilla Autoencoder.
 
     Subclass for the Vanilla AE, basically the strong RRAE with
@@ -389,95 +315,6 @@ class Vanilla_AE_MLP(Parent_Class):
         )
 
 
-class Strong_Dynamics_RRAE_MLP(Parent_Class):
-    DMD_W: Linear
-
-    """Vanilla Autoencoder.
-
-    Subclass for the Vanilla AE, basically the strong RRAE with
-    k_max = -1, hence returning all the modes with no truncation.
-    """
-
-    def __init__(
-        self,
-        in_size,
-        latent_size,
-        k_max,
-        post_proc_func=None,
-        *,
-        key,
-        kwargs_enc={},
-        kwargs_dec={},
-        **kwargs,
-    ):
-        raise NotImplementedError
-        if "linear_l" in kwargs.keys():
-            warnings.warn("linear_l can not be specified for Strong")
-            kwargs.pop("linear_l")
-
-        key1, key2 = jrandom.split(key, 2)
-
-        latent_func = latent_func_strong_RRAE
-        self.DMD_W = Linear(k_max, k_max, use_bias=False, key=key1)
-
-        super().__init__(
-            in_size,
-            latent_size,
-            k_max,
-            _perform_in_latent=latent_func,
-            map_latent=False,
-            post_proc_func=post_proc_func,
-            key=key2,
-            kwargs_enc=kwargs_enc,
-            kwargs_dec=kwargs_dec,
-            **kwargs,
-        )
-
-
-class Weak_RRAE_MLP(Parent_Class):
-    v_vt: v_vt_class
-
-    """Weak Rank Reduction Autoencoder. We define it as a
-    subclass of the strong RRAE with k_max = -1, and an
-    additional attribute v_vt.
-
-    Additional Attributes:
-    -----------------------
-    v_vt : v_vt_class
-        A class the include two trainable matrices v, and vt
-        that can approximate the latent space in the weak
-        formulation.
-    """
-
-    def __init__(
-        self,
-        in_size,
-        latent_size,
-        k_max,
-        samples,
-        *,
-        key,
-        kwargs_enc={},
-        kwargs_dec={},
-        **kwargs,
-    ):
-        raise NotImplementedError
-        super().__init__(
-            in_size,
-            latent_size,
-            -1,
-            key=key,
-            kwargs_enc=kwargs_enc,
-            kwargs_dec=kwargs_dec,
-            **kwargs,
-        )
-
-        if k_max == -1:
-            k_max = samples
-
-        self.v_vt = v_vt_class(latent_size, samples, k_max, key=key)
-
-
 def sample(y, sample_cls, k_max=None, epsilon=None, *args, **kwargs):
     if epsilon is None:
         new_perform_sample = lambda m, lv: sample_cls(m, lv, *args, **kwargs)
@@ -489,7 +326,7 @@ def sample(y, sample_cls, k_max=None, epsilon=None, *args, **kwargs):
         )
 
 
-class VAR_AE_MLP(Parent_Class):
+class VAE_MLP(Autoencoder):
     _sample: Sample
     lin_mean: Linear
     lin_logvar: Linear
@@ -529,7 +366,7 @@ class VAR_AE_MLP(Parent_Class):
         return sample(y, self._sample, *args, **kwargs)
 
 
-class IRMAE_MLP(Parent_Class):
+class IRMAE_MLP(Autoencoder):
     def __init__(
         self,
         in_size,
@@ -586,7 +423,7 @@ class LoRAE_MLP(IRMAE_MLP):
 
 
 
-class CNN_Autoencoder(Parent_Class):
+class CNN_Autoencoder(Autoencoder):
     def __init__(
         self,
         channels,
@@ -607,7 +444,7 @@ class CNN_Autoencoder(Parent_Class):
         )
         key1, key2, key3 = jrandom.split(key, 3)
 
-        encode = CNNs_with_MLP(
+        _encode = CNNs_with_MLP(
             width=width,
             height=height,
             channels=channels,
@@ -616,9 +453,8 @@ class CNN_Autoencoder(Parent_Class):
             dimension=dimension,
             **kwargs_enc,
         )
-        _encode = BaseClass(encode, -1, count=count)
 
-        decode = MLP_with_CNNs_trans(
+        _decode = MLP_with_CNNs_trans(
             width=width,
             height=height,
             inp=latent_size_after,
@@ -627,7 +463,6 @@ class CNN_Autoencoder(Parent_Class):
             dimension=dimension,
             **kwargs_dec,
         )
-        _decode = BaseClass(decode, -1, count=count)
 
         super().__init__(
             None,
@@ -640,7 +475,7 @@ class CNN_Autoencoder(Parent_Class):
             **kwargs,
         )
 
-class CNN3D_Autoencoder(Parent_Class):
+class CNN3D_Autoencoder(Autoencoder):
     def __init__(
         self,
         depth,   # I add the depth
@@ -662,8 +497,8 @@ class CNN3D_Autoencoder(Parent_Class):
         )
         key1, key2, key3 = jrandom.split(key, 3)
 
-        encode = CNN3D_with_MLP(
-            depth=depth,       # I add the depth
+        _encode = CNN3D_with_MLP(
+            depth=depth,
             width=width,
             height=height,
             channels=channels,
@@ -671,10 +506,9 @@ class CNN3D_Autoencoder(Parent_Class):
             key=key1,
             **kwargs_enc,
         )
-        _encode = BaseClass(encode, -1)
 
-        decode = MLP_with_CNN3D_trans(
-            depth=depth,       # I add the depth
+        _decode = MLP_with_CNN3D_trans(
+            depth=depth,
             width=width,
             height=height,
             inp=latent_size_after,
@@ -682,7 +516,6 @@ class CNN3D_Autoencoder(Parent_Class):
             key=key2,
             **kwargs_dec,
         )
-        _decode = BaseClass(decode, -1)
 
         super().__init__(
             None,
@@ -697,15 +530,16 @@ class CNN3D_Autoencoder(Parent_Class):
         )
         
         
-class VAR_AE_CNN(CNN_Autoencoder):
+class VAE_CNN(CNN_Autoencoder):
     lin_mean: Linear
     lin_logvar: Linear
     latent_size: int
 
     def __init__(self, channels, height, width, latent_size, *, key, count=1, **kwargs):
         key, key_m, key_s = jrandom.split(key, 3)
-        self.lin_mean = BaseClass(Linear(latent_size, latent_size, key=key_m), -1, count=count)
-        self.lin_logvar = BaseClass(Linear(latent_size, latent_size, key=key_s), -1, count=count)
+        v_Linear = vmap_wrap(Linear, -1, count=count)
+        self.lin_mean = v_Linear(latent_size, latent_size, key=key_m)
+        self.lin_logvar = v_Linear(latent_size, latent_size, key=key_s)
         self.latent_size = latent_size
         super().__init__(
             channels,
@@ -736,7 +570,7 @@ class VAR_AE_CNN(CNN_Autoencoder):
             return z, mean, logvar
         return z
 
-class Strong_RRAE_CNN(CNN_Autoencoder):
+class RRAE_CNN(CNN_Autoencoder):
     """Subclass of RRAEs with the strong formulation for inputs of
     dimension (channels, width, height).
     """
@@ -756,14 +590,7 @@ class Strong_RRAE_CNN(CNN_Autoencoder):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
 
-    def get_basis_coeffs(self, x, *args, **kwargs):
-        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
-
-    def decode_coeffs(self, c, basis, *args, **kwargs):
-        return self.decode(basis @ c, *args, **kwargs)
-
-
-class Strong_RRAE_CNN3D(CNN3D_Autoencoder):
+class RRAE_CNN3D(CNN3D_Autoencoder):
 
     def __init__(self, depth, width, height, channels, latent_size, k_max, *, key, **kwargs):
 
@@ -781,26 +608,18 @@ class Strong_RRAE_CNN3D(CNN3D_Autoencoder):
     
     def _perform_in_latent(self, y, *args, **kwargs):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
-
-
-    def get_basis_coeffs(self, x, *args, **kwargs):
-        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
-
-    def decode_coeffs(self, c, basis, *args, **kwargs):
-        return self.decode(basis @ c, *args, **kwargs)
         
         
-        
-class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
+class VRRAE_CNN(CNN_Autoencoder):
     lin_mean: Linear
     lin_logvar: Linear
     typ: int
 
     def __init__(self, channels, height, width, latent_size, k_max, typ="eye", *, key, count=1, **kwargs):
         key, key_m, key_s = jrandom.split(key, 3)
-
-        self.lin_mean = BaseClass(Linear(k_max, k_max, key=key_m), -1, count=count)
-        self.lin_logvar = BaseClass(Linear(k_max, k_max, key=key_s), -1, count=count)
+        v_Linear = vmap_wrap(Linear, -1, count=count)
+        self.lin_mean = v_Linear(k_max, k_max, key=key_m)
+        self.lin_logvar = v_Linear(k_max, k_max, key=key_s)
         self.typ = typ
         super().__init__(
             channels,
@@ -814,39 +633,7 @@ class VAR_Strong_RRAE_CNN(CNN_Autoencoder):
 
     def _perform_in_latent(self, y, *args, k_max=None, epsilon=None, return_dist=False, return_lat_dist=False, **kwargs):
         return latent_func_var_strong_RRAE(self, y, k_max, epsilon, return_dist, return_lat_dist, **kwargs)
-
-    def get_basis_coeffs(self, x, *args, **kwargs):
-        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
-
-    def decode_coeffs(self, c, basis, *args, **kwargs):
-        return self.decode(basis @ c, *args, **kwargs)
-
-class VAR_Strong_v3_RRAE_CNN(CNN_Autoencoder):
-    """Subclass of RRAEs with the strong formulation for inputs of
-    dimension (channels, width, height).
-    """
-
-    def __init__(self, channels, height, width, latent_size, k_max, *, key, basis=None, **kwargs):
-
-        super().__init__(
-            channels,
-            height,
-            width,
-            latent_size,
-            basis=basis,
-            key=key,
-            **kwargs,
-        )
-
-    def _perform_in_latent(self, y, *args, **kwargs):
-        return latent_func_var_strong_RRAE(self, y, *args, **kwargs)
-
-
-    def get_basis_coeffs(self, x, *args, **kwargs):
-        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
-
-    def decode_coeffs(self, c, basis, *args, **kwargs):
-        return self.decode(basis @ c, *args, **kwargs)
+    
 
 class Vanilla_AE_CNN(CNN_Autoencoder):
     """Vanilla Autoencoder.
@@ -861,36 +648,6 @@ class Vanilla_AE_CNN(CNN_Autoencoder):
             kwargs.pop("linear_l")
 
         super().__init__(channels, height, width, latent_size, key=key, **kwargs)
-
-
-class Weak_RRAE_CNN(CNN_Autoencoder):
-    v_vt: v_vt_class
-
-    """Weak Rank Reduction Autoencoder. We define it as a
-    subclass of the strong RRAE (CNN) with k_max = -1, and an
-    additional attribute v_vt.
-
-    Additional Attributes:
-    -----------------------
-    v_vt : v_vt_class
-        A class the include two trainable matrices v, and vt
-        that can approximate the latent space in the weak
-        formulation.
-    """
-
-    def __init__(
-        self, channels, height, width, latent_size, k_max, samples, *, key, **kwargs
-    ):
-        raise NotImplementedError
-        if "linear_l" in kwargs.keys():
-            warnings.warn("linear_l can not be specified for Vanilla_CNN")
-            kwargs.pop("linear_l")
-
-        super().__init__(channels, height, width, latent_size, key=key, **kwargs)
-        if k_max == -1:
-            k_max = samples
-
-        self.v_vt = v_vt_class(latent_size, samples, k_max, key=key)
 
 
 class IRMAE_CNN(CNN_Autoencoder):
@@ -954,7 +711,7 @@ class CNN1D_Autoencoder(CNN_Autoencoder):
             kwargs_dec=kwargs_dec,
         )
 
-class Strong_RRAE_CNN1D(CNN1D_Autoencoder):
+class RRAE_CNN1D(CNN1D_Autoencoder):
     """Subclass of RRAEs with the strong formulation for inputs of
     dimension (channels, width, height).
     """
@@ -973,23 +730,16 @@ class Strong_RRAE_CNN1D(CNN1D_Autoencoder):
         return latent_func_strong_RRAE(self, y, *args, **kwargs)
 
 
-    def get_basis_coeffs(self, x, *args, **kwargs):
-        return self.perform_in_latent(self.encode(x), *args, get_basis_coeffs=True, **kwargs)
-
-    def decode_coeffs(self, c, basis, *args, **kwargs):
-        return self.decode(basis @ c, *args, **kwargs)
-
-
-class VAR_Strong_RRAE_CNN1D(CNN1D_Autoencoder):
+class VRRAE_CNN1D(CNN1D_Autoencoder):
     lin_mean: Linear
     lin_logvar: Linear
     typ: int
 
     def __init__(self, channels, input_dim, latent_size, k_max, typ="eye", *, key, count=1, **kwargs):
         key, key_m, key_s = jrandom.split(key, 3)
-
-        self.lin_mean = BaseClass(Linear(k_max, k_max, key=key_m), -1, count=count)
-        self.lin_logvar = BaseClass(Linear(k_max, k_max, key=key_s), -1, count=count)
+        v_Linear = vmap_wrap(Linear, -1, count=count)
+        self.lin_mean = v_Linear(k_max, k_max, key=key_m)
+        self.lin_logvar = v_Linear(k_max, k_max, key=key_s)
         self.typ = typ
         super().__init__(
             channels,

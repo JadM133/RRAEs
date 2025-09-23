@@ -4,8 +4,6 @@ The MLP."""
 from equinox.nn import MLP
 from RRAEs.training_classes import Trainor_class
 import jax.random as jrandom
-import pdb
-from RRAEs.utilities import get_data
 import jax.numpy as jnp
 
 if __name__ == "__main__":

@@ -1,7 +1,5 @@
 
 from __future__ import print_function
-from RRAEs.utilities import my_vmap
-import pdb
 import jax.random as jrandom
 import jax.numpy as jnp
 import equinox as eqx
@@ -9,22 +7,20 @@ import jax.tree_util as jtu
 import optax
 from RRAEs.utilities import (
     dataloader,
-    find_weighted_loss,
     remove_keys_from_dict,
     merge_dicts,
     loss_generator,
     tree_map,
+    eval_with_batches
 )
 import warnings
 from RRAEs.utilities import v_print
 from RRAEs.interpolation import Objects_Interpolator_nD
-from RRAEs.Parent_classes import BaseClass
-from RRAEs.norm import Norm
 import os
 import time
 import dill
 import shutil
-import copy
+from RRAEs.wrappers import vmap_wrap, norm_wrap
 from functools import partial
 from RRAEs.trackers import (
     Null_Tracker,
@@ -32,8 +28,6 @@ from RRAEs.trackers import (
     RRAE_pars_Tracker,
     RRAE_gen_Tracker,
 )
-
-import jax
 
 
 from prettytable import PrettyTable
@@ -173,19 +167,17 @@ class Trainor_class:
         out_train=None,
         norm_in="None",
         norm_out="None",
-        call_map_count=0,
-        call_map_axis=0,
+        methods_map=["__call__"],
+        methods_norm_in=["__call__"],
+        methods_norm_out=["__call__"],
+        call_map_count=1,
+        call_map_axis=-1,
         **kwargs,
     ):
         if model_cls is not None:
-            self.model = Norm(
-                BaseClass(model_cls(**kwargs), map_axis=call_map_axis, count=call_map_count),
-                in_train=in_train,
-                out_train=out_train,
-                norm_in=norm_in,
-                norm_out=norm_out,
-            )
-            
+            model_cls = vmap_wrap(model_cls, call_map_axis, call_map_count, methods_map)
+            model_cls = norm_wrap(model_cls, in_train, norm_in, None, out_train, norm_out, None, methods_norm_in, methods_norm_out)
+            self.model = model_cls(**kwargs)
             params_in = self.model.params_in
             params_out = self.model.params_out
         else:
@@ -438,20 +430,6 @@ class Trainor_class:
         self.t_all = t_all
         return model, track_params
 
-    def evaluate_no_preds(
-        self,
-        x_train_o,
-        y_train_o,
-        x_test_o=None,
-        y_test_o=None,
-        batch_size=None,
-        call_func=None,
-        **kwargs,
-    ):
-        """Performs post-processing to find the relative error of the RRAE model."""
-        # TODO: Same as evaluate but without finding preds for large data
-        raise NotImplementedError("This method is not implemented yet.")
-
     def evaluate(
         self,
         x_train_o=None,
@@ -491,7 +469,7 @@ class Trainor_class:
             ), "You should either provide a batch_size or fit the model first."
 
             batch_size = self.batch_size if batch_size is None else batch_size
-            y_pred_train_o = self.model.eval_with_batches(
+            y_pred_train_o = eval_with_batches(
                 x_train_o,
                 batch_size,
                 call_func=call_func,
@@ -515,7 +493,7 @@ class Trainor_class:
 
         if x_test_o is not None:
             y_test_o = pre_func_out(y_test_o)
-            y_pred_test_o = self.model.eval_with_batches(
+            y_pred_test_o = eval_with_batches(
                 x_test_o,
                 batch_size,
                 call_func=call_func,
@@ -552,94 +530,6 @@ class Trainor_class:
             "y_pred_train": y_pred_train,
             "y_pred_test": y_pred_test,
         }
-
-    def AE_interpolate(
-        self,
-        p_train,
-        p_test,
-        x_train_o,
-        y_test_o,
-        batch_size=None,
-        latent_func=None,
-        decode_func=None,
-        norm_out_func=None,
-    ):
-        """Interpolates the latent space of the model and then decodes it to find the output."""
-        batch_size = self.batch_size if batch_size is None else batch_size
-
-        if latent_func is None:
-            call_func = lambda x: self.model.latent(x)
-        else:
-            call_func = latent_func
-
-        latent_train = self.model.eval_with_batches(
-            x_train_o,
-            batch_size,
-            call_func=call_func,
-            str="Finding train latent space used for interpolation...",
-            key_idx=0,
-        )
-
-        interpolation = Objects_Interpolator_nD()
-        latent_test_interp = interpolation(p_test, p_train, latent_train)
-
-        if decode_func is None:
-            call_func = lambda x: self.model.decode(x)
-        else:
-            call_func = decode_func
-
-        y_pred_interp_test_o = self.model.eval_with_batches(
-            latent_test_interp,
-            batch_size,
-            call_func=call_func,
-            str="Decoding interpolated latent space ...",
-            key_idx=0,
-        )
-
-        self.error_interp_test_o = (
-            jnp.linalg.norm(y_pred_interp_test_o - y_test_o)
-            / jnp.linalg.norm(y_test_o)
-            * 100
-        )
-        print(
-            "Test (interpolation) error over original output: ",
-            self.error_interp_test_o,
-        )
-
-        if norm_out_func is None:
-            call_func = lambda x: self.model.norm_out(x)
-        else:
-            call_func = norm_out_func
-
-        y_pred_interp_test = self.model.eval_with_batches(
-            y_pred_interp_test_o,
-            batch_size,
-            call_func=call_func,
-            str="Finding Normalized pred of interpolated latent space ...",
-            key_idx=0,
-        )
-
-        y_test = self.model.eval_with_batches(
-            y_test_o,
-            batch_size,
-            call_func=call_func,
-            str="Finding Normalized output of interpolated latent space ...",
-            key_idx=0,
-        )
-        self.error_interp_test = (
-            jnp.linalg.norm(y_pred_interp_test - y_test) / jnp.linalg.norm(y_test) * 100
-        )
-        print(
-            "Test (interpolation) error over normalized output: ",
-            self.error_interp_test,
-        )
-        return {
-            "error_interp_test": self.error_interp_test,
-            "error_interp_test_o": self.error_interp_test_o,
-            "y_pred_interp_test_o": y_pred_interp_test_o,
-            "y_pred_interp_test": y_pred_interp_test,
-        }
-
     def path_exists(self, filename):
         return os.path.exists(os.path.join(self.folder, filename))
 
@@ -697,13 +587,10 @@ class Trainor_class:
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
             kwargs.update(fn_kwargs)
-            self.model = Norm(
-                BaseClass(self.model_cls(**kwargs), map_axis=self.call_map_axis, count=self.call_map_count),
-                norm_in=self.norm_in,
-                norm_out=self.norm_out,
-                params_in=self.params_in,
-                params_out=self.params_out,
-            )
+
+            model_cls = vmap_wrap(self.model_cls, self.call_map_axis, self.call_map_count, ["__call__", "encode", "decode"])
+            model_cls = norm_wrap(self.model_cls, None, self.norm_in, self.params_in, None, self.norm_out, self.params_out, ["__call__", "encode"], ["__call__", "decode"])
+            self.model = model_cls(**kwargs)
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             attributes = dill.load(f)
             for key in attributes:
@@ -712,7 +599,107 @@ class Trainor_class:
             os.remove(filename)
 
 
-class RRAE_Trainor_class(Trainor_class):
+class AE_Trainor_class(Trainor_class):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, methods_map=["encode", "decode"], methods_norm_in=["encode"], methods_norm_out=["decode"], **kwargs)
+    
+    def fit(self, *args, training_key, training_kwargs,  **kwargs):
+        if "pre_func_inp" not in kwargs:
+            self.pre_func_inp = lambda x: x
+        else:
+            self.pre_func_inp = kwargs["pre_func_inp"]
+        training_kwargs = merge_dicts(kwargs, training_kwargs)
+        return super().fit(*args, training_key=training_key, **training_kwargs)  # train model
+
+    def AE_interpolate(
+        self,
+        p_train,
+        p_test,
+        x_train_o,
+        y_test_o,
+        batch_size=None,
+        latent_func=None,
+        decode_func=None,
+        norm_out_func=None,
+    ):
+        """Interpolates the latent space of the model and then decodes it to find the output."""
+        batch_size = self.batch_size if batch_size is None else batch_size
+
+        if latent_func is None:
+            call_func = lambda x: self.model.latent(x)
+        else:
+            call_func = latent_func
+
+        latent_train = eval_with_batches(
+            x_train_o,
+            batch_size,
+            call_func=call_func,
+            str="Finding train latent space used for interpolation...",
+            key_idx=0,
+        )
+
+        interpolation = Objects_Interpolator_nD()
+        latent_test_interp = interpolation(p_test, p_train, latent_train)
+
+        if decode_func is None:
+            call_func = lambda x: self.model.decode(x)
+        else:
+            call_func = decode_func
+
+        y_pred_interp_test_o = eval_with_batches(
+            latent_test_interp,
+            batch_size,
+            call_func=call_func,
+            str="Decoding interpolated latent space ...",
+            key_idx=0,
+        )
+
+        self.error_interp_test_o = (
+            jnp.linalg.norm(y_pred_interp_test_o - y_test_o)
+            / jnp.linalg.norm(y_test_o)
+            * 100
+        )
+        print(
+            "Test (interpolation) error over original output: ",
+            self.error_interp_test_o,
+        )
+
+        if norm_out_func is None:
+            call_func = lambda x: self.model.norm_out(x)
+        else:
+            call_func = norm_out_func
+
+        y_pred_interp_test = eval_with_batches(
+            y_pred_interp_test_o,
+            batch_size,
+            call_func=call_func,
+            str="Finding Normalized pred of interpolated latent space ...",
+            key_idx=0,
+        )
+
+        y_test = eval_with_batches(
+            y_test_o,
+            batch_size,
+            call_func=call_func,
+            str="Finding Normalized output of interpolated latent space ...",
+            key_idx=0,
+        )
+        self.error_interp_test = (
+            jnp.linalg.norm(y_pred_interp_test - y_test) / jnp.linalg.norm(y_test) * 100
+        )
+        print(
+            "Test (interpolation) error over normalized output: ",
+            self.error_interp_test,
+        )
+        return {
+            "error_interp_test": self.error_interp_test,
+            "error_interp_test_o": self.error_interp_test_o,
+            "y_pred_interp_test_o": y_pred_interp_test_o,
+            "y_pred_interp_test": y_pred_interp_test,
+        }
+
+
+class RRAE_Trainor_class(AE_Trainor_class):
     def __init__(self, *args, adapt=False, k_max=None, adap_type="None", **kwargs):
         self.k_init = k_max
         self.adap_type = adap_type
@@ -764,7 +751,7 @@ class RRAE_Trainor_class(Trainor_class):
 
         training_kwargs = merge_dicts(kwargs, training_kwargs)
 
-        model, track_params = super().fit(*args, training_key=key0, **training_kwargs)  # train model
+        model, track_params = super().fit(*args, training_key=key0, training_kwargs=training_kwargs)  # train model
     
         self.track_params = track_params    # Save track parameters in class?
 
@@ -797,7 +784,7 @@ class RRAE_Trainor_class(Trainor_class):
             else:
                 basis_batch_size = self.batch_size
 
-            all_bases = self.model.eval_with_batches(
+            all_bases = eval_with_batches(
                 inp,
                 basis_batch_size,
                 call_func=lambda x: self.model.latent(
@@ -815,14 +802,10 @@ class RRAE_Trainor_class(Trainor_class):
         @eqx.filter_value_and_grad(has_aux=True)
         def loss_fun(diff_model, static_model, input, out, idx, epsilon, basis):
             model = eqx.combine(diff_model, static_model)
-            pred = model(input, epsilon=epsilon, apply_basis=basis, inv_norm_out=False)
+            pred = model(input, epsilon=epsilon, apply_basis=basis, keep_normalized=True)
             aux = {"loss": norm_loss_(pred, out)}
             return norm_loss_(pred, out), aux
 
-        # if "loss_type" in kwargs:
-        #     raise ValueError(
-        #         "You should not provide loss_type in ft_kwargs since it is predefined to apply the basis."
-        #     )
         if "loss_type" in kwargs :
             pass
         else:
@@ -831,9 +814,9 @@ class RRAE_Trainor_class(Trainor_class):
 
         kwargs.setdefault("loss_kwargs", {}).update({"basis": self.basis})
         
-        fix_comp = lambda model: model._encode.model
+        fix_comp = lambda model: model._encode
         print("Fine tuning the basis ...")
-        super().fit(*args, training_key=key, fix_comp=fix_comp, **kwargs)
+        super().fit(*args, training_key=key, fix_comp=fix_comp, training_kwargs=kwargs)
 
     def evaluate(
         self,
@@ -886,167 +869,3 @@ class RRAE_Trainor_class(Trainor_class):
             decode_func=decode_func,
             norm_out_func=norm_out_func,
         )
-
-
-class V_AE_Trainor_class(RRAE_Trainor_class):
-    """ " Trainor class for variational batching."""
-
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError("This class is not implemented yet.")
-
-    def fit(
-        self,
-        input,
-        output,
-        loss_type=None,
-        step_st=[3000, 3000],  # 000, 8000],
-        lr_st=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9],
-        print_every=20,
-        batch_size_st=[16, 16, 16, 16, 32],
-        mul_lr=None,
-        mul_lr_func=None,  #  lambda tree: (tree.v_vt1.v, tree.v_vt1.vt)
-        regression=False,
-        verbose=True,
-        loss_kwargs={},
-        *,
-        training_key,
-    ):
-
-        output = self.model.norm_out(output)
-
-        training_params = {
-            "loss_type": loss_type,
-            "step_st": step_st,
-            "lr_st": lr_st,
-            "print_every": print_every,
-            "batch_size_st": batch_size_st,
-            "mul_lr": mul_lr,
-            "mul_lr_func": mul_lr_func,
-            "regression": regression,
-            "verbose": verbose,
-            "loss_kwargs": loss_kwargs,
-            "training_key": training_key,
-        }
-        self.all_kwargs = {**self.all_kwargs, **training_params}
-        model = self.model
-
-        if mul_lr is None:
-            mul_lr = [1] * len(lr_st)
-
-        norm_loss_ = lambda x1, x2: jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2) * 100
-
-        @eqx.filter_value_and_grad(has_aux=True)
-        def loss_fun(model, input, out, rand_mat, **kwargs):
-            all_lat = model.latent(input)
-            lat_b = all_lat @ rand_mat
-            pred = model.norm_out(model.decode(lat_b))
-            wv = jnp.array([1.0])
-            return find_weighted_loss([norm_loss_(pred, out)], weight_vals=wv), (pred,)
-
-        @eqx.filter_jit
-        def make_step(model, input, out, opt_state, rand_mat, **loss_kwargs):
-            (loss, aux), grads = loss_fun(model, input, out, rand_mat, **loss_kwargs)
-            updates, opt_state = optim.update(grads, opt_state)
-            model = eqx.apply_updates(model, updates)
-            return loss, model, opt_state, aux
-
-        v_print("Training the RRAE...", verbose)
-
-        if mul_lr_func is not None:
-            filter_spec = jtu.tree_map(lambda _: False, model)
-            is_acc = eqx.tree_at(
-                mul_lr_func,
-                filter_spec,
-                replace=(True,) * len(mul_lr_func(model)),
-            )
-            is_not_acc = jtu.tree_map(lambda x: not x, is_acc)
-
-        t_all = 0
-        training_num = jrandom.randint(training_key, (1,), 0, 1000)[0]
-
-        try:
-            inc = 0
-            for steps, lr, batch_size, mul_l in zip(
-                step_st, lr_st, batch_size_st, mul_lr
-            ):
-                t_t = 0
-
-                if mul_lr_func is not None:
-                    optim = optax.chain(
-                        optax.masked(optax.adabelief(lr), is_not_acc),
-                        optax.masked(optax.adabelief(mul_l * lr), is_acc),
-                    )
-                else:
-                    optim = optax.adabelief(lr)
-
-                filtered_model = eqx.filter(model, eqx.is_inexact_array)
-                try:
-                    opt_state = optim.init(filtered_model)
-                except ValueError:
-                    raise ValueError(
-                        "Optax has a bug! Send a message to Jad so he can fix it to you..."
-                    )
-
-                if (batch_size > input.shape[-1]) or batch_size == -1:
-                    batch_size = input.shape[-1]
-
-                idx_batch = jnp.arange(batch_size)
-
-                for step, (inp, out, batch_perm) in zip(
-                    range(steps),
-                    dataloader(
-                        [input.T, output.T, jnp.arange(0, input.shape[-1], 1)],
-                        batch_size,
-                        key_idx=training_num,
-                    ),
-                ):
-
-                    start = time.perf_counter()
-
-                    I = jnp.eye(batch_size)
-                    G = jrandom.uniform(
-                        jrandom.key(inc),
-                        (batch_size, batch_size),
-                        minval=-0.1,
-                        maxval=0.1,
-                    )
-                    G = G.at[idx_batch, idx_batch].set(0)
-
-                    loss, model, opt_state, aux = make_step(
-                        model,
-                        inp.T,
-                        out.T,
-                        opt_state,
-                        I + G,
-                        **loss_kwargs,
-                    )
-                    inc += 1
-                    end = time.perf_counter()
-                    t_t += end - start
-
-                    if (step % print_every) == 0 or step == steps - 1:
-                        if len(aux) == 2:
-                            v_print(
-                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}, loss1: {aux[0]}, loss2: {aux[1]}",
-                                verbose,
-                            )
-                        else:
-                            v_print(
-                                f"Step: {step}, Loss: {loss}, Computation time: {t_t}",
-                                verbose,
-                            )
-                        t_all += t_t
-                        t_t = 0
-                    if jnp.isnan(loss):
-                        print("Loss is nan, stopping training...")
-                        break
-        except (Exception, KeyboardInterrupt) as e:
-            print(e)
-            pdb.set_trace()
-            pass
-
-        model = eqx.nn.inference_mode(model)
-        self.model = model
-        self.batch_size = batch_size
-        self.t_all = t_all
-        return model

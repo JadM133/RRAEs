@@ -2,7 +2,7 @@ import jax.random as jr
 import pytest
 import jax.numpy as jnp
 import numpy as np
-from RRAEs.utilities import my_vmap
+from RRAEs.utilities import np_vmap
 from RRAEs.interpolation import Objects_Interpolator_nD
 
 
@@ -19,7 +19,7 @@ def test_nD_interp_on_1D():
         res = []
         my_interp = lambda x, y, z: np.interp(y, z, x)
         for test in x_test:
-            res.append(my_vmap(my_interp)(y_train, args=(test, x_train[:, 0])))
+            res.append(np_vmap(my_interp)(y_train, args=(test, x_train[:, 0])))
         return np.stack(res, axis=1)
 
     res2 = interp_1D(y_train, x_train, x_test)

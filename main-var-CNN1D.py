@@ -35,15 +35,15 @@ if __name__ == "__main__":
 
 
     # Step 2: Specify the model to use, VAR_Strong_RRAE_CNN is ours (recommended).
-    method = "VAR_Strong"
-    model_cls = VAR_Strong_RRAE_CNN1D # or VAR_AE_CNN for VAE
+    method = "VRRAE"
+    model_cls = VRRAE_CNN1D # or VAR_AE_CNN for VAE
 
     loss_type = (
-        "VAR_Strong"  # or "VAE" for VAE
+        "VRRAE"  # or "VAE" for VAE
     )
 
     match method:
-        case "VAR_Strong":
+        case "VRRAE":
             eps_fn = lambda lat, bs: np.random.normal(0, 1, size=(1, 1, k_max, bs))
         case "VAE":
             eps_fn = lambda lat, bs: np.random.normal(size=(1, 1, lat, bs))
@@ -70,14 +70,12 @@ if __name__ == "__main__":
         out_train=x_train,
         kwargs_enc={
             "width_CNNs": [32, 64],
-            "CNNs_num": 2,
             "kernel_conv": 3,
             "stride": 2,
             "padding": 1,
         },
         kwargs_dec={
             "width_CNNs": [256, 128, 32, 8],
-            "CNNs_num": 4,
             "kernel_conv": 3,
             "stride": 2,
             "padding": 1,

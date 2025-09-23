@@ -2,23 +2,6 @@ print("GOT TO IMPORT")
 from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class
 import jax.random as jrandom
-import pdb
-from RRAEs.utilities import get_data
-import jax.nn as jnn
-import pickle as pkl
-import numpy as np
-import jax.numpy as jnp
-import matplotlib.pyplot as plt
-
-
-def get_coeffs(trainors, inp):
-    coeffs = []
-    for trainor in trainors:
-        coeffs.append(
-            trainor.model.latent(inp, apply_basis=trainor.basis, get_coeffs=True)
-        )
-    return coeffs
-
 
 if __name__ == "__main__":
 
@@ -34,11 +17,11 @@ if __name__ == "__main__":
     print(f"Shape of data is {x_train.shape} (C x D0 x D1 x D2 x Ntr).")
 
     # Step 2: Specify the model to use, Strong_RRAE_CNN is ours (recommended).
-    method = "Strong"
+    method = "RRAE"
 
-    model_cls = Strong_RRAE_CNN3D
+    model_cls = RRAE_CNN3D
 
-    loss_type = "Strong"  # Specify the loss type, according to the model chosen.
+    loss_type = "RRAE"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
     latent_size = 2000  # latent space dimension
@@ -62,14 +45,12 @@ if __name__ == "__main__":
         out_train=x_train,
         kwargs_enc={
             "width_CNNs": [32, 64, 128],
-            "CNNs_num": 3,
             "kernel_conv": 3,
             "stride": 2,
             "padding": 1,
         },
         kwargs_dec={
             "width_CNNs": [32, 8],
-            "CNNs_num": 2,
             "kernel_conv": 3,
             "stride": 2,
             "padding": 1,

@@ -3,13 +3,7 @@
 It is advised to take a look at main-MLP.py first if you haven't already, as some redundant details
 are not explained here. """
 
-from RRAEs.AE_classes import (
-    Strong_RRAE_MLP,
-    Vanilla_AE_MLP,
-    IRMAE_MLP,
-    LoRAE_MLP,
-    VAR_AE_MLP,
-)
+from RRAEs.AE_classes import RRAE_MLP
 from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
 from RRAEs.trackers import RRAE_gen_Tracker, RRAE_Null_Tracker, RRAE_pars_Tracker
 import jax.random as jrandom
@@ -35,11 +29,11 @@ if __name__ == "__main__":
     print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
 
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-    method = "Strong"
+    method = "RRAE"
 
-    model_cls = Strong_RRAE_MLP
+    model_cls = RRAE_MLP
 
-    loss_type = "Strong"  # Specify the loss type, according to the model chosen.
+    loss_type = "RRAE"  # Specify the loss type, according to the model chosen.
 
     latent_size = 200  # latent space dimension 200
 

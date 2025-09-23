@@ -1,28 +1,26 @@
 import jax.random as jrandom
 import pytest
 from RRAEs.AE_classes import (
-    Strong_RRAE_CNN,
+    RRAE_CNN,
     Vanilla_AE_CNN,
-    Weak_RRAE_CNN,
     IRMAE_CNN,
     LoRAE_CNN,
 )
 import jax.numpy as jnp
 import equinox as eqx
-from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
+from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class, AE_Trainor_class
 
 
 @pytest.mark.parametrize(
     "model_cls, sh, lf",
     [
         (Vanilla_AE_CNN, (1, 2, 2, 10), "default"),
-        # (Weak_RRAE_CNN, (3, 12, 12, 10), "Weak"),
         (LoRAE_CNN, (6, 16, 16, 10), "nuc"),
     ],
 )
-def test_fitting(model_cls, sh, lf):
+def test_AE_fitting(model_cls, sh, lf):
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
-    trainor = Trainor_class(
+    trainor = AE_Trainor_class(
         x,
         model_cls,
         latent_size=100,
@@ -47,7 +45,7 @@ def test_fitting(model_cls, sh, lf):
             x,
             verbose=False,
             training_key=jrandom.PRNGKey(50),
-            **kwargs,
+            training_kwargs=kwargs,
         )
     except Exception as e:
         assert False, f"Fitting failed with the following exception {repr(e)}"
@@ -58,7 +56,7 @@ def test_IRMAE_fitting():
     lf = "default"
     sh = (3, 12, 12, 10)
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
-    trainor = Trainor_class(
+    trainor = AE_Trainor_class(
         x,
         model_cls,
         latent_size=100,
@@ -76,14 +74,14 @@ def test_IRMAE_fitting():
             x,
             verbose=False,
             training_key=jrandom.PRNGKey(50),
-            **kwargs,
+            training_kwargs=kwargs,
         )
     except Exception as e:
         assert False, f"Fitting failed with the following exception {repr(e)}"
 
-def test_Strong_fitting():
+def test_RRAE_fitting():
     sh = (1, 20, 20, 10)
-    model_cls = Strong_RRAE_CNN
+    model_cls = RRAE_CNN
     x = jrandom.normal(jrandom.PRNGKey(0), sh)
     trainor = RRAE_Trainor_class(
         x,
@@ -97,7 +95,7 @@ def test_Strong_fitting():
     )
     training_kwargs = {
         "step_st": [2],
-        "loss_type": "Strong"
+        "loss_type": "default"
     }
     ft_kwargs = {
         "step_st": [2],

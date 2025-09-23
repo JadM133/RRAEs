@@ -1,10 +1,7 @@
 from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class  # , Trainor_class
 import jax.random as jrandom
-import pdb
 from RRAEs.utilities import get_data
-import jax.numpy as jnp
-import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
@@ -25,11 +22,11 @@ if __name__ == "__main__":
     print(f"Shape of data is {x_train.shape} (T x Ntr) and {x_test.shape} (T x Nt)")
 
     # Step 2: Specify the model to use, Strong_RRAE_MLP is ours (recommended).
-    method = "Strong"
+    method = "RRAE"
 
-    model_cls = Strong_RRAE_MLP
+    model_cls = RRAE_MLP
 
-    loss_type = "Strong"  # Specify the loss type, according to the model chosen.
+    loss_type = "RRAE"  # Specify the loss type, according to the model chosen.
 
     # Step 3: Specify the archietectures' parameters:
     latent_size = 200  # latent space dimension

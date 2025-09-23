@@ -1,7 +1,6 @@
 import numpy as np
-from RRAEs.utilities import my_vmap
 import jax
-
+from RRAEs.utilities import np_vmap
 
 def p_of_dim_n_equi_grid(y_train, x_train, x_test):
     """Performs interpolation over an n-dimensional space with equidistant grid points."""
@@ -48,7 +47,7 @@ def p_of_dim_n_equi_grid(y_train, x_train, x_test):
 
         return nested_loops(dims, [], mats)
 
-    interp_ps = my_vmap(to_map_over_test)(x_test)
+    interp_ps = np_vmap(to_map_over_test)(x_test)
 
     def interpolate(coords, coord0, ps):
         ds = np.abs(coords - coord0)
@@ -62,7 +61,7 @@ def p_of_dim_n_equi_grid(y_train, x_train, x_test):
 
         return jax.vmap(func_per_mode, in_axes=[-1])(ps)
 
-    vt_test = my_vmap(interpolate)(
+    vt_test = np_vmap(interpolate)(
         x_train[interp_ps], x_test, y_train[:, interp_ps.T].T
     ).T
     if len(vt_test.shape) == 1:
