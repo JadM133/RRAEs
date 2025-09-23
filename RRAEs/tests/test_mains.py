@@ -5,7 +5,7 @@ import shutil
 
 def try_remove(name):
     try:
-        shutil.rmtree(os.path.join("RRAEs/", name))
+        shutil.rmtree(name)
     except FileNotFoundError:
         pass
 
@@ -27,7 +27,6 @@ def run_script(script_name):
     "script_name", ["main-MLP.py", "main-CNN.py",  "general-MLP.py", "main-adap-CNN.py", "main-adap-MLP.py", "main-var-CNN.py", "main-CNN1D.py"]
 )
 def test_scripts(script_name):
-    script_name = os.path.join("RRAEs/", script_name)
     if os.path.exists(script_name):
         output = run_script(script_name)
         assert output is not None
