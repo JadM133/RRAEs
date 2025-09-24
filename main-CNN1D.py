@@ -1,4 +1,5 @@
 print("GOT TO IMPORT")
+import RRAEs.config
 from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class
 import jax.random as jrandom
