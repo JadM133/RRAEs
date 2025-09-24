@@ -1,3 +1,4 @@
+import RRAEs.config
 import jax.random as jrandom
 import pytest
 from RRAEs.AE_classes import (
