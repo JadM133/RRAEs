@@ -2,7 +2,7 @@
 
 It is advised to take a look at main-MLP.py first if you haven't already, as some redundant details
 are not explained here. """
-
+import RRAEs.config
 from RRAEs.AE_classes import RRAE_MLP
 from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
 from RRAEs.trackers import RRAE_gen_Tracker, RRAE_Null_Tracker, RRAE_pars_Tracker
