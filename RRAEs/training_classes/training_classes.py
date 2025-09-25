@@ -372,6 +372,9 @@ class Trainor_class:
 
                     track_params = tracker(loss, avg_loss, track_params)
 
+                    if track_params["stop_train"]:
+                        break
+                    
                     dt = time.perf_counter() - start_time  # Execution time
                     t_t += dt  # Batch execution time
                     t_all += dt  # Total execution time

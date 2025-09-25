@@ -68,7 +68,9 @@ class RRAE_gen_Tracker:
         perf_loss=0,
         eps_0=1,
         eps_perc=5,
-        save_steps=20
+        save_steps=20,
+        k_min=1,
+        converged_steps=jnp.inf,
     ):
 
         self.patience_c_conv = 0
@@ -97,6 +99,9 @@ class RRAE_gen_Tracker:
         self.max_patience = jnp.inf
         self.save_steps = save_steps
         self.stop_train = False
+        self.k_min = k_min
+        self.converged_steps = converged_steps
+        self.converged_steps_c = 0
 
     def __call__(self, current_loss, prev_avg_loss, *args, **kwargs):
         save = False
@@ -125,6 +130,11 @@ class RRAE_gen_Tracker:
             return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
 
         self.total_steps += 1
+
+        if (self.k_now <= self.k_min) and (not self.converged):
+          print("Converged to minimum value")
+          self.converged = True
+
         if not self.converged:
             if current_loss < self.ideal_loss:
                 self.patience_c = 0
@@ -143,7 +153,9 @@ class RRAE_gen_Tracker:
             else:
                 self.patience_c_conv = 0
                 self.k_steps += 1
-                if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_0:
+                stg = jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_0
+                worse = current_loss > prev_avg_loss
+                if stg or worse:
                     self.k_steps = 0
                     self.patience_c += 1
                     if self.patience_c == self.patience:
@@ -156,14 +168,23 @@ class RRAE_gen_Tracker:
                         print("adding one and shit")
                         
         else:
-            if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_perc:
-                self.patience_c += 1
-                if self.patience_c == self.patience:
-                    self.patience_c = 0
-                    self.prev_k_steps = 0
-                    save = True
-                    self.stop_train = True
-                    print("Stopping training")
+            self.converged_steps_c += 1
+
+            if self.converged_steps_c >= self.converged_steps:
+                self.stop_train = True
+                save = True
+                self.patience_c = 0
+                self.prev_k_steps = 0
+                
+            else:
+                if jnp.abs(current_loss - prev_avg_loss)/jnp.abs(prev_avg_loss)*100 < self.eps_perc:
+                    self.patience_c += 1
+                    if self.patience_c == self.patience:
+                        self.patience_c = 0
+                        self.prev_k_steps = 0
+                        save = True
+                        self.stop_train = True
+                        print("Stopping training")
 
         return {"k_max": self.k_now, "save": save, "break_": break_, "stop_train": self.stop_train}
 
