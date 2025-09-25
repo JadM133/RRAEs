@@ -813,7 +813,7 @@ class RRAE_Trainor_class(AE_Trainor_class):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, epsilon=epsilon, apply_basis=basis, keep_normalized=True)
             aux = {"loss": norm_loss_(pred, out)}
-            return norm_loss_(pred, out), aux
+            return norm_loss_(pred, out), (aux, {})
 
         if "loss_type" in kwargs :
             pass
