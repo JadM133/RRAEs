@@ -311,7 +311,8 @@ class Trainor_class:
 
         # Initialize tracker
         track_params = tracker.init()
-            
+        extra_track = {}
+        
         # Initializer printer object
         print_info = Print_Info(**verbatim)
 
@@ -351,7 +352,7 @@ class Trainor_class:
                     step_kwargs = merge_dicts(loss_kwargs, track_params)
 
                     # Compute loss
-                    loss, model, opt_state, aux = make_step(
+                    loss, model, opt_state, (aux, extra_track) = make_step(
                                                                 model,
                                                                 input_b,
                                                                 out_b,
@@ -370,9 +371,9 @@ class Trainor_class:
                     if step > stagn_window:
                         avg_loss = sum(prev_losses) / stagn_window
 
-                    track_params = tracker(loss, avg_loss, track_params)
+                    track_params = tracker(loss, avg_loss, track_params, **extra_track)
 
-                    if track_params["stop_train"]:
+                    if track_params.get("stop_train"):
                         break
                     
                     dt = time.perf_counter() - start_time  # Execution time
@@ -431,7 +432,7 @@ class Trainor_class:
         self.model = model
         self.batch_size = batch_size
         self.t_all = t_all
-        return model, track_params
+        return model, track_params | extra_track
 
     def evaluate(
         self,
@@ -605,7 +606,7 @@ class Trainor_class:
 class AE_Trainor_class(Trainor_class):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, methods_map=["encode", "decode"], methods_norm_in=["encode"], methods_norm_out=["decode"], **kwargs)
-    
+
     def fit(self, *args, training_key, training_kwargs,  **kwargs):
         if "pre_func_inp" not in kwargs:
             self.pre_func_inp = lambda x: x
@@ -764,9 +765,14 @@ class RRAE_Trainor_class(AE_Trainor_class):
             self.batch_size = 16  # default value
 
         if ft_kwargs:
-            self.fine_tune_basis(
+            ft_model, ft_track_params = self.fine_tune_basis(
                 None, args=args, kwargs=ft_kwargs, key=key1
             )  # fine tune basis
+            self.ft_track_params = ft_track_params
+        else:
+            ft_model = None
+            ft_track_params = {}
+        return model, track_params, ft_model, ft_track_params
 
     def fine_tune_basis(self, basis=None, *, args, kwargs, key):
 
@@ -819,7 +825,7 @@ class RRAE_Trainor_class(AE_Trainor_class):
         
         fix_comp = lambda model: model._encode
         print("Fine tuning the basis ...")
-        super().fit(*args, training_key=key, fix_comp=fix_comp, training_kwargs=kwargs)
+        return super().fit(*args, training_key=key, fix_comp=fix_comp, training_kwargs=kwargs)
 
     def evaluate(
         self,
