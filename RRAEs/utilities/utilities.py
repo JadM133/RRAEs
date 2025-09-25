@@ -127,7 +127,7 @@ def loss_generator(which=None, norm_loss_=None):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, keep_normalized=True)
             aux = {"loss": norm_loss_(pred, out)}
-            return norm_loss_(pred, out), aux
+            return norm_loss_(pred, out), (aux, {})
         
     elif which == "RRAE":
         @eqx.filter_value_and_grad(has_aux=True)
@@ -135,7 +135,7 @@ def loss_generator(which=None, norm_loss_=None):
             model = eqx.combine(diff_model, static_model)
             pred = model(input, k_max=k_max, keep_normalized=True)
             aux = {"loss": norm_loss_(pred, out), "k_max": k_max}
-            return norm_loss_(pred, out), aux
+            return norm_loss_(pred, out), (aux, {})
     
     elif which == "Sparse":
         @eqx.filter_value_and_grad(has_aux=True)
@@ -150,7 +150,7 @@ def loss_generator(which=None, norm_loss_=None):
             ) * jnp.log((1 - sparsity) / (1 - jnp.mean(lat) + 1e-8))
 
             aux = {"loss rec": norm_loss_(pred, out), "loss sparse": sparse_term}
-            return norm_loss_(pred, out) + beta * sparse_term, aux
+            return norm_loss_(pred, out) + beta * sparse_term, (aux, {})
 
     elif which == "nuc":
         @eqx.filter_value_and_grad(has_aux=True)
@@ -183,7 +183,7 @@ def loss_generator(which=None, norm_loss_=None):
                 weight = find_layer(model)
 
             aux = {"loss rec": norm_loss_(pred, out), "loss nuc": jnp.linalg.norm(weight, "nuc")}
-            return norm_loss(pred, out) + lambda_nuc * jnp.linalg.norm(weight, "nuc"), aux
+            return norm_loss(pred, out) + lambda_nuc * jnp.linalg.norm(weight, "nuc"), (aux, {})
 
     elif which == "VRRAE":
         norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
@@ -205,7 +205,7 @@ def loss_generator(which=None, norm_loss_=None):
             if beta is None:
                 beta = lambda_fn(loss_rec, kl_loss)
             aux["beta"] = beta
-            return loss_rec + beta*kl_loss, aux
+            return loss_rec + beta*kl_loss, (aux, {})
 
     elif which == "VAE":
         norm_loss_ = lambda pr, out: jnp.linalg.norm(pr-out)/jnp.linalg.norm(out)*100
@@ -229,7 +229,7 @@ def loss_generator(which=None, norm_loss_=None):
             if beta is None:
                 beta = lambda_fn(loss_rec, kl_loss)
             aux["beta"] = beta
-            return loss_rec + beta*kl_loss, aux
+            return loss_rec + beta*kl_loss, (aux, {})
         
     elif "Contractive":
         @eqx.filter_value_and_grad(has_aux=True)
@@ -246,7 +246,7 @@ def loss_generator(which=None, norm_loss_=None):
             wv = jnp.array([1.0, beta])
             aux = {"loss": norm_loss_(pred, out), "cont": loss_contr}
             aux = {"loss": norm_loss_(pred, out), "cont": loss_contr}
-            return norm_loss_(pred, out) + beta * loss_contr, aux
+            return norm_loss_(pred, out) + beta * loss_contr, (aux, {})
     else:
         raise ValueError(f"{which} is an Unknown loss type")
     return loss_fun
