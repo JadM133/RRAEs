@@ -765,8 +765,14 @@ class RRAE_Trainor_class(AE_Trainor_class):
             self.batch_size = 16  # default value
 
         if ft_kwargs:
+            if "get_basis" in ft_kwargs:
+                get_basis = ft_kwargs["get_basis"]
+                ft_kwargs.pop("get_basis")
+            else:
+                get_basis = True
+                
             ft_model, ft_track_params = self.fine_tune_basis(
-                None, args=args, kwargs=ft_kwargs, key=key1
+                None, args=args, kwargs=ft_kwargs, key=key1, get_basis=get_basis
             )  # fine tune basis
             self.ft_track_params = ft_track_params
         else:
@@ -774,7 +780,7 @@ class RRAE_Trainor_class(AE_Trainor_class):
             ft_track_params = {}
         return model, track_params, ft_model, ft_track_params
 
-    def fine_tune_basis(self, basis=None, *, args, kwargs, key):
+    def fine_tune_basis(self, basis=None, get_basis=True, *, args, kwargs, key):
 
         if "loss" in kwargs:
             norm_loss_ = kwargs["loss"]
@@ -784,27 +790,31 @@ class RRAE_Trainor_class(AE_Trainor_class):
                 jnp.linalg.norm(x1 - x2) / jnp.linalg.norm(x2)
             )
 
-        if basis is None:
-            inp = args[0] if len(args) > 0 else kwargs["input"]
+        if (basis is None):
+            if get_basis:
+                inp = args[0] if len(args) > 0 else kwargs["input"]
 
-            if "basis_batch_size" in kwargs:
-                basis_batch_size = kwargs["basis_batch_size"]
-                kwargs.pop("basis_batch_size")
+                if "basis_batch_size" in kwargs:
+                    basis_batch_size = kwargs["basis_batch_size"]
+                    kwargs.pop("basis_batch_size")
+                else:
+                    basis_batch_size = self.batch_size
+
+                all_bases = eval_with_batches(
+                    inp,
+                    basis_batch_size,
+                    call_func=lambda x: self.model.latent(
+                        self.pre_func_inp(x), get_basis_coeffs=True, **self.track_params
+                    )[0],
+                    str="Finding train latent space...",
+                    end_type="concat",
+                    key_idx=0,
+                )
+                basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
+                self.basis = basis[:, : self.track_params["k_max"]]
             else:
-                basis_batch_size = self.batch_size
-
-            all_bases = eval_with_batches(
-                inp,
-                basis_batch_size,
-                call_func=lambda x: self.model.latent(
-                    self.pre_func_inp(x), get_basis_coeffs=True, **self.track_params
-                )[0],
-                str="Finding train latent space...",
-                end_type="concat",
-                key_idx=0,
-            )
-            basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
-            self.basis = basis[:, : self.track_params["k_max"]]
+                bas = self.model.latent(self.pre_func_inp(x[..., 0:1]), get_basis_coeffs=True, **self.track_params)[0]
+                self.basis = jnp.eye(bas.shape[0])
         else:
             self.basis = basis
 
