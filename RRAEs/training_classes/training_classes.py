@@ -193,6 +193,9 @@ class Trainor_class:
             "call_map_axis": call_map_axis,
             "call_map_count": call_map_count,
             "model_cls": model_cls,
+            "methods_map": methods_map,
+            "methods_norm_in": methods_norm_in,
+            "methods_norm_out": methods_norm_out,
         }
 
         self.folder = folder
@@ -569,10 +572,14 @@ class Trainor_class:
             dill.dump(obj, f)
         print(f"Object saved in {filename}")
 
-    def load_model(self, filename=None, erase=False, path=None, **fn_kwargs):
+    def load_model(self, filename=None, erase=False, path=None, model_cls=None, **fn_kwargs):
         """NOTE: fn_kwargs defines the functions of the model
         (e.g. final_activation, inner activation), if
-        needed to be saved/loaded on different devices/OS."""
+        needed to be saved/loaded on different devices/OS.
+        NOTE: if you have a systemerror when loading model 
+        that you saved on different device/OS, try giving
+        the model_cls argument when loading.
+        """
 
         if path == None:
             filename = self.file if filename is None else filename
@@ -582,7 +589,10 @@ class Trainor_class:
 
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
-            self.model_cls = self.all_kwargs["model_cls"]
+            if model_cls is None:
+                self.model_cls = self.all_kwargs["model_cls"]
+            else:
+                self.model_cls = model_cls
             kwargs = self.all_kwargs["kwargs"]
             self.call_map_axis = self.all_kwargs["call_map_axis"]
             self.call_map_count = self.all_kwargs["call_map_count"]
@@ -590,10 +600,14 @@ class Trainor_class:
             self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
+            self.methods_map = ["encode", "decode"] # self.all_kwargs["methods_map"]
+            self.methods_norm_in = ["encode"] # self.methods_norm_in["methods_norm_in"]
+            self.methods_norm_out = ["decode"] # self.methods_norm_out["methods_norm_out"]
             kwargs.update(fn_kwargs)
 
-            model_cls = vmap_wrap(self.model_cls, self.call_map_axis, self.call_map_count, ["__call__", "encode", "decode"])
-            model_cls = norm_wrap(self.model_cls, None, self.norm_in, self.params_in, None, self.norm_out, self.params_out, ["__call__", "encode"], ["__call__", "decode"])
+            model_cls = vmap_wrap(self.model_cls, self.call_map_axis, self.call_map_count, self.methods_map)
+            model_cls = norm_wrap(model_cls, None, self.norm_in, self.params_in, None, self.norm_out, self.params_out, self.methods_norm_in, self.methods_norm_out)
+            
             self.model = model_cls(**kwargs)
             self.model = eqx.tree_deserialise_leaves(f, self.model)
             attributes = dill.load(f)

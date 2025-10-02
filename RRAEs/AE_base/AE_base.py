@@ -111,9 +111,9 @@ def _default_autoencoder():
             return self._perform_in_latent(y, *args, **kwargs)
 
         def __call__(self, x, *args, **kwargs):
-            return self.decode(self.perform_in_latent(self.encode(x), *args, **kwargs))
+            return self.decode(self.perform_in_latent(self.encode(x, no_map=True), *args, **kwargs), no_map=True)
 
         def latent(self, x, *args, **kwargs):
-            return self.perform_in_latent(self.encode(x), *args, **kwargs)
+            return self.perform_in_latent(self.encode(x, no_map=True), *args, **kwargs)
 
     return Autoencoder
