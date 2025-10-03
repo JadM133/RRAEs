@@ -1,3 +1,4 @@
+import RRAEs.config
 import jax.random as jrandom
 from RRAEs.AE_classes import RRAE_CNN
 import jax.numpy as jnp
@@ -25,6 +26,10 @@ def test_save():  # Only to test if saving/loading is causing a problem
     trainor.save_model("test_")
     new_trainor = RRAE_Trainor_class()
     new_trainor.load_model("test_", erase=True)
+    try:
+        pr = trainor.model(data[..., 0:1], k_max=2)
+    except Exception as e:
+        raise ValueError(f"Original trainor failed with following exception {e}")
     try:
         pr = new_trainor.model(data[..., 0:1], k_max=2)
     except Exception as e:
