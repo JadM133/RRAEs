@@ -400,8 +400,8 @@ class Trainor_class:
                         print(print_info)
                     
                     if track_params.get("load"):
-                        self.load_model(f"checkpoint_k_{track_params.get("k_max")}")
-                        self.del_file(f"checkpoint_k_{track_params.get("k_max")}")
+                        self.load_model(f"checkpoint_k_{track_params.get('k_max')}")
+                        self.del_file(f"checkpoint_k_{track_params.get('k_max')}")
                         model = self.model
 
                         filtered_filter_spec = tree_map(lambda _: True, model)
@@ -423,8 +423,8 @@ class Trainor_class:
                         self.model = model
 
                         if track_params.get("save"):
-                            orig = f"checkpoint_k_{track_params.get("k_max")+1}"
-                            self.del_file(f"checkpoint_k_{track_params.get("k_max")+2}")
+                            orig = f"checkpoint_k_{track_params.get('k_max')+1}"
+                            self.del_file(f"checkpoint_k_{track_params.get('k_max')+2}")
                             checkpoint_filename = orig
 
                         else:
