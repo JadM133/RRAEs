@@ -1,4 +1,5 @@
-import RRAEs.config
+""" Example script to train an RRAE with MLP encoder/decoder on curves (1D). """
+import RRAEs.config # Include this in all your scripts
 from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class  # , Trainor_class
 import jax.random as jrandom
@@ -43,8 +44,8 @@ if __name__ == "__main__":
         k_max=k_max,
         folder=f"{problem}/{method}_{problem}/",
         file=f"{method}_{problem}.pkl",
-        norm_in="minmax",
-        norm_out="minmax",
+        norm_in="None",
+        norm_out="None",
         kwargs_enc={
             "width_size": 300,
             "depth": 1,
@@ -63,15 +64,16 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [2],  # Increase this to train well
+        "step_st": [2],  # Increase this to train well (e.g. 2000)
         "batch_size_st": [64, 64, 64, 64, 64],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
         "loss_type": loss_type,
+        "save_losses":True
     }
 
     ft_kwargs = {
-        "step_st": [2],
+        "step_st": [0], # Increase if you want to fine tune
         "batch_size_st": [64],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
@@ -81,12 +83,21 @@ if __name__ == "__main__":
     trainor.fit(
         x_train,
         y_train,
+        input_val=x_train, # put your validation set here if you have one, otherwise None
+        output_val=y_train, # put your validation set here if you have one, otherwise None
         training_key=jrandom.PRNGKey(50),
         training_kwargs=training_kwargs,
         ft_kwargs=ft_kwargs,
         pre_func_inp=pre_func_inp,
         pre_func_out=pre_func_out,
     )
+
+    # NOTE: the code does not overwrite the loss files, it gives every new file
+    # an index (e.g. all_losses_0, all_losses_1, etc.), if you run the model
+    # multiple times without deleting the loss file, consider changing idx
+    # below to specify the file of which training you want to plot
+    # trainor.plot_training_losses(idx=0) # to plot both training and validation losses
+
 
     preds = trainor.evaluate(
         x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out

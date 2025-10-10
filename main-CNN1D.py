@@ -1,5 +1,5 @@
-print("GOT TO IMPORT")
-import RRAEs.config
+""" Example script to train an RRAE with CNN encoder/decoder on curves (1D). """
+import RRAEs.config # Include this in all your scripts
 from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class
 import jax.random as jrandom
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     # find the basis), and fine-tuning kw arguments (second stage of training with the
     # basis found in the first stage).
     training_kwargs = {
-        "step_st": [200, 2],  # Increase those to train well
+        "step_st": [2],  # Increase those to train well
         "batch_size_st": [64, 64],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [2], # Increase those to train well
+        "step_st": [0], # Increase if you want to fine tune
         "batch_size_st": [64],
         "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
         "print_every": 100,

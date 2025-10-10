@@ -1,6 +1,6 @@
 """ This script contains an example of how to use a Trainor class for any equinox model. Specifically,
 The MLP."""
-
+import RRAEs.config # Include this in all your scripts
 from equinox.nn import MLP
 from RRAEs.training_classes import Trainor_class
 import jax.random as jrandom

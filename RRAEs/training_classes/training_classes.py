@@ -24,12 +24,11 @@ from RRAEs.wrappers import vmap_wrap, norm_wrap
 from functools import partial
 from RRAEs.trackers import (
     Null_Tracker,
-    RRAE_Null_Tracker,
+    RRAE_fixed_Tracker,
     RRAE_pars_Tracker,
     RRAE_gen_Tracker,
 )
-
-
+import matplotlib.pyplot as plt
 from prettytable import PrettyTable
 
 
@@ -234,6 +233,8 @@ class Trainor_class:
                     "printer_settings":{"padding_width": 3}
                     },
         save_losses=False,
+        input_val=None,
+        output_val=None,
         latent_size=0,
         *,
         training_key,
@@ -361,6 +362,18 @@ class Trainor_class:
                                                                 **step_kwargs,
                                                             )
                     
+                    if input_val is not None:
+                        diff_model, static_model = eqx.partition(
+                            model, filter_spec
+                        )  # Split model into differential and static portions
+
+                        idx = jnp.arange(input_val.shape[-1])
+                        (val_loss, _), _ = loss_fun(
+                            diff_model, static_model, input_val, output_val, idx=idx, epsilon=None, **step_kwargs
+                        )
+                        aux["val_loss"] = val_loss
+                    else:
+                        aux["val_loss"] = None
 
                     if save_losses:
                         all_losses.append(aux)
@@ -385,33 +398,52 @@ class Trainor_class:
                         print_info.update_aux({"Batch": step, **aux, "Time [s]": dt, "Total time [s]": t_all})
                         
                         print(print_info)
+                    
+                    if track_params.get("load"):
+                        self.load_model(f"checkpoint_k_{track_params.get("k_max")}")
+                        self.del_file(f"checkpoint_k_{track_params.get("k_max")}")
+                        model = self.model
+
+                        filtered_filter_spec = tree_map(lambda _: True, model)
+                        new_filt = jtu.tree_map(lambda _: False, fix_comp(filtered_filter_spec))
+                        filter_spec = jtu.tree_map(lambda _: True, model)
+                        filter_spec = eqx.tree_at(fix_comp, filter_spec, replace=new_filt)
+
+                        diff_model, _ = eqx.partition(model, filter_spec)
+                        filtered_model = eqx.filter(diff_model, eqx.is_inexact_array)
+
+                        optim = optimizer(lr)
+                        opt_state = optim.init(filtered_model)
                         
-                    if ((step % save_every) == 0) or jnp.isnan(loss):
+
+                    if track_params.get("save") or ((step % save_every) == 0) or jnp.isnan(loss):
                         if jnp.isnan(loss):
                             raise ValueError("Loss is nan, stopping training...")
 
                         self.model = model
 
-                        orig = (
-                            f"checkpoint_{step}"
-                            if not jnp.isnan(loss)
-                            else "checkpoint_bf_nan"
-                        )
+                        if track_params.get("save"):
+                            orig = f"checkpoint_k_{track_params.get("k_max")+1}"
+                            self.del_file(f"checkpoint_k_{track_params.get("k_max")+2}")
+                            checkpoint_filename = orig
 
-                        checkpoint_filename = f"{orig}_0.pkl"
+                        else:
+                            orig = (
+                                f"checkpoint_{step}"
+                                if not jnp.isnan(loss)
+                                else "checkpoint_bf_nan"
+                            )
 
-                        if os.path.exists(checkpoint_filename):
-                            i = 1
-                            new_filename = f"{orig}_{i}.pkl"
-                            while self.path_exists(new_filename):
-                                i += 1
+                            checkpoint_filename = f"{orig}_0.pkl"
+
+                            if os.path.exists(checkpoint_filename):
+                                i = 1
                                 new_filename = f"{orig}_{i}.pkl"
-                            checkpoint_filename = new_filename
+                                while self.path_exists(new_filename):
+                                    i += 1
+                                    new_filename = f"{orig}_{i}.pkl"
+                                checkpoint_filename = new_filename
                         self.save_model(checkpoint_filename)
-                        last_saved = checkpoint_filename
-
-                        self.save_model(checkpoint_filename)
-                        last_saved = checkpoint_filename
 
             except KeyboardInterrupt:
                 pass
@@ -432,6 +464,21 @@ class Trainor_class:
         self.batch_size = batch_size
         self.t_all = t_all
         return model, track_params | extra_track
+
+    def plot_training_losses(self, idx=0):
+        try:
+            with open(os.path.join(self.folder, f"all_losses_{idx}.pkl"), "rb") as f:
+                res_list = dill.load(f)
+        except FileNotFoundError:
+            raise ValueError("Losses where not saved during training, did you set save_losses=True in training_kwargs?")
+        training_losses = [r["loss"] for r in res_list]
+        val_losses = [r["val_loss"] for r in res_list]
+        plt.plot(training_losses, label="training loss")
+        if val_losses[0] is not None:
+            plt.plot(val_losses, label="val loss")
+        plt.legend()
+        plt.xlabel("Forward pass")
+        plt.show()
 
     def evaluate(
         self,
@@ -536,6 +583,11 @@ class Trainor_class:
     def path_exists(self, filename):
         return os.path.exists(os.path.join(self.folder, filename))
 
+    def del_file(self, filename):
+        filename = os.path.join(self.folder, filename)
+        if os.path.exists(filename):
+            os.remove(filename)
+
     def save_model(self, filename=None, erase=False, **kwargs):
         """Saves the trainor class."""
         if filename is None:
@@ -546,7 +598,6 @@ class Trainor_class:
                 shutil.rmtree(self.folder)
                 os.makedirs(self.folder)
         else:
-            filename = os.path.join(self.folder, filename)
             filename = os.path.join(self.folder, filename)
             if not os.path.exists(filename):
                 with open(filename, "a") as temp_file:
@@ -561,7 +612,13 @@ class Trainor_class:
             eqx.tree_serialise_leaves(f, self.model)
             dill.dump(attr, f)
         print(f"Model saved in {filename}")
-
+    
+    def load_object(self, filename):
+        filename = os.path.join(self.folder, filename)
+        with open(filename, "rb") as f:
+            object = dill.load(f)
+        return object
+    
     def save_object(self, obj, filename):
         filename = os.path.join(self.folder, filename)
         with open(filename, "wb") as f:
@@ -731,7 +788,7 @@ class RRAE_Trainor_class(AE_Trainor_class):
                 warnings.warn(
                     "k_max can not be None when using fixed scheme, choose a fixed k_max to use."
                 )
-            default_tracker = RRAE_Null_Tracker(k_max=self.k_init)
+            default_tracker = RRAE_fixed_Tracker(k_init=self.k_init)
 
         print("Training RRAEs...")
 
@@ -803,7 +860,6 @@ class RRAE_Trainor_class(AE_Trainor_class):
                     kwargs.pop("basis_batch_size")
                 else:
                     basis_batch_size = self.batch_size
-
                 all_bases = eval_with_batches(
                     inp,
                     basis_batch_size,
@@ -817,7 +873,7 @@ class RRAE_Trainor_class(AE_Trainor_class):
                 basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
                 self.basis = basis[:, : self.track_params["k_max"]]
             else:
-                bas = self.model.latent(self.pre_func_inp(x[..., 0:1]), get_basis_coeffs=True, **self.track_params)[0]
+                bas = self.model.latent(self.pre_func_inp(inp[..., 0:1]), get_basis_coeffs=True, **self.track_params)[0]
                 self.basis = jnp.eye(bas.shape[0])
         else:
             self.basis = basis
