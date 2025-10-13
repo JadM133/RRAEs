@@ -33,16 +33,24 @@ In RRAEs.utilities, there's a function called get_data that can import many data
 If you want to generate your own dataset, you will have to define the following:
 
 x_train: Train input (refer to each script to see the shape)
+
 x_test: Test input (refer to each script to see the shape)
+
 p_train: None (if you don't have any parameters, otherwise, 
             these can be used for interpolation in the latent space)
+            
 p_test: Same as p_train
+
 y_train: = x_train for autoencoders
+
 y_test: = x_test for autoencoders
+
 pre_func_inp: lambda x:x (if not needed, this is a function to be applied
                           on batches if memory is not enough to apply
                           over whole dataset)
+                          
 pre_func_out: lambda x:x (same as above but for output)
+
 kwargs: {} (any other kwargs you might need)
 
 # Installation
