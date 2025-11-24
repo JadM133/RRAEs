@@ -1525,7 +1525,6 @@ class MLP_with_CNN3D_trans(eqx.Module, strict=True):
             kernel_conv,
             dilation,
             width_CNNs,
-            len(width_CNNs),
             transpose=True,
             output_padding=output_padding,
             final_activation=jnn.relu,
