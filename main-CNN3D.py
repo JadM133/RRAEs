@@ -1,4 +1,4 @@
-print("GOT TO IMPORT")
+""" Example script to train an RRAE with CNN encoder/decoder on cubes (3D). """
 import RRAEs.config
 from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     }
 
     ft_kwargs = {
-        "step_st": [0], # Increase those to train well
+        "step_st": [0], # Increase if you want to fine tune
         "batch_size_st": [20],
         "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
         "print_every": 100,

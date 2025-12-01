@@ -1,5 +1,5 @@
-print("GOT TO IMPORT")
-import RRAEs.config
+""" Example script to train an RRAE with CNN encoder/decoder on images. """
+import RRAEs.config # Include this in all your scripts
 from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class
 import jax.random as jrandom
@@ -47,8 +47,8 @@ if __name__ == "__main__":
         k_max=k_max,
         folder=f"{problem}",
         file=f"{method}_{problem}_test.pkl",
-        norm_in="minmax",
-        norm_out="minmax",
+        norm_in="None",
+        norm_out="None",
         out_train=x_train,
         kwargs_enc={
             "width_CNNs": [32, 64, 128],
@@ -77,10 +77,11 @@ if __name__ == "__main__":
         "print_every": 1,
         # "save_every": 789,
         "loss_type": loss_type,
+        "save_losses": True # if you want to save losses to plot them later
     }
 
     ft_kwargs = {
-        "step_st": [2], # Increase those to train well
+        "step_st": [0], # Increase if you want to fine tune
         "batch_size_st": [20],
         "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
         "print_every": 100,
@@ -97,6 +98,13 @@ if __name__ == "__main__":
         pre_func_inp=pre_func_inp,
         pre_func_out=pre_func_out,
     )
+
+    # NOTE: the code does not overwrite the loss files, it gives every new file
+    # an index (e.g. all_losses_0, all_losses_1, etc.), if you run the model
+    # multiple times without deleting the loss file, consider changing idx
+    # below to specify the file of which training you want to plot
+    # trainor.plot_training_losses(idx=0) # to plot both training and validation losses
+
     preds = trainor.evaluate(
         x_train, y_train, x_test, y_test, None, pre_func_inp, pre_func_out
     )

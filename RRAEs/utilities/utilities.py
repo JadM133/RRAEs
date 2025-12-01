@@ -519,7 +519,7 @@ def get_data(problem, folder=None, train_size=1000, test_size=10000, **kwargs):
             def sf_func(s, x):
                 return jnp.sin(x - s * jnp.pi)
 
-            p_vals = jnp.linspace(0, 1.8, 18)[:-1]  # 18
+            p_vals = jnp.linspace(0, 1.8, 200)[:-1]  # 18
             y_shift = jax.vmap(sf_func, in_axes=[0, None])(p_vals, ts).T
             p_test = jnp.linspace(0, jnp.max(p_vals), 500)[1:-1]
             y_test = jax.vmap(sf_func, in_axes=[0, None])(p_test, ts).T
@@ -636,8 +636,8 @@ def get_data(problem, folder=None, train_size=1000, test_size=10000, **kwargs):
 
         case "mult_gausses":
 
-            p_vals_0 = jnp.repeat(jnp.linspace(1, 3, 10), 10)
-            p_vals_1 = jnp.tile(jnp.linspace(4, 6, 10), 10)
+            p_vals_0 = jnp.repeat(jnp.linspace(1, 3, 10), 100)
+            p_vals_1 = jnp.tile(jnp.linspace(4, 6, 10), 100)
             p_vals = jnp.stack([p_vals_0, p_vals_1], axis=-1)
             p_test_0 = jrandom.uniform(
                 jrandom.PRNGKey(1000),
@@ -1525,7 +1525,6 @@ class MLP_with_CNN3D_trans(eqx.Module, strict=True):
             kernel_conv,
             dilation,
             width_CNNs,
-            len(width_CNNs),
             transpose=True,
             output_padding=output_padding,
             final_activation=jnn.relu,

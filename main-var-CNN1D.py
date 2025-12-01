@@ -1,4 +1,5 @@
-import RRAEs.config
+""" Example script to train a VRRAE with CNN encoder/decoder on curves (1D). """
+import RRAEs.config # Include this in all your scripts
 from RRAEs.AE_classes import *
 from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class  # , Trainor_class
 import jax.random as jrandom
@@ -101,7 +102,7 @@ if __name__ == "__main__":
 
 
     ft_kwargs = {
-        "step_st": [0],
+        "step_st": [0], # Increase if you want to fine tune
         "batch_size_st": [64],
         "lr_st": [1e-4, 1e-6, 1e-7, 1e-8],
         "print_every": 1,

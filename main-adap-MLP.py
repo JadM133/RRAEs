@@ -2,17 +2,17 @@
 
 It is advised to take a look at main-MLP.py first if you haven't already, as some redundant details
 are not explained here. """
-import RRAEs.config
+import RRAEs.config # Include this in all your scripts
 from RRAEs.AE_classes import RRAE_MLP
 from RRAEs.training_classes import RRAE_Trainor_class, Trainor_class
-from RRAEs.trackers import RRAE_gen_Tracker, RRAE_Null_Tracker, RRAE_pars_Tracker
+from RRAEs.trackers import RRAE_gen_Tracker, RRAE_fixed_Tracker, RRAE_pars_Tracker
 import jax.random as jrandom
 from RRAEs.utilities import get_data
 
 
 if __name__ == "__main__":
     # Step 1: Get the data - replace this with your own data of the same shape.
-    problem = "gaussian_shift"
+    problem = "mult_gausses"
 
     (
         x_train,
@@ -52,8 +52,8 @@ if __name__ == "__main__":
         k_max=k_max,
         folder=f"{problem}/{method}_{problem}/",
         file=f"{method}_{problem}.pkl",
-        norm_in="minmax",
-        norm_out="minmax",
+        norm_in="None",
+        norm_out="None",
         kwargs_enc={
             "width_size": 300,
             "depth": 1,
@@ -80,12 +80,13 @@ if __name__ == "__main__":
     }
 
     # The tracker above will specify the adaptive scheme to be used. Gen means generic and it
-    # is the algorithm that starts with the mlargest possible number of modes and starts decreasing
-    # until stagnation. For this tracker, consider increasing a lot "step_st" since the algorithm
-    # will break training by itself on stagnation.
+    # is the algorithm that starts with the largest possible number of modes and starts decreasing
+    # until stagnation. For this tracker, consider increasing a big "step_st" since the algorithm
+    # will break training by itself on stagnation. Refer to RRAE_gen_Tracker for more details
+    # about the parameters of the algorithm.
 
     ft_kwargs = {
-        "step_st": [2], # Increase those to train better
+        "step_st": [0], # Increase if you want to fine tune
         "batch_size_st": [64],
         "lr_st": [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8],
         "print_every": 1,

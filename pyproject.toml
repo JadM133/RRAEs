@@ -4,5 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "RRAEs"
-version = "0.1"
+version = "0.1.0"
+description= " A package that allows handling equinox models and training them easily. It also provides many pre-defined Autoencoders based on equinox."
+readme="README.md"
+requires-python= ">=3.10"
+license={text= "MIT"}
+authors=[{name="Jad Mounayer", email="jad.mounayer@outlook.com"}]
 dependencies = ["tqdm", "pytest", "dill", "jax", "jaxlib", "matplotlib", "numpy", "equinox", "optax", "pandas", "jaxtyping", "prettytable"]
