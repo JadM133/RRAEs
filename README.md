@@ -57,6 +57,10 @@ kwargs: {} (any other kwargs you might need)
 
 pip install RRAEs
 
+Or to get the newest changes:
+
+pip install git+https://github.com/JadM133/RRAEs.git
+
 # Using the Library in MATLAB
 
 The library is not coded in MATLAB, so we highly recommend that you use the python codes. However, if you would like to simply get predictions using RRAEs in MATLAB, you can run [MATLAB_runner.m](MATLAB_runner.m) and follow the instructions there.
