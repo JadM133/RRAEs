@@ -625,7 +625,7 @@ class Trainor_class:
             dill.dump(obj, f)
         print(f"Object saved in {filename}")
 
-    def load_model(self, filename=None, erase=False, path=None, **fn_kwargs):
+    def load_model(self, filename=None, erase=False, path=None, orig_model_cls=None, **fn_kwargs):
         """NOTE: fn_kwargs defines the functions of the model
         (e.g. final_activation, inner activation), if
         needed to be saved/loaded on different devices/OS.
@@ -639,7 +639,10 @@ class Trainor_class:
 
         with open(filename, "rb") as f:
             self.all_kwargs = dill.load(f)
-            orig_model_cls = self.all_kwargs["orig_model_cls"]
+            if orig_model_cls is None:
+                orig_model_cls = self.all_kwargs["orig_model_cls"]
+            else:
+                orig_model_cls = orig_model_cls
             kwargs = self.all_kwargs["kwargs"]
             self.call_map_axis = self.all_kwargs["call_map_axis"]
             self.call_map_count = self.all_kwargs["call_map_count"]
@@ -647,9 +650,15 @@ class Trainor_class:
             self.params_out = self.all_kwargs["params_out"]
             self.norm_in = self.all_kwargs["norm_in"]
             self.norm_out = self.all_kwargs["norm_out"]
-            self.methods_map = self.all_kwargs["methods_map"]
-            self.methods_norm_in = self.all_kwargs["methods_norm_in"]
-            self.methods_norm_out = self.all_kwargs["methods_norm_out"]
+            try:
+                self.methods_map = self.all_kwargs["methods_map"]
+                self.methods_norm_in = self.all_kwargs["methods_norm_in"]
+                self.methods_norm_out = self.all_kwargs["methods_norm_out"]
+            except:
+                self.methods_map = ["encode", "decode"]
+                self.methods_norm_in = ["encode"]
+                self.methods_norm_out = ["decode"]
+
             kwargs.update(fn_kwargs)
 
             model_cls = vmap_wrap(orig_model_cls, self.call_map_axis, self.call_map_count, self.methods_map)
@@ -831,9 +840,22 @@ class RRAE_Trainor_class(AE_Trainor_class):
                 ft_kwargs.pop("get_basis")
             else:
                 get_basis = True
-                
+            
+            if "ft_end_type" in ft_kwargs:
+                ft_end_type = ft_kwargs["ft_end_type"]
+                ft_kwargs.pop("ft_end_type")
+            else:
+                ft_end_type = "concat"
+            
+            if "basis_call_kwargs" in ft_kwargs:
+                basis_call_kwargs = ft_kwargs["basis_call_kwargs"]
+                ft_kwargs.pop("basis_call_kwargs")
+            else:
+                ft_end_type = "concat"
+                basis_call_kwargs = {}
+
             ft_model, ft_track_params = self.fine_tune_basis(
-                None, args=args, kwargs=ft_kwargs, key=key1, get_basis=get_basis
+                None, args=args, kwargs=ft_kwargs, key=key1, get_basis=get_basis, end_type=ft_end_type, basis_call_kwargs=basis_call_kwargs
             )  # fine tune basis
             self.ft_track_params = ft_track_params
         else:
@@ -841,7 +863,7 @@ class RRAE_Trainor_class(AE_Trainor_class):
             ft_track_params = {}
         return model, track_params, ft_model, ft_track_params
 
-    def fine_tune_basis(self, basis=None, get_basis=True, *, args, kwargs, key):
+    def fine_tune_basis(self, basis=None, get_basis=True, end_type="concat", basis_call_kwargs={}, *, args, kwargs, key):
 
         if "loss" in kwargs:
             norm_loss_ = kwargs["loss"]
@@ -860,20 +882,25 @@ class RRAE_Trainor_class(AE_Trainor_class):
                     kwargs.pop("basis_batch_size")
                 else:
                     basis_batch_size = self.batch_size
+
+                basis_kwargs = basis_call_kwargs | self.track_params
                 all_bases = eval_with_batches(
                     inp,
                     basis_batch_size,
                     call_func=lambda x: self.model.latent(
-                        self.pre_func_inp(x), get_basis_coeffs=True, **self.track_params
+                        self.pre_func_inp(x), get_basis_coeffs=True, **basis_kwargs
                     )[0],
                     str="Finding train latent space...",
-                    end_type="concat",
+                    end_type=end_type,
                     key_idx=0,
                 )
-                basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
-                self.basis = basis[:, : self.track_params["k_max"]]
+                if end_type == "concat":
+                    basis = jnp.linalg.svd(all_bases, full_matrices=False)[0]
+                    self.basis = basis[:, : self.track_params["k_max"]]
+                else:
+                    self.basis = all_bases
             else:
-                bas = self.model.latent(self.pre_func_inp(inp[..., 0:1]), get_basis_coeffs=True, **self.track_params)[0]
+                bas = self.model.latent(self.pre_func_inp(x[..., 0:1]), get_basis_coeffs=True, **self.track_params)[0]
                 self.basis = jnp.eye(bas.shape[0])
         else:
             self.basis = basis
