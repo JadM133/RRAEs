@@ -851,8 +851,8 @@ class RRAE_Trainor_class(AE_Trainor_class):
                 basis_call_kwargs = ft_kwargs["basis_call_kwargs"]
                 ft_kwargs.pop("basis_call_kwargs")
             else:
-                basis_call_kwargs = {}
                 ft_end_type = "concat"
+                basis_call_kwargs = {}
 
             ft_model, ft_track_params = self.fine_tune_basis(
                 None, args=args, kwargs=ft_kwargs, key=key1, get_basis=get_basis, end_type=ft_end_type, basis_call_kwargs=basis_call_kwargs
