@@ -61,7 +61,7 @@ class RRAE_gen_Tracker:
         eps_0=1,
         eps_perc=5,
         save_each_k=False,
-        k_min=0,
+        k_min=1,
         converged_steps=jnp.inf,
     ):
 
